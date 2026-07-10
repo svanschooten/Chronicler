@@ -12,8 +12,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  linting:
-    name: Linting
+  setup:
+    name: Setup Environment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+
+      - uses: actions/setup-python@v5
+        name: Setup Python
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Cache virtualenv
+        id: cache-venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+
+      - name: Create virtualenv and install dependencies
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install -r requirements-dev.txt
+          .venv/bin/pip install -e .
+
+  quality-control:
+    name: Quality Control
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,43 +54,38 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-          pip install -e .
+      - name: Restore virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
 
       - name: Check Ruff
         continue-on-error: true
         run: |
-          ruff check .
+          .venv/bin/ruff check .
 
       - name: Check Flake8
         continue-on-error: true
         run: |
-          flake8 .
+          .venv/bin/flake8 .
 
       - name: Check Mypy
         continue-on-error: true
         run: |
-          mypy src/chronicler
+          .venv/bin/mypy src/chronicler
 
-  run-tests:
+  tests:
     name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    needs: setup
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ubuntu-latest]
         # os: [ ubuntu-latest, macos-latest ]
-        python-version: [ "3.12" ]
+        python-version: ["3.12"]
         # python-version: [ "3.10", "3.12" ]
-        include:
-          - os: ubuntu-latest
-            path: ~/.cache/pip
-          # - os: macos-latest
-          #   path: ~/Library/Caches/pip
 
     steps:
       - uses: actions/checkout@v4
@@ -71,24 +96,25 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - uses: actions/cache@v4
-        name: Cache pip dependencies
+      - name: Restore virtualenv
+        id: restore-venv
+        uses: actions/cache@v4
         with:
-          path: ${{ matrix.path }}
-          key: "${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}"
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
 
-      - name: Install Dependencies
+      - name: Install Dependencies (Fallback)
+        if: steps.restore-venv.outputs.cache-hit != 'true'
         run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-          pip install -e .
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install -r requirements-dev.txt
+          .venv/bin/pip install -e .
 
       - name: Run the tests
         run: |
-          pytest -v -s --junitxml=junit.xml --cov=chronicler --cov-report=xml --cov-report=term
+          .venv/bin/pytest -v -s --junitxml=junit.xml --cov=chronicler --cov-report=xml --cov-report=term
 
       - name: Upload Test and Coverage Reports
         if: always()

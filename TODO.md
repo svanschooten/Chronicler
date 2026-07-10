@@ -8,6 +8,7 @@
 * [x] Add formatting tools
 * [x] Add linting
 * [x] Add GitHub Actions CI
+    * [x] Optimized multi-job workflow with caching
 
 ---
 
