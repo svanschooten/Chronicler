@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v6
         name: Cache pip dependencies
         with:
           path: ${{ matrix.path }}
