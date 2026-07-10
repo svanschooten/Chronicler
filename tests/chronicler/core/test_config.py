@@ -1,7 +1,9 @@
 from chronicler.core.config import Settings, get_settings
 
 
-def test_default_settings():
+def test_default_settings(monkeypatch, tmp_path):
+    # Mock user_config_dir to a clean temp path
+    monkeypatch.setattr("chronicler.core.config.user_config_dir", lambda x: str(tmp_path))
     settings = Settings()
     assert settings.app_name == "Chronicler"
     assert settings.workspace_path is None

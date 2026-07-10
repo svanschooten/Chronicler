@@ -87,15 +87,15 @@ Future:
 
 ## UI
 
-* [ ] Application shell
-* [ ] Navigation
-* [ ] Theme support
+* [x] Application shell
+* [x] Navigation
+* [x] Theme support
 
 ---
 
 ## Archive view
 
-* [ ] Browse Chronicles
+* [x] Browse Chronicles
 * [ ] Search
 * [ ] Filter by tags
 * [ ] Open Chronicle
@@ -114,8 +114,8 @@ Future:
 
 ## Task monitor
 
-* [ ] View active tasks
-* [ ] Show progress
+* [x] View active tasks
+* [x] Show progress
 * [ ] Retry failures
 
 ---
