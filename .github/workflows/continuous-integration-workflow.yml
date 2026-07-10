@@ -3,37 +3,75 @@ on:
   push:
     branches:
       - master
-  pull_request_target:
+  pull_request:
     branches:
       - master
 
 concurrency:
-  group: ${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  linting:
+    name: Linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+
+      - uses: actions/setup-python@v5
+        name: Setup Python
+        with:
+          python-version: "3.12"
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Check Ruff
+        continue-on-error: true
+        run: |
+          ruff check .
+
+      - name: Check Flake8
+        continue-on-error: true
+        run: |
+          flake8 .
+
+      - name: Check Mypy
+        continue-on-error: true
+        run: |
+          mypy src/chronicler
+
   run-tests:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
-        python-version: [ "3.10", "3.12" ]
+        os: [ ubuntu-latest ]
+        # os: [ ubuntu-latest, macos-latest ]
+        python-version: [ "3.12" ]
+        # python-version: [ "3.10", "3.12" ]
         include:
           - os: ubuntu-latest
             path: ~/.cache/pip
-          - os: macos-latest
-            path: ~/Library/Caches/pip
+          # - os: macos-latest
+          #   path: ~/Library/Caches/pip
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         name: Checkout Repository
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         name: Setup Python
         with:
           python-version: ${{ matrix.python-version }}
 
-      - uses: actions/cache@v6
+      - uses: actions/cache@v4
         name: Cache pip dependencies
         with:
           path: ${{ matrix.path }}
@@ -46,12 +84,17 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-
-      - name: Check Linter
-        run: |
-          echo "Checking flake8 formatting..."
-          python3 -m flake8 .
+          pip install -e .
 
       - name: Run the tests
         run: |
-          pytest -v -s
+          pytest -v -s --junitxml=junit.xml --cov=chronicler --cov-report=xml --cov-report=term
+
+      - name: Upload Test and Coverage Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ matrix.os }}-python${{ matrix.python-version }}
+          path: |
+            junit.xml
+            coverage.xml

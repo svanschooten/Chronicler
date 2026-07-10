@@ -7,7 +7,7 @@
 * [x] Add development dependencies
 * [x] Add formatting tools
 * [x] Add linting
-* [ ] Add GitHub Actions CI
+* [x] Add GitHub Actions CI
 
 ---
 
