@@ -2,7 +2,7 @@
 
 ## Phase 0 — Project foundation
 
-* [ ] Create repository structure
+* [x] Create repository structure
 * [ ] Configure Python package
 * [ ] Add development dependencies
 * [ ] Add formatting tools
