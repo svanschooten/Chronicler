@@ -1,6 +1,7 @@
 from chronicler.core.models import Chronicle
 from chronicler.core.repositories import ChronicleRepository
 
+
 class ChronicleService:
     def __init__(self, repository: ChronicleRepository):
         self.repository = repository

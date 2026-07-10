@@ -58,13 +58,14 @@ The UI and services should not depend directly on SQLite.
 
 # Phase 3 — Worker framework
 
-* [ ] Create worker manager
-* [ ] Create worker lifecycle
-* [ ] Persistent task handling
-* [ ] Task claiming
-* [ ] Task status tracking
-* [ ] Error handling
-* [ ] Retry support
+* [x] Create worker manager
+* [x] Create worker lifecycle
+* [x] Persistent task handling (store tasks in master database)
+* [x] Task claiming
+* [x] Task status tracking: WAITING, WORKING, DONE, FAILED
+* [x] Task progress tracking
+* [x] Error handling
+* [x] Retry support
 
 Initial tasks:
 
@@ -76,6 +77,8 @@ Initial tasks:
 Future:
 
 * [ ] AI_ANALYSIS
+* [ ] AI_SUMMARIZE
+* [ ] GRAPH_ANALYZE
 
 ---
 

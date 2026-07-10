@@ -1,15 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
 from uuid import UUID
-from chronicler.core.models import Chronicle, Tag
+
+from chronicler.core.models import Chronicle, Tag, Task
+
 
 class ChronicleRepository(ABC):
     @abstractmethod
-    async def get_all(self) -> List[Chronicle]:
+    async def get_all(self) -> list[Chronicle]:
         pass
 
     @abstractmethod
-    async def get_by_id(self, chronicle_id: UUID) -> Optional[Chronicle]:
+    async def get_by_id(self, chronicle_id: UUID) -> Chronicle | None:
         pass
 
     @abstractmethod
@@ -24,9 +25,10 @@ class ChronicleRepository(ABC):
     async def delete(self, chronicle_id: UUID) -> None:
         pass
 
+
 class TagRepository(ABC):
     @abstractmethod
-    async def get_all(self) -> List[Tag]:
+    async def get_all(self) -> list[Tag]:
         pass
 
     @abstractmethod
@@ -37,15 +39,28 @@ class TagRepository(ABC):
     async def delete(self, tag_id: UUID) -> None:
         pass
 
+
 class TaskRepository(ABC):
     @abstractmethod
-    async def get_all(self) -> List[dict]: # Using dict for now as Task model is simple
+    async def get_all(self) -> list[Task]:
         pass
 
     @abstractmethod
-    async def create(self, task_data: dict) -> dict:
+    async def get_pending(self) -> list[Task]:
         pass
 
     @abstractmethod
-    async def update_status(self, task_id: UUID, status: str, error: Optional[str] = None) -> None:
+    async def get_by_id(self, task_id: UUID) -> Task | None:
+        pass
+
+    @abstractmethod
+    async def create(self, task: Task) -> Task:
+        pass
+
+    @abstractmethod
+    async def update_status(self, task_id: UUID, status: str, error: str | None = None) -> None:
+        pass
+
+    @abstractmethod
+    async def update_progress(self, task_id: UUID, progress: int) -> None:
         pass

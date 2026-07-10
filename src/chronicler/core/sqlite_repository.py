@@ -1,21 +1,24 @@
-from typing import List, Optional
 from uuid import UUID
+
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete as sa_delete
-from chronicler.core.models import Chronicle
+
 from chronicler.core.database import DBChronicle, DBTask
+from chronicler.core.models import Chronicle, Task, TaskStatus
 from chronicler.core.repositories import ChronicleRepository, TaskRepository
+
 
 class SQLiteChronicleRepository(ChronicleRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_all(self) -> List[Chronicle]:
+    async def get_all(self) -> list[Chronicle]:
         result = await self.session.execute(select(DBChronicle))
         db_chronicles = result.scalars().all()
         return [Chronicle.model_validate(db) for db in db_chronicles]
 
-    async def get_by_id(self, chronicle_id: UUID) -> Optional[Chronicle]:
+    async def get_by_id(self, chronicle_id: UUID) -> Chronicle | None:
         result = await self.session.execute(
             select(DBChronicle).where(DBChronicle.id == str(chronicle_id))
         )
@@ -29,7 +32,7 @@ class SQLiteChronicleRepository(ChronicleRepository):
             description=chronicle.description,
             source_file=chronicle.source_file,
             created_at=chronicle.created_at,
-            updated_at=chronicle.updated_at
+            updated_at=chronicle.updated_at,
         )
         self.session.add(db_chronicle)
         await self.session.commit()
@@ -57,56 +60,61 @@ class SQLiteChronicleRepository(ChronicleRepository):
         )
         await self.session.commit()
 
+
 class SQLiteTaskRepository(TaskRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_all(self) -> List[dict]:
+    async def get_all(self) -> list[Task]:
         result = await self.session.execute(select(DBTask))
         db_tasks = result.scalars().all()
-        return [
-            {
-                "id": t.id,
-                "type": t.type,
-                "status": t.status,
-                "priority": t.priority,
-                "data": t.data,
-                "error": t.error,
-                "created_at": t.created_at,
-                "updated_at": t.updated_at,
-                "chronicle_id": t.chronicle_id,
-            }
-            for t in db_tasks
-        ]
+        return [Task.model_validate(t) for t in db_tasks]
 
-    async def create(self, task_data: dict) -> dict:
+    async def get_pending(self) -> list[Task]:
+        result = await self.session.execute(
+            select(DBTask)
+            .where(DBTask.status == TaskStatus.PENDING)
+            .order_by(DBTask.priority.desc(), DBTask.created_at.asc())
+        )
+        db_tasks = result.scalars().all()
+        return [Task.model_validate(t) for t in db_tasks]
+
+    async def get_by_id(self, task_id: UUID) -> Task | None:
+        result = await self.session.execute(select(DBTask).where(DBTask.id == str(task_id)))
+        db_task = result.scalar_one_or_none()
+        return Task.model_validate(db_task) if db_task else None
+
+    async def create(self, task: Task) -> Task:
         db_task = DBTask(
-            type=task_data["type"],
-            status=task_data.get("status", "PENDING"),
-            priority=task_data.get("priority", 0),
-            data=task_data.get("data"),
-            chronicle_id=task_data.get("chronicle_id"),
+            id=str(task.id),
+            type=task.type,
+            status=task.status,
+            priority=task.priority,
+            progress=task.progress,
+            data=task.data,
+            chronicle_id=str(task.chronicle_id) if task.chronicle_id else None,
+            created_at=task.created_at,
+            updated_at=task.updated_at,
         )
         self.session.add(db_task)
         await self.session.commit()
         await self.session.refresh(db_task)
-        return {
-            "id": db_task.id,
-            "type": db_task.type,
-            "status": db_task.status,
-            "priority": db_task.priority,
-            "data": db_task.data,
-            "created_at": db_task.created_at,
-            "updated_at": db_task.updated_at,
-            "chronicle_id": db_task.chronicle_id,
-        }
+        return Task.model_validate(db_task)
 
-    async def update_status(self, task_id: UUID, status: str, error: Optional[str] = None) -> None:
-        result = await self.session.execute(
-            select(DBTask).where(DBTask.id == str(task_id))
-        )
+    async def update_status(self, task_id: UUID, status: str, error: str | None = None) -> None:
+        result = await self.session.execute(select(DBTask).where(DBTask.id == str(task_id)))
         db_task = result.scalar_one_or_none()
         if db_task:
             db_task.status = status
             db_task.error = error
+            if status == TaskStatus.PENDING:
+                db_task.progress = 0
+                db_task.error = None
+            await self.session.commit()
+
+    async def update_progress(self, task_id: UUID, progress: int) -> None:
+        result = await self.session.execute(select(DBTask).where(DBTask.id == str(task_id)))
+        db_task = result.scalar_one_or_none()
+        if db_task:
+            db_task.progress = progress
             await self.session.commit()
