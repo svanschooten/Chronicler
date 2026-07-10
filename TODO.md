@@ -3,10 +3,10 @@
 ## Phase 0 — Project foundation
 
 * [x] Create repository structure
-* [ ] Configure Python package
-* [ ] Add development dependencies
-* [ ] Add formatting tools
-* [ ] Add linting
+* [x] Configure Python package
+* [x] Add development dependencies
+* [x] Add formatting tools
+* [x] Add linting
 * [ ] Add GitHub Actions CI
 
 ---
@@ -15,19 +15,19 @@
 
 ## Configuration
 
-* [ ] Create application settings system
-* [ ] Store user configuration in OS config directory
+* [x] Create application settings system
+* [x] Store user configuration in OS config directory
 * [ ] Create first-run wizard
-* [ ] Select workspace location
-* [ ] Validate workspace permissions
+* [x] Select workspace location
+* [x] Validate workspace permissions
 
 ---
 
 ## Backend abstraction
 
-* [ ] Define repository interfaces
-* [ ] Separate services from storage
-* [ ] Create local storage backend
+* [x] Define repository interfaces
+* [x] Separate services from storage
+* [x] Create local storage backend
 * [ ] Prepare remote API backend interface
 
 Goal:
@@ -40,18 +40,18 @@ The UI and services should not depend directly on SQLite.
 
 ## Archive database
 
-* [ ] Projects/Chronicles table
-* [ ] Tags table
-* [ ] Chronicle/tag relationship
-* [ ] Persistent task table
+* [x] Projects/Chronicles table
+* [x] Tags table
+* [x] Chronicle/tag relationship
+* [x] Persistent task table
 
 ---
 
 ## Chronicle database
 
-* [ ] Chronicle metadata
-* [ ] Speakers
-* [ ] Transcript lines
+* [x] Chronicle metadata
+* [x] Speakers
+* [x] Transcript lines
 * [ ] Cleanup state
 
 ---
@@ -178,6 +178,7 @@ Future:
 # Phase 7 — Chronicler Server
 
 * [ ] Add server application mode
+* [ ] Add first run CLI wizard
 * [ ] Add API layer
 * [ ] Add authentication
 * [ ] Add server storage management
