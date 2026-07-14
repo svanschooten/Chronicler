@@ -1,10 +1,14 @@
+import asyncio
 from enum import Enum
 
 import flet as ft
 
 from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.models import TaskType
+from chronicler.core.processing.handlers import WorkerHandlers
 from chronicler.core.services import ChronicleService, TaskService
 from chronicler.core.sqlite_repository import SQLiteChronicleRepository, SQLiteTaskRepository
+from chronicler.core.workers import WorkerManager
 from chronicler.desktop.views.archive import ArchiveView
 from chronicler.desktop.views.tasks import TasksView
 
@@ -42,6 +46,21 @@ class DesktopApp:
         self.chronicle_service = ChronicleService(self.chronicle_repo)
         self.task_service = TaskService(self.task_repo)
 
+        # Initialize worker manager
+        self.worker_manager = WorkerManager(self.task_repo)
+        handlers = WorkerHandlers(self.db_manager)
+        self.worker_manager.register_handler(TaskType.IMPORT, handlers.handle_import)
+        self.worker_manager.register_handler(TaskType.CLEAN, handlers.handle_clean)
+
+        # Start worker manager in background
+        asyncio.create_task(self.worker_manager.run_forever())
+
+        self.page.on_disconnect = self.cleanup
+        self.page.on_close = self.cleanup
+
+        self.file_picker = ft.FilePicker()
+        self.page.update()
+
         self.rail = ft.NavigationRail(
             selected_index=0,
             label_type=ft.NavigationRailLabelType.ALL,
@@ -66,7 +85,7 @@ class DesktopApp:
             on_change=self.on_nav_change,
         )
 
-        self.content_area = ft.Container(expand=True, padding=20)
+        self.content_area = ft.Container(expand=True, padding=20, bgcolor=ft.Colors.GREY_900)
 
         self.page.add(
             ft.Row(
@@ -91,9 +110,16 @@ class DesktopApp:
             self.state.navigate_to(ViewType.SETTINGS)
         await self.update_view()
 
+    async def cleanup(self, e):
+        self.worker_manager.stop()
+        await self.session.close()
+        await self.db_manager.close_all()
+
     async def update_view(self):
         if self.state.current_view == ViewType.ARCHIVE:
-            self.content_area.content = ArchiveView(self.chronicle_service)
+            self.content_area.content = ArchiveView(
+                self.chronicle_service, self.task_service, self.file_picker
+            )
         elif self.state.current_view == ViewType.TASKS:
             self.content_area.content = TasksView(self.task_service)
         elif self.state.current_view == ViewType.SETTINGS:

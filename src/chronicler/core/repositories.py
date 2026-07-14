@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from chronicler.core.models import Chronicle, Tag, Task
+from chronicler.core.models import Chronicle, Speaker, Tag, Task, TranscriptLine
 
 
 class ChronicleRepository(ABC):
@@ -63,4 +63,30 @@ class TaskRepository(ABC):
 
     @abstractmethod
     async def update_progress(self, task_id: UUID, progress: int) -> None:
+        pass
+
+
+class TranscriptRepository(ABC):
+    @abstractmethod
+    async def get_speakers(self) -> list[Speaker]:
+        pass
+
+    @abstractmethod
+    async def get_or_create_speaker(self, name: str) -> Speaker:
+        pass
+
+    @abstractmethod
+    async def get_lines(self) -> list[TranscriptLine]:
+        pass
+
+    @abstractmethod
+    async def add_line(self, line: TranscriptLine) -> TranscriptLine:
+        pass
+
+    @abstractmethod
+    async def add_lines(self, lines: list[TranscriptLine]) -> None:
+        pass
+
+    @abstractmethod
+    async def delete_all(self) -> None:
         pass

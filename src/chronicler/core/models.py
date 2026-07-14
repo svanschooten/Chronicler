@@ -39,6 +39,7 @@ class Speaker(BaseModel):
 class TranscriptLine(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     speaker_id: uuid.UUID | None = None
+    speaker_name: str | None = None
     start_time: float  # seconds
     end_time: float  # seconds
     text: str

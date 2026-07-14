@@ -70,9 +70,9 @@ The UI and services should not depend directly on SQLite.
 
 Initial tasks:
 
-* [ ] IMPORT
+* [x] IMPORT
 * [ ] TRANSCRIBE
-* [ ] CLEAN
+* [x] CLEAN
 * [ ] EXPORT
 
 Future:
@@ -99,16 +99,17 @@ Future:
 * [ ] Search
 * [ ] Filter by tags
 * [ ] Open Chronicle
+* [x] Import Transcript (via Header)
 
 ---
 
 ## Create Chronicle wizard
 
-* [ ] Select files
+* [x] Select files
 * [ ] Assign speakers
 * [ ] Enter metadata
 * [ ] Add tags
-* [ ] Create Chronicle
+* [x] Create Chronicle (Basic implementation)
 
 ---
 
@@ -126,7 +127,8 @@ Future:
 
 * [ ] Audio importer
 * [ ] File validation
-* [ ] Import worker
+* [x] Import worker
+* [x] Regex importer
 
 ---
 
@@ -142,9 +144,9 @@ Future:
 
 ## Cleanup
 
-* [ ] Cleanup worker
-* [ ] Text normalization
-* [ ] Segment merging
+* [x] Cleanup worker
+* [x] Text normalization
+* [x] Segment merging
 * [ ] Cleanup markers
 
 ---
