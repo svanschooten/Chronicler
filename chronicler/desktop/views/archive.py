@@ -155,6 +155,6 @@ class ArchiveView(ft.Column):
                 self.chronicle_list.controls = [ft.Text("No chronicles found.")]
             self.update()
         except Exception as e:
-            print(f"Error loading chronicles: {e}")
+            logger.exception(f"Error loading chronicles: {e}")
             self.chronicle_list.controls = [ft.Text(f"Error loading chronicles: {e}")]
             self.update()

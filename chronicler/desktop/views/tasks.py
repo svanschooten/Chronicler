@@ -65,6 +65,6 @@ class TasksView(ft.Column):
                 self.task_list.controls = [ft.Text("No tasks found.")]
             self.update()
         except Exception as e:
-            print(f"Error loading tasks: {e}")
+            logger.exception(f"Error loading tasks: {e}")
             self.task_list.controls = [ft.Text(f"Error loading tasks: {e}")]
             self.update()

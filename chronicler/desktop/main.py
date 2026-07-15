@@ -19,7 +19,7 @@ def run_desktop():
     if not settings.workspace_path:
         # For now, default to a folder in home directory
         settings.workspace_path = Path.home() / "ChroniclerWorkspace"
-        print(f"No workspace set. Using default: {settings.workspace_path}")
+        logger.info(f"No workspace set. Using default: {settings.workspace_path}")
         settings.save()
 
     db_manager = DatabaseManager(settings.workspace_path)

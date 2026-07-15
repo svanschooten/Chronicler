@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +21,12 @@ from chronicler.core.sqlite import (
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8000):
-    print("Chronicler Server starting...")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("Chronicler Server starting...")
     settings = get_settings()
 
     if not settings.workspace_path:
