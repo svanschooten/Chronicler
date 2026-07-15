@@ -1,10 +1,14 @@
 import flet as ft
+import logging
 
-from chronicler.core.services import TaskService
+from chronicler.core.services.task_service import TaskService
+
+logger = logging.getLogger(__name__)
 
 
 class TasksView(ft.Column):
     def __init__(self, task_service: TaskService):
+        logger.info("TasksView constructed")
         self.task_service = task_service
         self.task_list = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
@@ -24,7 +28,11 @@ class TasksView(ft.Column):
         )
 
     def did_mount(self):
+        logger.info("TasksView loaded")
         self.page.run_task(self.load_tasks)
+
+    def will_unmount(self):
+        logger.info("TasksView unloaded")
 
     async def refresh_clicked(self, e):
         await self.load_tasks()

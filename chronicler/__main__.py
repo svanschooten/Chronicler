@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from pathlib import Path
 
 from chronicler.core.config import get_settings
@@ -6,7 +7,12 @@ from chronicler.core.database_manager import DatabaseManager
 
 
 def main():
-    print("Chronicler Desktop starting...")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("Chronicler Desktop starting...")
     settings = get_settings()
 
     if not settings.workspace_path:

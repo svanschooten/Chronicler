@@ -1,9 +1,12 @@
 import os
+import logging
 
 import flet as ft
 
-from chronicler.core.services import ChronicleService, TaskService
+from chronicler.core.services.task_service import TaskService
+from chronicler.core.services.chronicle_service import ChronicleService
 
+logger = logging.getLogger(__name__)
 
 class ArchiveView(ft.Column):
     def __init__(
@@ -12,6 +15,7 @@ class ArchiveView(ft.Column):
         task_service: TaskService,
         file_picker: ft.FilePicker,
     ):
+        logger.info("ArchiveView constructed")
         self.chronicle_service = chronicle_service
         self.task_service = task_service
         self.file_picker = file_picker
@@ -22,7 +26,7 @@ class ArchiveView(ft.Column):
             title=ft.Text("Create New Chronicle"),
             content=self.new_chronicle_name,
             actions=[
-                ft.TextButton("Cancel", on_click=lambda _: self.close_dialog()),
+                ft.TextButton("Cancel", on_click=lambda _: self.page.run_task(self.close_dialog)),
                 ft.TextButton("Create", on_click=self.create_chronicle_clicked),
             ],
         )
@@ -53,6 +57,7 @@ class ArchiveView(ft.Column):
         )
 
     def did_mount(self):
+        logger.info("ArchiveView loaded")
         self.page.run_task(self.mount_async)
 
     async def mount_async(self):
@@ -64,6 +69,7 @@ class ArchiveView(ft.Column):
         await self.load_chronicles()
 
     def will_unmount(self):
+        logger.info("ArchiveView unloaded")
         if self.create_dialog in self.page.overlay:
             self.page.overlay.remove(self.create_dialog)
         self.page.update()

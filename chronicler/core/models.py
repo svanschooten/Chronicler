@@ -16,6 +16,7 @@ class TaskStatus(str, Enum):
 class TaskType(str, Enum):
     IMPORT = "IMPORT"
     TRANSCRIBE = "TRANSCRIBE"
+    PROCESS = "PROCESS"
     CLEAN = "CLEAN"
     EXPORT = "EXPORT"
     TEST = "TEST"
@@ -40,6 +41,7 @@ class TranscriptLine(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     speaker_id: uuid.UUID | None = None
     speaker_name: str | None = None
+    chronicle_id: uuid.UUID | None = None
     start_time: float  # seconds
     end_time: float  # seconds
     text: str
@@ -70,6 +72,5 @@ class Task(BaseModel):
     error: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
-    chronicle_id: uuid.UUID | None = None
 
     model_config = ConfigDict(from_attributes=True)

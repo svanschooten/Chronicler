@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from enum import Enum
 
 import flet as ft
@@ -6,11 +7,15 @@ import flet as ft
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import TaskType
 from chronicler.core.processing.handlers import WorkerHandlers
-from chronicler.core.services import ChronicleService, TaskService
+from chronicler.core.services.chronicle_service import ChronicleService
+from chronicler.core.services.task_service import TaskService
 from chronicler.core.sqlite_repository import SQLiteChronicleRepository, SQLiteTaskRepository
 from chronicler.core.workers import WorkerManager
 from chronicler.desktop.views.archive import ArchiveView
+from chronicler.desktop.views.settings import SettingsView
 from chronicler.desktop.views.tasks import TasksView
+
+logger = logging.getLogger(__name__)
 
 
 class ViewType(str, Enum):
@@ -29,10 +34,12 @@ class AppState:
 
 class DesktopApp:
     def __init__(self, db_manager: DatabaseManager):
+        logger.info("DesktopApp constructed")
         self.state = AppState()
         self.db_manager = db_manager
 
     async def main(self, page: ft.Page):
+        logger.info("DesktopApp main started")
         self.page = page
         self.page.title = "Chronicler"
         self.page.theme_mode = ft.ThemeMode.DARK
@@ -116,6 +123,7 @@ class DesktopApp:
         await self.db_manager.close_all()
 
     async def update_view(self):
+        logger.info(f"Navigating to view: {self.state.current_view}")
         if self.state.current_view == ViewType.ARCHIVE:
             self.content_area.content = ArchiveView(
                 self.chronicle_service, self.task_service, self.file_picker
@@ -123,15 +131,9 @@ class DesktopApp:
         elif self.state.current_view == ViewType.TASKS:
             self.content_area.content = TasksView(self.task_service)
         elif self.state.current_view == ViewType.SETTINGS:
-            self.content_area.content = ft.Column(
-                [
-                    ft.Text("Settings", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
-                    ft.Divider(),
-                    ft.Text("Configuration and preferences will be here."),
-                ],
-                expand=True,
-            )
+            self.content_area.content = SettingsView()
 
+        self.content_area.update()
         self.page.update()
 
 
