@@ -1,7 +1,9 @@
-import flet as ft
 import logging
 
+import flet as ft
+
 logger = logging.getLogger(__name__)
+
 
 class SettingsView(ft.Column):
     def __init__(self):

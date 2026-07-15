@@ -7,7 +7,7 @@ from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Task
 from chronicler.core.processing.cleaners import TranscriptCleaner
 from chronicler.core.processing.importers import DefaultImporter
-from chronicler.core.sqlite_repository import SQLiteTranscriptRepository
+from chronicler.core.sqlite import SQLiteTranscriptRepository
 
 logger = logging.getLogger(__name__)
 

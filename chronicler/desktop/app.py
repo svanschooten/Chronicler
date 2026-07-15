@@ -9,7 +9,7 @@ from chronicler.core.models import TaskType
 from chronicler.core.processing.handlers import WorkerHandlers
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
-from chronicler.core.sqlite_repository import SQLiteChronicleRepository, SQLiteTaskRepository
+from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTaskRepository
 from chronicler.core.workers import WorkerManager
 from chronicler.desktop.views.archive import ArchiveView
 from chronicler.desktop.views.settings import SettingsView

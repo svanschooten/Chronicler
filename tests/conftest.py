@@ -1,6 +1,8 @@
-import pytest
 from unittest.mock import MagicMock
+
 import flet
+import pytest
+
 
 @pytest.fixture(autouse=True)
 def mock_flet_app(monkeypatch):

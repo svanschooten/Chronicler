@@ -60,10 +60,11 @@ Repository = "https://github.com/svanschooten/Chronicler"
 Issues = "https://github.com/svanschooten/Chronicler/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/chronicler"]
+packages = ["chronicler"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-ra"
 
 [tool.ruff]

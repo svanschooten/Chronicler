@@ -194,7 +194,7 @@ A remote server is not only a transcription worker. It is a complete headless Ch
 | UI        | Flet               |
 | Database  | SQLite             |
 | ORM       | SQLAlchemy         |
-| API       | TBD                |
+| API       | FastAPI / Uvicorn  |
 | Packaging | PyInstaller/Nuitka |
 | CI/CD     | GitHub Actions     |
 

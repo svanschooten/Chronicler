@@ -1,6 +1,5 @@
-import pytest
 from chronicler.core.processing.importers import DefaultImporter
-from chronicler.core.models import TranscriptLine
+
 
 def test_default_importer_simple():
     importer = DefaultImporter()
@@ -15,6 +14,7 @@ Speaker 2 : I am fine.
     assert lines[0].text == "Hello world how are you?"
     assert lines[1].speaker_name == "Speaker 2"
     assert lines[1].text == "I am fine."
+
 
 def test_default_importer_example_snippet():
     importer = DefaultImporter()

@@ -1,16 +1,16 @@
-from chronicler.core.models import Chronicle, Tag, Task, Speaker
-from chronicler.core.repositories import TaskRepository, ChronicleRepository, TagRepository
+from chronicler.core.models import Chronicle, Speaker, Tag, Task
+from chronicler.core.repositories import ChronicleRepository, TagRepository, TaskRepository
 from chronicler.core.rpc import service
 
 
 @service
 class SearchService:
-
-    def __init__(self,
-                 task_repository: TaskRepository,
-                 chronicle_repository: ChronicleRepository,
-                 tag_repository: TagRepository
-                 ):
+    def __init__(
+        self,
+        task_repository: TaskRepository,
+        chronicle_repository: ChronicleRepository,
+        tag_repository: TagRepository,
+    ):
         self.task_repository = task_repository
         self.chronicle_repository = chronicle_repository
         self.tag_repository = tag_repository

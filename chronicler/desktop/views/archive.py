@@ -1,12 +1,13 @@
-import os
 import logging
+import os
 
 import flet as ft
 
-from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.chronicle_service import ChronicleService
+from chronicler.core.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
+
 
 class ArchiveView(ft.Column):
     def __init__(

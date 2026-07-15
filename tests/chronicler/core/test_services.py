@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from chronicler.core.repositories import ChronicleRepository
-from chronicler.core.services import ChronicleService
+from chronicler.core.services.chronicle_service import ChronicleService
 
 
 @pytest.mark.asyncio

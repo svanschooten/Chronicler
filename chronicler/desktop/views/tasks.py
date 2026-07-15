@@ -1,5 +1,6 @@
-import flet as ft
 import logging
+
+import flet as ft
 
 from chronicler.core.services.task_service import TaskService
 

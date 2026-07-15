@@ -26,6 +26,8 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
 class Settings(BaseSettings):
     app_name: str = "Chronicler"
     workspace_path: Path | None = None
+    server_url: str | None = None
+    api_key: str | None = None
 
     @property
     def config_dir(self) -> Path:

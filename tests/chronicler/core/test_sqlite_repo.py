@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from chronicler.core.database import Base
 from chronicler.core.models import Chronicle, Task, TaskStatus, TaskType
-from chronicler.core.sqlite_repository import SQLiteChronicleRepository, SQLiteTaskRepository
+from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTaskRepository
 
 
 @pytest_asyncio.fixture

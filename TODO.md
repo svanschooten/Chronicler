@@ -29,7 +29,7 @@
 * [x] Define repository interfaces
 * [x] Separate services from storage
 * [x] Create local storage backend
-* [ ] Prepare remote API backend interface
+* [x] Prepare remote API backend interface
 
 Goal:
 
@@ -183,12 +183,12 @@ Future:
 
 # Phase 7 — Chronicler Server
 
-* [ ] Add server application mode
+* [x] Add server application mode
 * [ ] Add first run CLI wizard
-* [ ] Add API layer
-* [ ] Add authentication
+* [x] Add API layer
+* [x] Add authentication
 * [ ] Add server storage management
-* [ ] Add remote repository implementation
+* [x] Add remote repository implementation
 * [ ] Connect desktop client to server
 
 ---

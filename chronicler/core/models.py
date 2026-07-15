@@ -70,6 +70,7 @@ class Task(BaseModel):
     progress: int = 0
     data: str | None = None
     error: str | None = None
+    chronicle_id: uuid.UUID | None = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 

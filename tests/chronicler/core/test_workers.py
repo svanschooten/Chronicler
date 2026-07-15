@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from chronicler.core.database import Base
 from chronicler.core.models import Task, TaskStatus, TaskType
-from chronicler.core.sqlite_repository import SQLiteTaskRepository
+from chronicler.core.sqlite import SQLiteTaskRepository
 from chronicler.core.workers import WorkerManager
 
 
