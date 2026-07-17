@@ -1,211 +1,321 @@
 # Chronicler
 
-> Preserve every conversation.
+![CI](https://github.com/svanschooten/Chronicler/actions/workflows/continuous-integration-workflow.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/github/license/svanschooten/Chronicler)
+![Version](https://img.shields.io/github/v/tag/svanschooten/Chronicler?label=version)
+![Status](https://img.shields.io/badge/status-pre--alpha-orange)
 
-Chronicler is a local-first transcript management application for turning conversations into organized, searchable records.
+> Preserve conversations. Discover knowledge.
+
+Chronicler is a local-first transcript management application for importing, generating, processing, editing, searching and exporting transcripts.
 
 A single recorded conversation is called a **Chronicle**.
 
 Chronicler is designed for:
 
-* work meetings
-* interviews
-* lectures
+* Work meetings
+* Interviews
+* Lectures
 * D&D campaigns
-* personal recordings
-* any situation where spoken words need to become searchable knowledge
+* Personal recordings
+* Any situation where spoken conversations need to become searchable knowledge
 
-Chronicler combines transcription, organization, cleanup, and export into a single application.
+A Chronicle is a portable project containing everything related to a conversation, including transcripts, recordings, metadata, exports and future analysis.
 
----
+## Concepts
 
-# Concepts
-
-## Chronicler
-
-The application used to create, manage, and access Chronicles.
-
-Chronicler can run in three modes:
-
-### Desktop mode
-
-A full local application with:
-
-* user interface
-* local storage
-* local workers
-* local Whisper transcription
-
-### Server mode
-
-A headless instance providing:
-
-* exposes application service interfaces over API access
-* project storage
-* database management
-* background workers
-* GPU accelerated processing
-
-### Remote mode
-
-A lightweight instance providing:
-
-* user interface
-* consumes application service interfaces over API access
-* remote storage and workers
-* no local models or storage
-
-The same codebase supports all three modes.
-
----
-
-## Chronicle
+### Chronicle
 
 A Chronicle is a self-contained record of a conversation or recording.
 
-Examples:
+Examples include:
 
-* a weekly work meeting
-* a D&D session
-* an interview
-* a lecture
+* A weekly work meeting
+* A D&D session
+* An interview
+* A lecture
 
-A Chronicle contains:
+A Chronicle can contain:
 
-* metadata (source, creation date, etc)
-* tags
-* speakers
-* transcript lines
+* Metadata
+* Tags
+* Speakers
+* Transcript
+* Audio recordings
+* Generated exports
+* AI-generated content and analysis
 
-And later on can also include things like:
-* related files
-* generated exports
-* text analysis and summaries
+Every Chronicle is stored independently, making it easy to archive, copy, back up or share without requiring the rest of the workspace.
 
----
+### Chronicler
 
-# Architecture
+Chronicler is the application used to create, manage and process Chronicles.
 
-Chronicler separates application logic from storage.
+The application is built around a shared service layer. Whether running locally or remotely, the same application services perform the work.
 
+## Deployment modes
+
+Chronicler supports three deployment modes.
+
+The active mode is determined by the application configuration. Switching between local and remote operation requires restarting the application.
+
+### Full Stack
+
+A complete local installation containing:
+
+* Flet user interface
+* Application services
+* Local storage
+* Background processing
+* Local AI models
+
+Everything runs on the local machine.
+
+### Server
+
+A headless Chronicler instance providing:
+
+* HTTP API
+* Chronicle storage
+* Database management
+* Background processing
+* GPU accelerated processing
+
+The server is a complete Chronicler instance, not only a transcription server.
+
+### Thin Client
+
+A lightweight client containing:
+
+* Flet user interface
+* Remote service access
+
+All processing, storage and AI models remain on the server.
+
+```mermaid
+flowchart LR
+
+subgraph Full Stack
+    UI1[Flet UI]
+    S1[Application Services]
+    DB1[Workspace]
+    UI1 --> S1
+    S1 --> DB1
+end
+
+subgraph Thin Client
+    UI2[Flet UI]
+    Proxy[Generated Service Proxy]
+    UI2 --> Proxy
+end
+
+subgraph Server
+    API[Generated HTTP API]
+    S2[Application Services]
+    DB2[Workspace]
+
+    API --> S2
+    S2 --> DB2
+end
+
+Proxy --> API
 ```
-             User Interface
-                    |
-                    |
-          Application Services
-                    |
-        +-----------+-----------+
-        |                       |
- Repository Interfaces     Remote Application Service Interfaces
-        |                       |
- Local Storage             Server API
-        |                       |
-     SQLite                Chronicles Server
-```
 
-The application services do not know whether data is stored locally or accessed remotely.
+## Storage
 
----
+Chronicler separates application configuration from user data.
 
-# Storage
+### Configuration
 
-Local mode uses a user-selected workspace.
+Application configuration contains machine-specific settings such as:
+
+* Workspace location
+* Deployment mode
+* Remote server configuration
+* Provider configuration
+* User preferences
+
+Configuration is stored in the operating system's user configuration directory.
 
 Example:
 
-```
-Chronicler/
-    chronicler.db
-    chronicles/
-        <chronicle-id>/
-            project.db
-            audio/
-            exports/
-            logs/
+```text
+~/.chronicler_config.yaml
 ```
 
-A server installation uses the same concept:
+The configuration determines whether `python -m chronicler` starts a local Full Stack instance or a Thin Client connected to a remote server.
 
+### Workspace
+
+A workspace contains application data together with one or more Chronicles.
+
+```text
+Workspace/
+│
+├── chronicler.db
+│
+└── chronicles/
+    ├── <chronicle-id>/
+    │   ├── project.db
+    │   ├── audio/
+    │   ├── exports/
+    │   ├── logs/
+    │   └── ...
+    └── ...
 ```
-/var/lib/chronicler/
-    master.db
-    chronicles/
-```
 
----
+The workspace database stores application-level information, including:
 
-# Background processing
+* Chronicle index
+* Task queue
+* Workspace state
 
-Chronicler uses persistent background tasks.
+Each Chronicle contains its own database and files, including:
+
+* Transcript
+* Speakers
+* Tags
+* Metadata
+* Generated content
+
+### Designed for existing storage solutions
+
+Chronicler intentionally stores data as normal files and directories instead of introducing a custom synchronization or backup mechanism.
+
+This allows users to continue using the tools they already trust.
+
+Examples include:
+
+* Dropbox
+* OneDrive
+* Nextcloud / ownCloud
+* Network shares
+* NAS storage
+* External drives
+* Manual backups
 
 Examples:
 
-* importing files
-* transcribing audio
-* cleaning transcripts
-* exporting documents
-* future AI analysis
+* Store an entire workspace inside Dropbox to synchronize between machines.
+* Archive a workspace to an external drive.
+* Share a single Chronicle with someone else using FTP, Nextcloud or any other file sharing solution.
 
-Tasks are stored persistently and survive application restarts to be restarted.
+Because every Chronicle is self-contained, projects can be shared independently without exposing the rest of the workspace.
 
-Workers execute tasks in both standalone desktop and server mode.
+## Background processing
 
-Remote mode will not spawn workers locally or load any models to keep package size small.
+Long-running operations are represented as persistent tasks.
 
----
+Tasks survive application restarts and are executed by background workers called **Scribes**.
 
-# Remote server
+Examples include:
 
-A future Chronicler Server allows users to host their own instance.
+* Importing files
+* Recording audio
+* Audio pre-processing
+* Transcription
+* Transcript cleanup
+* Speaker identification
+* Exporting
+* AI processing
 
-A desktop client can connect to a server using an authenticated API.
+Tasks belong to a Chronicle and contain:
 
-A server provides:
+* Task type
+* Provider
+* JSON payload containing task-specific configuration
 
-* centralized storage
-* shared access
-* GPU accelerated transcription
-* background processing
+Typical task categories include:
 
-Example:
+| Task type       | Example providers                          |
+| --------------- | ------------------------------------------ |
+| Import          | Audio files, formatted text                |
+| Recording       | Local recorder                             |
+| Pre-processing  | Audio normalization                        |
+| Transcription   | Faster Whisper                             |
+| Post-processing | Cleanup, speaker identification, summaries |
+| Export          | Markdown, HTML, PDF                        |
 
+## Processing pipeline
+
+A Chronicle can move through several processing stages.
+
+Not every Chronicle requires every stage.
+
+```text
+Import
+    │
+Pre-processing
+    │
+Transcription
+    │
+Post-processing
+    │
+Editing
+    │
+Export
 ```
-Chronicler Desktop
-        |
-        | API
-        |
-Chronicler Server
-        |
-        |
-   Database
-   Storage
-   Workers
+
+Example workflows:
+
+**Audio**
+
+```text
+Audio
+    │
+Import
+    │
+Normalize
+    │
+Transcribe
+    │
+Speaker identification
+    │
+Cleanup
+    │
+Export
 ```
 
-A remote server is not only a transcription worker. It is a complete headless Chronicler instance.
+**Formatted text**
 
----
-
-# Technology stack
-
-| Component | Technology         |
-| --------- | ------------------ |
-| Language  | Python             |
-| UI        | Flet               |
-| Database  | SQLite             |
-| ORM       | SQLAlchemy         |
-| API       | FastAPI / Uvicorn  |
-| Packaging | PyInstaller/Nuitka |
-| CI/CD     | GitHub Actions     |
-
----
-
-# Development setup
-
-## Install
-
+```text
+Import
+    │
+Chronicle
+    │
+Export
 ```
+
+## Documentation
+
+The README provides a general overview.
+
+More detailed documentation is available in:
+
+* **[ARCHITECTURE.md](ARCHITECTURE.md)** – service architecture, storage model, task system, deployment modes and extension points.
+* **[HOWTO.md](HOWTO.md)** – practical guides for configuring providers, remote servers, GPU support, backups and future integrations.
+
+## Technology stack
+
+| Component | Technology           |
+| --------- | -------------------- |
+| Language  | Python               |
+| UI        | Flet                 |
+| Database  | SQLite               |
+| ORM       | SQLAlchemy           |
+| API       | FastAPI              |
+| ASGI      | Uvicorn              |
+| Packaging | PyInstaller / Nuitka |
+| CI/CD     | GitHub Actions       |
+
+## Development
+
+### Install
+
+```bash
 git clone git@github.com:svanschooten/Chronicler.git
+
 cd Chronicler
 
 python -m venv .venv
@@ -213,31 +323,58 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
----
+### Run
 
-## Run desktop application
-
-```
+```bash
 python -m chronicler
 ```
 
----
+The startup mode depends on the application configuration.
 
-## Run server mode
+* Local workspace configured → Full Stack
+* Remote server configured → Thin Client
 
-```
+Changing between modes requires restarting the application.
+
+### Run server
+
+```bash
 python -m chronicler server
 ```
 
----
+The server exposes the generated HTTP API and executes background Scribes.
 
-# Future goals
+A small management CLI is available for inspecting the server.
 
-* transcript editing
-* custom import, export, and cleanup jobs
-* audio playback synchronization
-* AI summaries
-* semantic search
-* remote servers
-* collaboration features
-* additional import/export formats
+Examples:
+
+```bash
+chronicler server status
+
+chronicler server workers
+
+chronicler server tasks
+```
+
+## Future goals
+
+### Near future
+
+* Audio recording
+* Transcript editing improvements
+* Speaker diarization
+* Audio playback synchronization
+* Additional import and export formats
+
+### Future
+
+* Additional transcription providers
+* AI summaries and analysis
+* Semantic search
+* Remote collaboration
+* Additional client applications
+* External integrations
+
+## License
+
+Chronicler is licensed under the terms described in the [LICENSE](LICENSE) file.
