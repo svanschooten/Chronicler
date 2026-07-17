@@ -8,7 +8,7 @@ on:
       - master
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -63,17 +63,17 @@ jobs:
       - name: Check Ruff
         continue-on-error: true
         run: |
-          .venv/bin/ruff check .
+          .venv/bin/ruff check chronicler tests
 
       - name: Check Flake8
         continue-on-error: true
         run: |
-          .venv/bin/flake8 .
+          .venv/bin/flake8 chronicler tests
 
       - name: Check Mypy
         continue-on-error: true
         run: |
-          .venv/bin/mypy src/chronicler
+          .venv/bin/mypy chronicler tests
 
   tests:
     name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
