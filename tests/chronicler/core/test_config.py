@@ -58,14 +58,14 @@ def test_save_settings(tmp_path, monkeypatch):
     settings = Settings(workspace_path=workspace)
     settings.save()
 
-    config_file = tmp_path / "settings.json"
+    config_file = tmp_path / "settings.yaml"
     assert config_file.exists()
 
     # Verify content
-    import json
+    import yaml
 
     with open(config_file) as f:
-        data = json.load(f)
+        data = yaml.safe_load(f)
         assert data["workspace_path"] == str(workspace)
 
 
@@ -76,9 +76,23 @@ def test_load_settings(tmp_path, monkeypatch):
 
     monkeypatch.setattr("chronicler.core.config.user_config_dir", mock_user_config_dir)
 
-    config_file = tmp_path / "settings.json"
-    workspace_str = str(tmp_path / "test_workspace")
-    config_file.write_text(f'{{"workspace_path": "{workspace_str}"}}')
+    # Test JSON loading (legacy)
+    config_file_json = tmp_path / "settings.json"
+    workspace_str = str(tmp_path / "test_workspace_json")
+    config_file_json.write_text(f'{{"workspace_path": "{workspace_str}"}}')
 
     settings = Settings()
     assert str(settings.workspace_path) == workspace_str
+
+    # Test YAML loading (current)
+    # Clear lru_cache for Settings if needed, but Settings() creates a new instance each time, 
+    # it's get_settings() that is cached.
+    config_file_yaml = tmp_path / "settings.yaml"
+    workspace_str_yaml = str(tmp_path / "test_workspace_yaml")
+    config_file_yaml.write_text(f"workspace_path: {workspace_str_yaml}\n")
+    
+    # Priority is YAML, so it should pick the yaml one now if both exist
+    # (actually in my impl it's Priority 2 platform yaml)
+    # Wait, in my impl it's Priority 2: settings.yaml, Priority 3: settings.json
+    settings = Settings()
+    assert str(settings.workspace_path) == workspace_str_yaml

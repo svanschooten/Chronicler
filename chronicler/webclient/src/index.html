@@ -1,0 +1,41 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chronicler Web</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .chronicle-card { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<h1>Chronicler</h1>
+<h3>Preserve conversations. Discover knowledge.</h3>
+
+<div id="status">Connecting to server...</div>
+
+<div id="chronicles-list">
+    <p>Loading chronicles...</p>
+</div>
+
+<script>
+    async function loadChronicles() {
+        // This is a placeholder for actual API call
+        // In a real implementation, we would fetch the API URL and key from settings
+        const status = document.getElementById('status');
+        const list = document.getElementById('chronicles-list');
+        
+        try {
+            // For now, we just show a message
+            status.textContent = 'Ready (API integration pending)';
+            list.innerHTML = '<p>No chronicles to display yet. Connect to a Chronicler Server to see your data.</p>';
+        } catch (e) {
+            status.textContent = 'Error: ' + e.message;
+        }
+    }
+
+    loadChronicles();
+</script>
+
+</body>
+</html>

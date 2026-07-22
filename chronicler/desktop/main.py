@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from pathlib import Path
 
 from chronicler.core.config import get_settings
 from chronicler.core.database_manager import DatabaseManager
@@ -8,19 +7,23 @@ from chronicler.desktop.app import run_app
 
 
 def run_desktop():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
     logger = logging.getLogger(__name__)
     logger.info("Chronicler Desktop starting...")
     settings = get_settings()
 
+    if not settings.workspace_path and not settings.server_url:
+        logger.error("No workspace or server URL configured. Running configuration wizard...")
+        from chronicler.core.wizard import run_wizard
+        run_wizard(mode="client:desktop")
+        settings = get_settings()
+
     if not settings.workspace_path:
-        # For now, default to a folder in home directory
-        settings.workspace_path = Path.home() / "ChroniclerWorkspace"
-        logger.info(f"No workspace set. Using default: {settings.workspace_path}")
-        settings.save()
+        # If we are here and workspace_path is missing, it means server_url was set,
+        # otherwise the block above would have triggered the wizard.
+        print("\nThin Client mode is not yet fully implemented for the Desktop application.")
+        print("Please run in Full Stack mode for now (option 1 in the wizard).")
+        import sys
+        sys.exit(1)
 
     db_manager = DatabaseManager(settings.workspace_path)
 

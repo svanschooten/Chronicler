@@ -21,10 +21,6 @@ from chronicler.core.sqlite import (
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8000):
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
     logger = logging.getLogger(__name__)
     logger.info("Chronicler Server starting...")
     settings = get_settings()
@@ -45,5 +41,5 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
     container.register_factory(TaskRepository, SQLiteTaskRepository)
     container.register_factory(TagRepository, SQLiteTagRepository)
 
-    server = RpcServer(container)
+    server = RpcServer(container, api_key=settings.api_key)
     server.run(host=host, port=port)

@@ -81,6 +81,7 @@ class RpcServer:
 
     def build(self):
         from fastapi import Depends, FastAPI, HTTPException, Security, status
+        from fastapi.middleware.cors import CORSMiddleware
         from fastapi.security import APIKeyHeader
 
         api_key_header = APIKeyHeader(name="X-API-Key")
@@ -96,6 +97,14 @@ class RpcServer:
         self._app = FastAPI(
             title="Chronicler RPC Server",
             dependencies=[Depends(verify_api_key)],
+        )
+
+        self._app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
         )
 
         if self.container:

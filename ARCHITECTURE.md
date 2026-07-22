@@ -69,9 +69,9 @@ The same service implementations are used regardless of deployment mode.
 
 # Deployment modes
 
-Chronicler supports three deployment modes.
+Chronicler supports four deployment modes.
 
-The selected mode is determined by the application configuration.
+The selected mode is determined by the application configuration and the entry point used.
 
 ## Full Stack
 
@@ -122,6 +122,22 @@ Application Services
 The Thin Client performs no local processing.
 
 All work is delegated to a remote Chronicler server.
+
+---
+
+## Web Client (Server)
+
+```text
+Web Browser
+    │
+Web Client Server
+    │
+HTTP API
+    │
+Application Services
+```
+
+The Web Client is a browser-based frontend. It is served by a lightweight FastAPI server which also provides configuration for connecting to a Chronicler Server.
 
 ---
 

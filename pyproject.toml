@@ -30,6 +30,7 @@ dependencies = [
     "pydantic-settings>=2,<3",
     "SQLAlchemy>=2,<3",
     "aiosqlite>=0.20,<1",
+    "PyYAML>=6,<7",
 ]
 
 [project.optional-dependencies]

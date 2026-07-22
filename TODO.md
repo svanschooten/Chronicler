@@ -18,9 +18,17 @@
 
 * [x] Create application settings system
 * [x] Store user configuration in OS config directory
-* [ ] Create first-run wizard
+* [x] Create first-run wizard
 * [x] Select workspace location
 * [x] Validate workspace permissions
+* [x] Automatic configuration validation for different run modes
+
+## Architecture alignment
+
+* [ ] Implement DI container for service resolution
+* [ ] Refactor DesktopApp to use DI container
+* [ ] Support switching between local and remote services based on settings
+* [ ] Ensure all business logic is strictly in Services
 
 ---
 
@@ -53,6 +61,8 @@ The UI and services should not depend directly on SQLite.
 * [x] Chronicle metadata
 * [x] Speakers
 * [x] Transcript lines
+* [ ] Tags (in project.db for portability)
+* [ ] AI analysis results
 * [ ] Cleanup state
 
 ---
@@ -67,6 +77,8 @@ The UI and services should not depend directly on SQLite.
 * [x] Task progress tracking
 * [x] Error handling
 * [x] Retry support
+* [ ] Implement annotation-based provider registration
+* [ ] Implement Scribe workers with concurrency configuration
 
 Initial tasks:
 
@@ -96,7 +108,10 @@ Future:
 ## Archive view
 
 * [x] Browse Chronicles
-* [ ] Search
+* [ ] Implement SearchService
+    * [ ] Workspace search (across chronicles)
+    * [ ] Chronicle search (Full-text search using SQLite FTS)
+* [ ] Search UI in Archive view
 * [ ] Filter by tags
 * [ ] Open Chronicle
 * [x] Import Transcript (via Header)
@@ -182,9 +197,9 @@ Future:
 ---
 
 # Phase 7 — Chronicler Server
-
 * [x] Add server application mode
-* [ ] Add first run CLI wizard
+* [x] Add first run CLI wizard
+    * [x] Add option to generate or set API key
 * [x] Add API layer
 * [x] Add authentication
 * [ ] Add server storage management
@@ -193,7 +208,18 @@ Future:
 
 ---
 
-# Phase 8 — Distribution
+# Phase 8 — Web Client
+
+* [x] Implement basic web client server
+* [x] Serve static files
+* [x] Implement API proxy or CORS support for Chronicler Server
+* [x] Web Client Configuration in Wizard (Option to set up as a Web Client server)
+* [ ] Basic UI for browsing Chronicles
+* [ ] Basic UI for viewing a Chronicle
+
+---
+
+# Phase 9 — Distribution
 
 * [ ] GitHub Actions builds
 * [ ] Automated releases

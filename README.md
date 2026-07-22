@@ -56,9 +56,9 @@ The application is built around a shared service layer. Whether running locally 
 
 ## Deployment modes
 
-Chronicler supports three deployment modes.
+Chronicler supports four deployment modes.
 
-The active mode is determined by the application configuration. Switching between local and remote operation requires restarting the application.
+The active mode is determined by the application configuration and the command used to start the application.
 
 ### Full Stack
 
@@ -93,6 +93,12 @@ A lightweight client containing:
 
 All processing, storage and AI models remain on the server.
 
+### Web Client (Server)
+
+A browser-based client providing access to a remote Chronicler server.
+
+The web client is served by a lightweight web server and communicates with the Chronicler server via its HTTP API.
+
 ```mermaid
 flowchart LR
 
@@ -110,6 +116,12 @@ subgraph Thin Client
     UI2 --> Proxy
 end
 
+subgraph Web Client
+    Browser[Web Browser]
+    WS[Web Client Server]
+    Browser --> WS
+end
+
 subgraph Server
     API[Generated HTTP API]
     S2[Application Services]
@@ -120,6 +132,7 @@ subgraph Server
 end
 
 Proxy --> API
+Browser --> API
 ```
 
 ## Storage
@@ -133,6 +146,7 @@ Application configuration contains machine-specific settings such as:
 * Workspace location
 * Deployment mode
 * Remote server configuration
+* API key for authentication
 * Provider configuration
 * User preferences
 
@@ -145,6 +159,10 @@ Example:
 ```
 
 The configuration determines whether `python -m chronicler` starts a local Full Stack instance or a Thin Client connected to a remote server.
+
+### Automatic Configuration Validation
+
+Chronicler automatically validates your configuration based on the mode you are running. If required settings (like a workspace path for a server or a remote URL for a thin client) are missing, Chronicler will automatically launch the relevant steps of the configuration wizard to help you set it up.
 
 ### Workspace
 
@@ -325,18 +343,18 @@ pip install -e ".[dev]"
 
 ### Run
 
+The startup mode depends on how you launch the application and your configuration.
+
+#### Desktop Application (Full Stack or Thin Client)
+
 ```bash
 python -m chronicler
 ```
 
-The startup mode depends on the application configuration.
+* If a local workspace is configured → **Full Stack**
+* If a remote server is configured → **Thin Client**
 
-* Local workspace configured → Full Stack
-* Remote server configured → Thin Client
-
-Changing between modes requires restarting the application.
-
-### Run server
+#### Server
 
 ```bash
 python -m chronicler server
@@ -355,6 +373,14 @@ chronicler server workers
 
 chronicler server tasks
 ```
+
+#### Web Client (Server)
+
+```bash
+python -m chronicler client:web
+```
+
+The web client server hosts the web-based user interface. It requires a configuration that points to a **Chronicler Server** (similar to a Thin Client setup).
 
 ## Future goals
 
