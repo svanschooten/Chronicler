@@ -1,21 +1,38 @@
+import argparse
 import logging
-import sys
 
 
 def main():
+    parser = argparse.ArgumentParser(prog="chronicler")
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        default="desktop",
+        choices=["desktop", "server", "web", "client:web", "client:desktop"],
+        help="Run mode (default: %(default)s)",
+    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
+
+    args = parser.parse_args()
+
+    log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(
-        level=logging.INFO,
+        level=log_level,
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
+
     from chronicler.core.config import get_settings, is_config_initialized
     from chronicler.core.wizard import run_wizard
 
-    mode = "client:desktop"
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "server":
-            mode = "server"
-        elif sys.argv[1] == "client:web":
-            mode = "client:web"
+    # Map friendly names to internal mode names
+    mode_map = {
+        "desktop": "client:desktop",
+        "web": "client:web",
+        "server": "server",
+        "client:web": "client:web",
+        "client:desktop": "client:desktop",
+    }
+    mode = mode_map.get(args.mode, args.mode)
 
     if not is_config_initialized():
         run_wizard(mode=mode)

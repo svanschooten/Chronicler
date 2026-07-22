@@ -105,6 +105,8 @@ The server is a headless Chronicler instance.
 
 It exposes the same application services through HTTP while managing storage and background processing.
 
+Additionally, it provides a specialized `/upload` endpoint for receiving files (such as audio recordings) from remote clients.
+
 ---
 
 ## Thin Client

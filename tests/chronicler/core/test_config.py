@@ -85,12 +85,12 @@ def test_load_settings(tmp_path, monkeypatch):
     assert str(settings.workspace_path) == workspace_str
 
     # Test YAML loading (current)
-    # Clear lru_cache for Settings if needed, but Settings() creates a new instance each time, 
+    # Clear lru_cache for Settings if needed, but Settings() creates a new instance each time,
     # it's get_settings() that is cached.
     config_file_yaml = tmp_path / "settings.yaml"
     workspace_str_yaml = str(tmp_path / "test_workspace_yaml")
     config_file_yaml.write_text(f"workspace_path: {workspace_str_yaml}\n")
-    
+
     # Priority is YAML, so it should pick the yaml one now if both exist
     # (actually in my impl it's Priority 2 platform yaml)
     # Wait, in my impl it's Priority 2: settings.yaml, Priority 3: settings.json

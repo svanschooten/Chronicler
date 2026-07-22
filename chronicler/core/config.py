@@ -11,6 +11,7 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, Settings
 
 logger = logging.getLogger(__name__)
 
+
 class FileConfigSettingsSource(PydanticBaseSettingsSource):
     def get_field_value(self, field_name: str, field: Any) -> tuple[Any, str, bool]:
         return None, field_name, False
@@ -91,7 +92,7 @@ class Settings(BaseSettings):
         with open(config_file, "w") as f:
             # Convert to dict and then to yaml
             yaml.dump(json.loads(self.model_dump_json()), f, default_flow_style=False)
-        
+
         return config_file
 
     model_config = SettingsConfigDict(env_prefix="CHRONICLER_", env_file=".env", extra="ignore")

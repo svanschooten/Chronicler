@@ -142,6 +142,7 @@ class ConfigWizard:
 def run_wizard(mode: str | None = None):
     try:
         from chronicler.core.config import get_settings
+
         wizard = ConfigWizard(settings=get_settings())
         wizard.run(mode=mode)
     except KeyboardInterrupt:

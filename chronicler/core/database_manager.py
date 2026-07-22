@@ -23,8 +23,14 @@ class DatabaseManager:
 
     async def init_archive(self):
         self.workspace_path.mkdir(parents=True, exist_ok=True)
+        (self.workspace_path / "imports").mkdir(parents=True, exist_ok=True)
         async with self.archive_engine.begin() as conn:
             await conn.run_sync(ArchiveBase.metadata.create_all)
+
+    def get_imports_path(self) -> Path:
+        path = self.workspace_path / "imports"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     def get_archive_session(self) -> AsyncSession:
         return self.archive_session_factory()

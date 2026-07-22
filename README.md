@@ -348,6 +348,12 @@ The startup mode depends on how you launch the application and your configuratio
 #### Desktop Application (Full Stack or Thin Client)
 
 ```bash
+python -m chronicler desktop
+```
+
+or simply:
+
+```bash
 python -m chronicler
 ```
 
@@ -362,25 +368,31 @@ python -m chronicler server
 
 The server exposes the generated HTTP API and executes background Scribes.
 
-A small management CLI is available for inspecting the server.
-
-Examples:
+#### Web Client (Server)
 
 ```bash
-chronicler server status
-
-chronicler server workers
-
-chronicler server tasks
+python -m chronicler web
 ```
 
-#### Web Client (Server)
+or:
 
 ```bash
 python -m chronicler client:web
 ```
 
 The web client server hosts the web-based user interface. It requires a configuration that points to a **Chronicler Server** (similar to a Thin Client setup).
+
+### Command Line Options
+
+Chronicler supports several command-line options:
+
+```bash
+python -m chronicler [mode] [-v|--verbose] [--help]
+```
+
+- `mode`: The run mode. One of `desktop`, `server`, `web`.
+- `-v`, `--verbose`: Enable debug logging (sets log level to DEBUG).
+- `--help`: Show the help message.
 
 ## Future goals
 

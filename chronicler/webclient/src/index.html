@@ -1,41 +1,199 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chronicler Web</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .chronicle-card { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --bg-color: #f4f7f6;
+            --text-color: #333;
+            --white: #ffffff;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        header {
+            background-color: var(--primary-color);
+            color: var(--white);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        main {
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .status-bar {
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+        .chronicle-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+        .chronicle-card {
+            background: var(--white);
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+        .chronicle-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        }
+        .chronicle-card h3 {
+            margin-top: 0;
+            color: var(--primary-color);
+        }
+        .btn {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .btn:hover {
+            background-color: #2980b9;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 400px;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 0.5rem;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+        }
     </style>
 </head>
 <body>
 
-<h1>Chronicler</h1>
-<h3>Preserve conversations. Discover knowledge.</h3>
+<div id="app">
+    <header>
+        <div>
+            <h1 style="margin: 0; font-size: 1.5rem;">Chronicler</h1>
+        </div>
+        <div class="status-bar">
+            Status: {{ status }}
+        </div>
+    </header>
 
-<div id="status">Connecting to server...</div>
+    <main>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h2>Chronicles</h2>
+            <button class="btn" @click="showCreateModal = true">New Chronicle</button>
+        </div>
 
-<div id="chronicles-list">
-    <p>Loading chronicles...</p>
+        <div v-if="chronicles.length === 0" style="text-align: center; color: #666; margin-top: 4rem;">
+            <p>No chronicles found. Create your first one!</p>
+        </div>
+
+        <div class="chronicle-list">
+            <div v-for="chronicle in chronicles" :key="chronicle.id" class="chronicle-card">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h3>{{ chronicle.title }}</h3>
+                        <p style="font-size: 0.9rem; color: #666;">ID: {{ chronicle.id }}</p>
+                    </div>
+                    <button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" @click.stop="selectedChronicle = chronicle">Import Audio</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Create Modal -->
+    <div v-if="showCreateModal" class="modal">
+        <div class="modal-content">
+            <h3>Create New Chronicle</h3>
+            <div class="form-group">
+                <label for="title">Title</label>
+                <input type="text" id="title" v-model="newChronicleTitle" placeholder="Enter chronicle title" @keyup.enter="createChronicle">
+            </div>
+            <div class="actions">
+                <button class="btn" style="background-color: #95a5a6;" @click="showCreateModal = false">Cancel</button>
+                <button class="btn" @click="createChronicle">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div v-if="selectedChronicle" class="modal">
+        <div class="modal-content">
+            <h3>Import Audio to "{{ selectedChronicle.title }}"</h3>
+            <p style="font-size: 0.9rem; color: #666; margin-bottom: 1.5rem;">Select an audio file or transcript to import.</p>
+            
+            <div class="form-group">
+                <label for="file">Audio File</label>
+                <input type="file" id="file" @change="handleFileChange">
+            </div>
+
+            <div v-if="isUploading" style="margin-bottom: 1rem;">
+                <div style="height: 4px; background: #eee; border-radius: 2px; overflow: hidden;">
+                    <div style="height: 100%; background: var(--accent-color); width: 50%; animation: pulse 1.5s infinite;"></div>
+                </div>
+                <p style="font-size: 0.8rem; text-align: center; margin-top: 0.5rem;">Uploading...</p>
+            </div>
+
+            <div class="actions">
+                <button class="btn" style="background-color: #95a5a6;" @click="selectedChronicle = null" :disabled="isUploading">Cancel</button>
+                <button class="btn" @click="uploadAndImport" :disabled="!selectedFile || isUploading">
+                    {{ isUploading ? 'Uploading...' : 'Import' }}
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
-<script>
-    async function loadChronicles() {
-        // This is a placeholder for actual API call
-        // In a real implementation, we would fetch the API URL and key from settings
-        const status = document.getElementById('status');
-        const list = document.getElementById('chronicles-list');
-        
-        try {
-            // For now, we just show a message
-            status.textContent = 'Ready (API integration pending)';
-            list.innerHTML = '<p>No chronicles to display yet. Connect to a Chronicler Server to see your data.</p>';
-        } catch (e) {
-            status.textContent = 'Error: ' + e.message;
-        }
-    }
+<style>
+@keyframes pulse {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+}
+</style>
 
-    loadChronicles();
-</script>
-
+<script src="/src/app.js"></script>
 </body>
 </html>

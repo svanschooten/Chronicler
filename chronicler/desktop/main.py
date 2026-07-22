@@ -14,6 +14,7 @@ def run_desktop():
     if not settings.workspace_path and not settings.server_url:
         logger.error("No workspace or server URL configured. Running configuration wizard...")
         from chronicler.core.wizard import run_wizard
+
         run_wizard(mode="client:desktop")
         settings = get_settings()
 
@@ -23,6 +24,7 @@ def run_desktop():
         print("\nThin Client mode is not yet fully implemented for the Desktop application.")
         print("Please run in Full Stack mode for now (option 1 in the wizard).")
         import sys
+
         sys.exit(1)
 
     db_manager = DatabaseManager(settings.workspace_path)

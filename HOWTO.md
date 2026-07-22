@@ -39,8 +39,15 @@ The wizard will ask you how you would like to run Chronicler.
 1. Ensure you have a Chronicler Server running.
 2. Select option **4. Web Client (Server)**.
 3. Enter the Server URL and API key.
-4. Start the web client server: `python -m chronicler client:web`.
+4. Start the web client server: `python -m chronicler web`.
 5. Open your browser at `http://localhost:8080`.
+
+The Web Client allows you to:
+- Browse your Chronicles.
+- Create new Chronicles.
+- Upload audio files or transcripts directly to the server for processing.
+
+---
 
 ## Configuration File Locations
 

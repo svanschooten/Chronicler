@@ -36,10 +36,20 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
 
     container = Container()
     container.register_instance(DatabaseManager, db_manager)
-    container.register_factory(AsyncSession, lambda dm: dm.get_archive_session())
+    container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
     container.register_factory(ChronicleRepository, SQLiteChronicleRepository)
     container.register_factory(TaskRepository, SQLiteTaskRepository)
     container.register_factory(TagRepository, SQLiteTagRepository)
 
-    server = RpcServer(container, api_key=settings.api_key)
+    from chronicler.core.services import (
+        ChronicleService,
+        SearchService,
+        TaskService,
+    )
+
+    server = RpcServer(
+        container,
+        services=[ChronicleService, SearchService, TaskService],
+        api_key=settings.api_key,
+    )
     server.run(host=host, port=port)

@@ -22,10 +22,11 @@
 * [x] Select workspace location
 * [x] Validate workspace permissions
 * [x] Automatic configuration validation for different run modes
+* [x] Use argparse for command-line arguments and --verbose mode
 
 ## Architecture alignment
 
-* [ ] Implement DI container for service resolution
+* [x] Implement DI container for service resolution
 * [ ] Refactor DesktopApp to use DI container
 * [ ] Support switching between local and remote services based on settings
 * [ ] Ensure all business logic is strictly in Services
@@ -214,7 +215,9 @@ Future:
 * [x] Serve static files
 * [x] Implement API proxy or CORS support for Chronicler Server
 * [x] Web Client Configuration in Wizard (Option to set up as a Web Client server)
-* [ ] Basic UI for browsing Chronicles
+* [x] Basic UI for browsing Chronicles
+* [x] Basic UI for creating Chronicles
+* [x] UI for importing audio files via upload
 * [ ] Basic UI for viewing a Chronicle
 
 ---

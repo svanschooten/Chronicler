@@ -12,7 +12,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Chronicler Web Client")
 
     static_path = Path(__file__).parent / "src"
-    
+
     # Mount the static files directory
     app.mount("/src", StaticFiles(directory=static_path), name="src")
 

@@ -64,6 +64,12 @@ class RpcServer:
         for param_name, param in sig.parameters.items():
             if param_name == "self":
                 continue
+
+            # Variadic parameters (*args, **kwargs) cannot have default values
+            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                new_params.append(param)
+                continue
+
             # Treat all parameters as body fields
             new_param = param.replace(default=Body(..., alias=param_name, embed=True))
             new_params.append(new_param)
@@ -80,9 +86,13 @@ class RpcServer:
         router.add_api_route(f"/{name}", wrapper, methods=["POST"])
 
     def build(self):
-        from fastapi import Depends, FastAPI, HTTPException, Security, status
+        import shutil
+
+        from fastapi import Depends, FastAPI, File, HTTPException, Security, UploadFile, status
         from fastapi.middleware.cors import CORSMiddleware
         from fastapi.security import APIKeyHeader
+
+        from chronicler.core.database_manager import DatabaseManager
 
         api_key_header = APIKeyHeader(name="X-API-Key")
 
@@ -106,6 +116,20 @@ class RpcServer:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+        @self._app.post("/upload")
+        async def upload_file(file: UploadFile = File(...)):
+            if not self.container:
+                raise HTTPException(status_code=500, detail="Server not configured for uploads")
+
+            db_manager = self.container.resolve(DatabaseManager)
+            upload_dir = db_manager.get_imports_path()
+
+            file_path = upload_dir / file.filename
+            with file_path.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            return {"file_path": str(file_path)}
 
         if self.container:
             target_services = self.services if self.services is not None else get_services()
