@@ -32,11 +32,16 @@ class DBChronicle(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(String(1000))
+    kind: Mapped[str] = mapped_column(String(100), default="Unknown")
+    status: Mapped[str] = mapped_column(String(50), default="Imported")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
     )
     source_file: Mapped[str | None] = mapped_column(String(1024))
+    project_path: Mapped[str | None] = mapped_column(String(1024))
+    duration: Mapped[str | None] = mapped_column(String(50))
+    speakers_count: Mapped[int] = mapped_column(default=0)
 
     tags: Mapped[list[DBTag]] = relationship(secondary=chronicle_tags, lazy="selectin")
 

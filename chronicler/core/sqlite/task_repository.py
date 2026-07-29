@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chronicler.core.database import DBTask
+from chronicler.core.database import DBChronicle, DBTask
 from chronicler.core.models import Task, TaskStatus
 from chronicler.core.repositories import TaskRepository
 
@@ -65,3 +65,12 @@ class SQLiteTaskRepository(TaskRepository):
         if db_task:
             db_task.progress = progress
             await self.session.commit()
+
+    async def search(self, query: str) -> list[Task]:
+        result = await self.session.execute(
+            select(DBTask)
+            .outerjoin(DBChronicle)
+            .where(or_(DBTask.type.ilike(f"%{query}%"), DBChronicle.title.ilike(f"%{query}%")))
+        )
+        db_tasks = result.scalars().all()
+        return [Task.model_validate(t) for t in db_tasks]

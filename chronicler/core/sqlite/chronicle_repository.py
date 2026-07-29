@@ -30,7 +30,12 @@ class SQLiteChronicleRepository(ChronicleRepository):
             id=str(chronicle.id),
             title=chronicle.title,
             description=chronicle.description,
+            kind=chronicle.kind,
+            status=chronicle.status,
             source_file=chronicle.source_file,
+            project_path=chronicle.project_path,
+            duration=chronicle.duration,
+            speakers_count=chronicle.speakers_count,
             created_at=chronicle.created_at,
             updated_at=chronicle.updated_at,
         )
@@ -47,7 +52,12 @@ class SQLiteChronicleRepository(ChronicleRepository):
         if db_chronicle:
             db_chronicle.title = chronicle.title
             db_chronicle.description = chronicle.description
+            db_chronicle.kind = chronicle.kind
+            db_chronicle.status = chronicle.status
             db_chronicle.source_file = chronicle.source_file
+            db_chronicle.project_path = chronicle.project_path
+            db_chronicle.duration = chronicle.duration
+            db_chronicle.speakers_count = chronicle.speakers_count
             db_chronicle.updated_at = chronicle.updated_at
             await self.session.commit()
             await self.session.refresh(db_chronicle)
@@ -59,3 +69,10 @@ class SQLiteChronicleRepository(ChronicleRepository):
             sa_delete(DBChronicle).where(DBChronicle.id == str(chronicle_id))
         )
         await self.session.commit()
+
+    async def search(self, query: str) -> list[Chronicle]:
+        result = await self.session.execute(
+            select(DBChronicle).where(DBChronicle.title.ilike(f"%{query}%"))
+        )
+        db_chronicles = result.scalars().all()
+        return [Chronicle.model_validate(db) for db in db_chronicles]

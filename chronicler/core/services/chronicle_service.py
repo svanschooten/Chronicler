@@ -16,8 +16,10 @@ class ChronicleService:
     async def get_chronicle(self, chronicle_id: UUID) -> Chronicle | None:
         return await self.repository.get_by_id(chronicle_id)
 
-    async def create_chronicle(self, title: str) -> Chronicle:
-        chronicle = Chronicle(title=title)
+    async def create_chronicle(
+        self, title: str, project_path: str | None = None, source_file: str | None = None
+    ) -> Chronicle:
+        chronicle = Chronicle(title=title, project_path=project_path, source_file=source_file)
         return await self.repository.create(chronicle)
 
     async def update_chronicle(self, chronicle: Chronicle) -> Chronicle:
@@ -25,3 +27,6 @@ class ChronicleService:
 
     async def delete_chronicle(self, chronicle_id: UUID) -> None:
         return await self.repository.delete(chronicle_id)
+
+    async def search_chronicles(self, query: str) -> list[Chronicle]:
+        return await self.repository.search(query)

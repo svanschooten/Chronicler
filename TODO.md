@@ -109,12 +109,12 @@ Future:
 ## Archive view
 
 * [x] Browse Chronicles
-* [ ] Implement SearchService
-    * [ ] Workspace search (across chronicles)
+* [x] Implement search in repositories and services
+    * [x] Workspace search (across chronicles)
     * [ ] Chronicle search (Full-text search using SQLite FTS)
-* [ ] Search UI in Archive view
+* [x] Search UI in Archive view
 * [ ] Filter by tags
-* [ ] Open Chronicle
+* [x] Open Chronicle
 * [x] Import Transcript (via Header)
 
 ---
@@ -171,8 +171,8 @@ Future:
 
 ## Transcript viewer
 
-* [ ] Display transcript
-* [ ] Edit text
+* [x] Display transcript
+* [x] Edit text
 * [ ] Search within Chronicle
 
 Future:

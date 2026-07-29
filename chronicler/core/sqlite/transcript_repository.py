@@ -8,6 +8,7 @@ from chronicler.core.repositories import TranscriptRepository
 
 
 class SQLiteTranscriptRepository(TranscriptRepository):
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -70,3 +71,6 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         await self.session.execute(sa_delete(DBTranscriptLine))
         await self.session.execute(sa_delete(DBSpeaker))
         await self.session.commit()
+
+    async def search(self, query: str) -> list[TranscriptLine]:
+        pass # TODO implement search

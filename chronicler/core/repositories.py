@@ -25,6 +25,10 @@ class ChronicleRepository(ABC):
     async def delete(self, chronicle_id: UUID) -> None:
         pass
 
+    @abstractmethod
+    async def search(self, query: str) -> list[Chronicle]:
+        pass
+
 
 class TagRepository(ABC):
     @abstractmethod
@@ -37,6 +41,10 @@ class TagRepository(ABC):
 
     @abstractmethod
     async def delete(self, tag_id: UUID) -> None:
+        pass
+
+    @abstractmethod
+    async def search(self, query: str) -> list[Tag]:
         pass
 
 
@@ -65,6 +73,10 @@ class TaskRepository(ABC):
     async def update_progress(self, task_id: UUID, progress: int) -> None:
         pass
 
+    @abstractmethod
+    async def search(self, query: str) -> list[Task]:
+        pass
+
 
 class TranscriptRepository(ABC):
     @abstractmethod
@@ -89,4 +101,8 @@ class TranscriptRepository(ABC):
 
     @abstractmethod
     async def delete_all(self) -> None:
+        pass
+
+    @abstractmethod
+    async def search(self, query: str) -> list[TranscriptLine]:
         pass

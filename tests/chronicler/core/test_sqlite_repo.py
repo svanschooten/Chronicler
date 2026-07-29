@@ -110,3 +110,46 @@ async def test_update_task_status(async_session):
     fetched = await repo.get_by_id(task.id)
     assert fetched.status == TaskStatus.FAILED
     assert fetched.error == "Something went wrong"
+
+
+@pytest.mark.asyncio
+async def test_search_chronicles(async_session):
+    repo = SQLiteChronicleRepository(async_session)
+    await repo.create(Chronicle(title="Meeting One"))
+    await repo.create(Chronicle(title="Interview Two"))
+
+    results = await repo.search("Meeting")
+    assert len(results) == 1
+    assert results[0].title == "Meeting One"
+
+    results = await repo.search("One")
+    assert len(results) == 1
+    assert results[0].title == "Meeting One"
+
+    results = await repo.search("Three")
+    assert len(results) == 0
+
+
+@pytest.mark.asyncio
+async def test_search_tasks(async_session):
+    chronicle_repo = SQLiteChronicleRepository(async_session)
+    task_repo = SQLiteTaskRepository(async_session)
+
+    chronicle = await chronicle_repo.create(Chronicle(title="D&D Session"))
+
+    await task_repo.create(Task(type=TaskType.IMPORT, chronicle_id=chronicle.id))
+    await task_repo.create(Task(type=TaskType.TRANSCRIBE))
+
+    # Search by type
+    results = await task_repo.search("IMPORT")
+    assert len(results) == 1
+    assert results[0].type == TaskType.IMPORT
+
+    # Search by chronicle title
+    results = await task_repo.search("D&D")
+    assert len(results) == 1
+    assert results[0].type == TaskType.IMPORT
+
+    # Search case insensitive
+    results = await task_repo.search("d&d")
+    assert len(results) == 1

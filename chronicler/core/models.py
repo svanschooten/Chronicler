@@ -53,9 +53,14 @@ class Chronicle(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     title: str
     description: str | None = None
+    kind: str = "Unknown"
+    status: str = "Imported"
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     source_file: str | None = None
+    project_path: str | None = None
+    duration: str | None = None
+    speakers_count: int = 0
 
     tags: list[Tag] = []
 
