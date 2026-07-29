@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>Chronicler</title>
+  <rect width="512" height="512" rx="104" fill="#4E342E"/>
+  <path d="M132 112h190c32 0 58 26 58 58v218c0 7-8 11-14 7l-56-36-55 36-55-36-55 36c-6 4-13 0-13-7V112z" fill="#FFF8E1"/>
+  <path d="M184 202h144M184 256h144M184 310h92" fill="none" stroke="#795548" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="343" cy="332" r="58" fill="#FFCA28"/>
+  <path d="M329 307v46c0 12 28 12 28 0v-46c0-18-28-18-28 0zm-13 34h54m-27 12v20" fill="none" stroke="#4E342E" stroke-width="12" stroke-linecap="round"/>
+</svg>
