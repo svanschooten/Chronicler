@@ -34,7 +34,7 @@ class AppState:
 
 class DesktopApp:
     def __init__(self, db_manager: DatabaseManager):
-        logger.info("DesktopApp constructed")
+        logger.debug("DesktopApp constructed")
         self.state = AppState()
         self.db_manager = db_manager
 
@@ -123,7 +123,7 @@ class DesktopApp:
         await self.db_manager.close_all()
 
     async def update_view(self):
-        logger.info(f"Navigating to view: {self.state.current_view}")
+        logger.debug(f"Navigating to view: {self.state.current_view}")
         if self.state.current_view == ViewType.ARCHIVE:
             self.content_area.content = ArchiveView(
                 self.chronicle_service, self.task_service, self.file_picker
@@ -139,4 +139,4 @@ class DesktopApp:
 
 def run_app(db_manager: DatabaseManager):
     app = DesktopApp(db_manager)
-    ft.app(target=app.main)
+    ft.run(app.main)

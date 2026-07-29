@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class TasksView(ft.Column):
     def __init__(self, task_service: TaskService):
-        logger.info("TasksView constructed")
+        logger.debug("TasksView constructed")
         self.task_service = task_service
         self.task_list = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
@@ -17,7 +17,7 @@ class TasksView(ft.Column):
             controls=[
                 ft.Row(
                     [
-                        ft.Text("Tasks", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                        ft.Text("Tasks", theme_style=ft.TextThemeStyle.HEADLINE_MEDIUM),
                         ft.IconButton(ft.Icons.REFRESH, on_click=self.refresh_clicked),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -29,11 +29,11 @@ class TasksView(ft.Column):
         )
 
     def did_mount(self):
-        logger.info("TasksView loaded")
+        logger.debug("TasksView loaded")
         self.page.run_task(self.load_tasks)
 
     def will_unmount(self):
-        logger.info("TasksView unloaded")
+        logger.debug("TasksView unloaded")
 
     async def refresh_clicked(self, e):
         await self.load_tasks()

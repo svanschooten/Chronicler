@@ -16,7 +16,7 @@ class ArchiveView(ft.Column):
         task_service: TaskService,
         file_picker: ft.FilePicker,
     ):
-        logger.info("ArchiveView constructed")
+        logger.debug("ArchiveView constructed")
         self.chronicle_service = chronicle_service
         self.task_service = task_service
         self.file_picker = file_picker
@@ -36,7 +36,7 @@ class ArchiveView(ft.Column):
             controls=[
                 ft.Row(
                     [
-                        ft.Text("Archive", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                        ft.Text("Archive", theme_style=ft.TextThemeStyle.HEADLINE_MEDIUM),
                         ft.Row(
                             [
                                 ft.IconButton(
@@ -58,7 +58,7 @@ class ArchiveView(ft.Column):
         )
 
     def did_mount(self):
-        logger.info("ArchiveView loaded")
+        logger.debug("ArchiveView loaded")
         self.page.run_task(self.mount_async)
 
     async def mount_async(self):
@@ -70,7 +70,7 @@ class ArchiveView(ft.Column):
         await self.load_chronicles()
 
     def will_unmount(self):
-        logger.info("ArchiveView unloaded")
+        logger.debug("ArchiveView unloaded")
         if self.create_dialog in self.page.overlay:
             self.page.overlay.remove(self.create_dialog)
         self.page.update()

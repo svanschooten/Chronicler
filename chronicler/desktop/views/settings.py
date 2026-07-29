@@ -7,10 +7,10 @@ logger = logging.getLogger(__name__)
 
 class SettingsView(ft.Column):
     def __init__(self):
-        logger.info("SettingsView constructed")
+        logger.debug("SettingsView constructed")
         super().__init__(
             [
-                ft.Text("Settings", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+                ft.Text("Settings", theme_style=ft.TextThemeStyle.HEADLINE_MEDIUM),
                 ft.Divider(),
                 ft.Text("Configuration and preferences will be here."),
             ],
@@ -18,7 +18,7 @@ class SettingsView(ft.Column):
         )
 
     def did_mount(self):
-        logger.info("SettingsView loaded")
+        logger.debug("SettingsView loaded")
 
     def will_unmount(self):
-        logger.info("SettingsView unloaded")
+        logger.debug("SettingsView unloaded")
