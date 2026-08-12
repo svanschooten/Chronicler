@@ -2,6 +2,7 @@ import json
 from uuid import UUID
 
 from chronicler.core.models import Task, TaskType
+from chronicler.core.processing.regex_guard import assert_safe_pattern
 from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import service
 
@@ -24,6 +25,7 @@ class TaskService:
     ):
         data = {"file_path": file_path}
         if regex:
+            assert_safe_pattern(regex)
             data["regex"] = regex
             data["speaker_group"] = speaker_group
             data["text_group"] = text_group

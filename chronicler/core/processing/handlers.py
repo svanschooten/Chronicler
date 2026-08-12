@@ -33,9 +33,18 @@ class WorkerHandlers:
         if not file_path:
             raise ValueError("No file_path provided for import task")
 
+        # file_path arrives from the RPC caller (TaskService.queue_import) and is not
+        # trustworthy on its own - confine it to the imports directory right at the
+        # point of access, which covers every caller regardless of how they obtained a
+        # file_path string, not just ones that went through the /upload endpoint.
+        resolved_path = Path(file_path).resolve()
+        imports_root = self.db_manager.get_imports_path().resolve()
+        if not resolved_path.is_relative_to(imports_root):
+            raise ValueError(f"file_path must be inside the imports directory: {file_path}")
+
         logger.info(f"Importing transcript from {file_path} for chronicle {task.chronicle_id}")
 
-        with open(file_path, encoding="utf-8") as f:
+        with open(resolved_path, encoding="utf-8") as f:
             content = f.read()
 
         regex = data.get("regex")

@@ -2,6 +2,7 @@ import re
 from abc import ABC, abstractmethod
 
 from chronicler.core.models import TranscriptLine
+from chronicler.core.processing.regex_guard import assert_safe_pattern
 
 
 class Importer(ABC):
@@ -12,6 +13,10 @@ class Importer(ABC):
 
 class RegexImporter(Importer):
     def __init__(self, line_regex: str, speaker_group: int = 1, text_group: int = 2):
+        # Defense in depth: TaskService.queue_import already rejects unsafe patterns
+        # at submission time, but RegexImporter can be constructed directly by any
+        # other caller, so the check belongs here too.
+        assert_safe_pattern(line_regex)
         self.line_regex = re.compile(line_regex)
         self.speaker_group = speaker_group
         self.text_group = text_group
