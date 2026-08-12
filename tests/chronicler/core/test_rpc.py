@@ -95,7 +95,11 @@ async def test_rpc_server_upload(tmp_path):
     container.register_factory(TaskRepository, SQLiteTaskRepository)
     container.register_factory(TagRepository, SQLiteTagRepository)
 
-    server = RpcServer(container=container, api_key="test-key")
+    # services=[] deliberately: this test only exercises /upload, and leaving the
+    # default (None -> every globally @service-registered class) would make the test's
+    # pass/fail depend on which other test modules happened to import first in this
+    # session and populate the global registry.
+    server = RpcServer(container=container, services=[], api_key="test-key")
     app = server.build()
 
     transport = ASGITransport(app=app)

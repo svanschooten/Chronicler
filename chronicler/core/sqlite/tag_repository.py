@@ -32,3 +32,8 @@ class SQLiteTagRepository(TagRepository):
     async def delete(self, tag_id: UUID) -> None:
         await self.session.execute(sa_delete(DBTag).where(DBTag.id == str(tag_id)))
         await self.session.commit()
+
+    async def search(self, query: str) -> list[Tag]:
+        result = await self.session.execute(select(DBTag).where(DBTag.name.ilike(f"%{query}%")))
+        db_tags = result.scalars().all()
+        return [Tag.model_validate(t) for t in db_tags]
