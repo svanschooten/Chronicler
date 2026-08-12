@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -108,8 +109,7 @@ async def test_remote_container_full_cycle():
         assert new_item.name == "Remote Item"
 
 
-@pytest.mark.asyncio
-async def test_rpc_server_upload(tmp_path):
+async def _build_upload_app(tmp_path):
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from chronicler.core.database_manager import DatabaseManager
@@ -130,12 +130,17 @@ async def test_rpc_server_upload(tmp_path):
     container.register_factory(TaskRepository, SQLiteTaskRepository)
     container.register_factory(TagRepository, SQLiteTagRepository)
 
-    # services=[] deliberately: this test only exercises /upload, and leaving the
-    # default (None -> every globally @service-registered class) would make the test's
-    # pass/fail depend on which other test modules happened to import first in this
-    # session and populate the global registry.
+    # services=[] deliberately: these tests only exercise /upload, and leaving the
+    # default (None -> every globally @service-registered class) would make pass/fail
+    # depend on which other test modules happened to import first in this session and
+    # populate the global registry.
     server = RpcServer(container=container, services=[], api_key="test-key")
-    app = server.build()
+    return server.build(), db_manager.get_imports_path()
+
+
+@pytest.mark.asyncio
+async def test_rpc_server_upload(tmp_path):
+    app, upload_dir = await _build_upload_app(tmp_path)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -144,7 +149,66 @@ async def test_rpc_server_upload(tmp_path):
         assert response.status_code == 200
         data = response.json()
         assert "file_path" in data
+        assert data["original_filename"] == "test.wav"
 
-        import os
+        result_path = Path(data["file_path"])
+        assert result_path.exists()
+        # The on-disk name is server-generated, not the client-supplied filename.
+        assert result_path.name != "test.wav"
+        assert result_path.suffix == ".wav"
+        assert result_path.parent.resolve() == upload_dir.resolve()
 
-        assert os.path.exists(data["file_path"])
+
+@pytest.mark.asyncio
+async def test_upload_rejects_path_traversal_filename(tmp_path):
+    app, upload_dir = await _build_upload_app(tmp_path)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        for evil_name in (
+            "../../../etc/passwc",
+            "..%2f..%2fetc%2fpasswd",
+            "/etc/passwd",
+            "..\\..\\windows\\system32\\config",
+        ):
+            files = {"file": (evil_name, io.BytesIO(b"data"), "application/octet-stream")}
+            response = await client.post(
+                "/upload", files=files, headers={"X-API-Key": "test-key"}
+            )
+            assert response.status_code == 200
+            result_path = Path(response.json()["file_path"]).resolve()
+            assert result_path.is_relative_to(upload_dir.resolve()), evil_name
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_oversized_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(RpcServer, "MAX_UPLOAD_SIZE", 10)
+    app, upload_dir = await _build_upload_app(tmp_path)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        files = {"file": ("big.wav", io.BytesIO(b"x" * 1000), "audio/wav")}
+        response = await client.post("/upload", files=files, headers={"X-API-Key": "test-key"})
+        assert response.status_code == 413
+
+    # No partial file left behind.
+    assert list(upload_dir.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_upload_same_filename_twice_no_collision(tmp_path):
+    app, upload_dir = await _build_upload_app(tmp_path)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        paths = []
+        for _ in range(2):
+            files = {"file": ("session.txt", io.BytesIO(b"hello"), "text/plain")}
+            response = await client.post(
+                "/upload", files=files, headers={"X-API-Key": "test-key"}
+            )
+            assert response.status_code == 200
+            paths.append(response.json()["file_path"])
+
+        assert paths[0] != paths[1]
+        assert all(Path(p).exists() for p in paths)

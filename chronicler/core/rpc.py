@@ -20,6 +20,9 @@ def get_services() -> list[type]:
 
 
 class RpcServer:
+    MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB - generous headroom for audio files
+    UPLOAD_CHUNK_SIZE = 1024 * 1024
+
     def __init__(
         self,
         container: Any = None,
@@ -86,7 +89,8 @@ class RpcServer:
         router.add_api_route(f"/{name}", wrapper, methods=["POST"])
 
     def build(self):
-        import shutil
+        import uuid
+        from pathlib import Path
 
         from fastapi import Depends, FastAPI, File, HTTPException, Security, UploadFile, status
         from fastapi.middleware.cors import CORSMiddleware
@@ -129,11 +133,34 @@ class RpcServer:
             db_manager = self.container.resolve(DatabaseManager)
             upload_dir = db_manager.get_imports_path()
 
-            file_path = upload_dir / file.filename
-            with file_path.open("wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            # file.filename is fully client-controlled - never use it to build a path
+            # (e.g. "../../.ssh/authorized_keys" would escape upload_dir). Generate the
+            # on-disk name server-side; keep only a whitelisted extension for
+            # readability, and store the original name as metadata, not as a path.
+            raw_suffix = Path(file.filename).suffix if file.filename else ""
+            safe_suffix = "".join(c for c in raw_suffix if c.isalnum() or c == ".")[:16]
+            stored_name = f"{uuid.uuid4().hex}{safe_suffix}"
+            file_path = upload_dir / stored_name
 
-            return {"file_path": str(file_path)}
+            bytes_written = 0
+            try:
+                with file_path.open("wb") as buffer:
+                    while chunk := await file.read(self.UPLOAD_CHUNK_SIZE):
+                        bytes_written += len(chunk)
+                        if bytes_written > self.MAX_UPLOAD_SIZE:
+                            raise HTTPException(
+                                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                                detail=(
+                                    f"File exceeds maximum upload size of "
+                                    f"{self.MAX_UPLOAD_SIZE} bytes"
+                                ),
+                            )
+                        buffer.write(chunk)
+            except HTTPException:
+                file_path.unlink(missing_ok=True)
+                raise
+
+            return {"file_path": str(file_path), "original_filename": file.filename}
 
         if self.container:
             target_services = self.services if self.services is not None else get_services()
