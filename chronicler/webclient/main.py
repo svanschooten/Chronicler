@@ -1,11 +1,14 @@
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+import httpx
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from chronicler.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -16,13 +19,76 @@ def create_app() -> FastAPI:
     # Mount the static files directory
     app.mount("/src", StaticFiles(directory=static_path), name="src")
 
+    def _not_configured() -> JSONResponse:
+        return JSONResponse(
+            {"detail": "Web client is not configured with a server_url/api_key"},
+            status_code=503,
+        )
+
     @app.get("/config")
     async def get_config():
         settings = get_settings()
-        return {
-            "server_url": settings.server_url or "http://localhost:8000",
-            "api_key": settings.api_key,
-        }
+        # Intentionally no server_url or api_key here: the browser talks to this web
+        # client only, over /api/..., which injects the key server-side. Never hand the
+        # upstream credential to an unauthenticated caller on the network.
+        return {"connected": bool(settings.server_url and settings.api_key)}
+
+    @app.post("/api/upload")
+    async def proxy_upload(request: Request):
+        settings = get_settings()
+        if not settings.server_url or not settings.api_key:
+            return _not_configured()
+
+        body = await request.body()
+        headers = {"X-API-Key": settings.api_key}
+        content_type = request.headers.get("content-type")
+        if content_type:
+            headers["Content-Type"] = content_type
+
+        async with httpx.AsyncClient() as client:
+            try:
+                upstream = await client.post(
+                    f"{settings.server_url}/upload",
+                    content=body,
+                    headers=headers,
+                    timeout=120.0,
+                )
+            except httpx.HTTPError:
+                logger.exception("Upstream upload request failed")
+                return JSONResponse({"detail": "Upstream server unreachable"}, status_code=502)
+
+        return Response(
+            content=upstream.content,
+            status_code=upstream.status_code,
+            media_type=upstream.headers.get("content-type"),
+        )
+
+    @app.post("/api/{service}/{method}")
+    async def proxy_rpc(service: str, method: str, request: Request):
+        settings = get_settings()
+        if not settings.server_url or not settings.api_key:
+            return _not_configured()
+
+        body = await request.body()
+        headers = {"X-API-Key": settings.api_key, "Content-Type": "application/json"}
+
+        async with httpx.AsyncClient() as client:
+            try:
+                upstream = await client.post(
+                    f"{settings.server_url}/{service}/{method}",
+                    content=body,
+                    headers=headers,
+                    timeout=30.0,
+                )
+            except httpx.HTTPError:
+                logger.exception("Upstream RPC request failed")
+                return JSONResponse({"detail": "Upstream server unreachable"}, status_code=502)
+
+        return Response(
+            content=upstream.content,
+            status_code=upstream.status_code,
+            media_type=upstream.headers.get("content-type"),
+        )
 
     @app.get("/")
     async def read_index():

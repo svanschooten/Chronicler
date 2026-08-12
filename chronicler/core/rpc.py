@@ -97,7 +97,7 @@ class RpcServer:
         api_key_header = APIKeyHeader(name="X-API-Key")
 
         async def verify_api_key(api_key: str = Security(api_key_header)):
-            if api_key != self.api_key:
+            if not secrets.compare_digest(api_key, self.api_key):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Could not validate credentials",
@@ -109,10 +109,14 @@ class RpcServer:
             dependencies=[Depends(verify_api_key)],
         )
 
+        # Auth here is a bearer-style X-API-Key header, not a cookie, so browsers never
+        # attach it automatically the way they do credentials - allow_credentials=True
+        # combined with a wildcard origin would be both invalid (browsers reject the
+        # combination) and unnecessary here.
         self._app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
-            allow_credentials=True,
+            allow_credentials=False,
             allow_methods=["*"],
             allow_headers=["*"],
         )

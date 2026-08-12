@@ -24,22 +24,23 @@ const app = createApp({
 
         const rpcCall = async (service, method, params = {}) => {
             if (!config.value) return;
-            
-            const url = `${config.value.server_url}/${service}/${method}`;
+
+            // Same-origin proxy route: the web client injects the API key server-side,
+            // so the browser never holds or sends it.
+            const url = `/api/${service}/${method}`;
             try {
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'X-API-Key': config.value.api_key
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(params)
                 });
-                
+
                 if (!response.ok) {
                     throw new Error(`RPC Error: ${response.statusText}`);
                 }
-                
+
                 return await response.json();
             } catch (e) {
                 console.error(e);
@@ -80,16 +81,12 @@ const app = createApp({
             status.value = 'Uploading file...';
             
             try {
-                // 1. Upload file
+                // 1. Upload file (same-origin proxy - see rpcCall)
                 const formData = new FormData();
                 formData.append('file', selectedFile.value);
-                
-                const uploadUrl = `${config.value.server_url}/upload`;
-                const uploadResponse = await fetch(uploadUrl, {
+
+                const uploadResponse = await fetch('/api/upload', {
                     method: 'POST',
-                    headers: {
-                        'X-API-Key': config.value.api_key
-                    },
                     body: formData
                 });
                 

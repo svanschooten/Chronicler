@@ -50,6 +50,41 @@ async def test_rpc_server_and_remote_proxy():
         assert resp.json() == [{"id": 1, "name": "Test Item"}]
 
 
+def test_cors_does_not_combine_wildcard_with_credentials():
+    """allow_origins=['*'] together with allow_credentials=True is an invalid, unsafe
+    combination that browsers reject outright - and unnecessary here anyway, since auth
+    is a bearer-style X-API-Key header that browsers never attach automatically.
+    """
+    container = Container()
+    server = RpcServer(container, services=[], api_key="test-key")
+    app = server.build()
+
+    cors_middlewares = [
+        m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"
+    ]
+    assert len(cors_middlewares) == 1
+    assert cors_middlewares[0].kwargs["allow_credentials"] is False
+
+
+@pytest.mark.asyncio
+async def test_wrong_key_of_same_length_still_rejected():
+    """Exercises the secrets.compare_digest path with a same-length wrong key, since a
+    naive `!=` and compare_digest both reject it - the point is the endpoint stays
+    correct after switching comparison functions, not that we can observe timing here.
+    """
+    container = Container()
+    api_key = "a" * 32
+    server = RpcServer(container, services=[MockService], api_key=api_key)
+    app = server.build()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "http://test/mock/get_items", json={}, headers={"X-API-Key": "b" * 32}
+        )
+        assert resp.status_code == 403
+
+
 @pytest.mark.asyncio
 async def test_remote_container_full_cycle():
     container = Container()
