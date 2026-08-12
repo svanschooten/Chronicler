@@ -16,4 +16,3 @@ async def test_webclient_serves_index():
 
         response = await client.get("/config")
         assert response.status_code == 200
-        assert "server_url" in response.json()

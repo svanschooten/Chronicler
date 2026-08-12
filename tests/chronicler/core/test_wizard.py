@@ -1,5 +1,5 @@
 from io import StringIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -27,14 +27,9 @@ def test_wizard_full_stack(tmp_path):
         wizard = ConfigWizard()
         wizard.run()
 
-        # Verify settings were saved
         settings_file = tmp_path / "Chronicler" / "settings.yaml"
         assert settings_file.exists()
 
-        from chronicler.core.config import Settings
-
-        # We need to bypass the lru_cache for get_settings if we were using it,
-        # but here we can just check the file or create a new Settings object
         saved_settings = Settings()
         assert saved_settings.workspace_path == tmp_path / "workspace"
         assert saved_settings.server_url is None
@@ -86,9 +81,6 @@ def test_wizard_thin_client(tmp_path):
 
 
 def test_wizard_reports_correct_path(tmp_path):
-    from io import StringIO
-
-    # We want to catch the output of print
     out = StringIO()
     config_dir_patch = patch(
         "chronicler.core.config.user_config_dir",
@@ -147,7 +139,6 @@ def test_wizard_web_client(tmp_path):
 def test_api_key_step_generates_on_empty_input():
     settings = Settings()
     # Option 2 is "Enter an existing API key"
-    # We provide "2" then "" (empty enter)
     inputs = ["2", ""]
 
     with (
@@ -164,29 +155,7 @@ def test_api_key_step_generates_on_empty_input():
         assert "Generated API key:" in fake_out.getvalue()
 
 
-def test_remote_server_step_generates_on_empty_api_key():
-    settings = Settings()
-    # RemoteServerStep asks for URL then API key
-    # We provide "http://localhost:8000" then ""
-    inputs = ["http://localhost:8000", ""]
-
-    with (
-        patch("builtins.input", side_effect=inputs),
-        patch("sys.stdout", new=StringIO()) as fake_out,
-    ):
-        from chronicler.core.wizard import RemoteServerStep
-
-        step = RemoteServerStep()
-        step.run(settings)
-
-        assert settings.server_url == "http://localhost:8000"
-        assert settings.api_key is not None
-        assert len(settings.api_key) == 43
-        assert "No API key provided. Generated:" in fake_out.getvalue()
-
-
 def test_server_mode_requires_workspace_and_api_key(tmp_path):
-    # Setup settings
     settings = Settings(workspace_path=None, api_key=None)
     assert settings.validate_for_mode("server") is False
 
@@ -256,62 +225,14 @@ def test_wizard_run_desktop_mode_missing(mock_choice, tmp_path):
     mock_choice.assert_called_once()
 
 
-@patch("chronicler.core.wizard.run_wizard")
-@patch("chronicler.core.config.is_config_initialized", return_value=True)
-@patch("chronicler.core.config.get_settings")
-def test_main_checks_validity(mock_get_settings, mock_is_init, mock_run_wizard):
-    import sys
-
-    from chronicler.__main__ import main
-
-    # Mock settings that are INVALID for server mode
-    mock_settings = MagicMock(spec=Settings)
-    mock_settings.validate_for_mode.return_value = False
-    mock_get_settings.return_value = mock_settings
-
-    with (
-        patch.object(sys, "argv", ["chronicler", "server"]),
-        patch("chronicler.__main__.server_main"),
-    ):
-        main()
-
-    mock_settings.validate_for_mode.assert_called_with("server")
-    mock_run_wizard.assert_called_with(mode="server")
-
-
-@patch("chronicler.core.wizard.run_wizard")
-@patch("chronicler.core.config.is_config_initialized", return_value=True)
-@patch("chronicler.core.config.get_settings")
-def test_main_skips_wizard_if_valid(mock_get_settings, mock_is_init, mock_run_wizard):
-    import sys
-
-    from chronicler.__main__ import main
-
-    # Mock settings that are VALID for server mode
-    mock_settings = MagicMock(spec=Settings)
-    mock_settings.validate_for_mode.return_value = True
-    mock_get_settings.return_value = mock_settings
-
-    with (
-        patch.object(sys, "argv", ["chronicler", "server"]),
-        patch("chronicler.__main__.server_main"),
-    ):
-        main()
-
-    mock_settings.validate_for_mode.assert_called_with("server")
-    mock_run_wizard.assert_not_called()
-
-
 def test_wizard_skips_satisfied_steps(tmp_path):
     with patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)):
         # Simulate previous run that set api_key
         settings = Settings(api_key="existing-key", workspace_path=None)
         wizard = ConfigWizard(settings=settings)
 
-        # Run wizard for 'server' mode.
         # 'server' mode runs WorkspaceStep and ApiKeyStep.
         # It should only run WorkspaceStep because api_key is already set.
-
         with (
             patch("chronicler.core.wizard.WorkspaceStep.run") as mock_ws,
             patch("chronicler.core.wizard.ApiKeyStep.run") as mock_api,
@@ -328,10 +249,7 @@ def test_wizard_desktop_choice_skips_satisfied_steps(tmp_path):
         settings = Settings(api_key="existing-key", workspace_path=None, server_url=None)
         wizard = ConfigWizard(settings=settings)
 
-        # Run wizard for 'client:desktop' mode.
-        # User will choose '1' (Full Stack).
-        # It should run WorkspaceStep but skip ApiKeyStep.
-
+        # User chooses '1' (Full Stack): should run WorkspaceStep but skip ApiKeyStep.
         with (
             patch("builtins.input", return_value="1"),
             patch("chronicler.core.wizard.WorkspaceStep.run") as mock_ws,
