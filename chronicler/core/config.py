@@ -23,7 +23,7 @@ class FileConfigSettingsSource(PydanticBaseSettingsSource):
             try:
                 return yaml.safe_load(home_config.read_text()) or {}
             except Exception:
-                pass
+                logger.warning("Failed to parse config file %s", home_config, exc_info=True)
 
         # Priority 2: Platform specific settings.yaml
         config_dir = Path(user_config_dir("Chronicler"))
@@ -32,7 +32,9 @@ class FileConfigSettingsSource(PydanticBaseSettingsSource):
             try:
                 return yaml.safe_load(config_file_yaml.read_text()) or {}
             except Exception:
-                pass
+                logger.warning(
+                    "Failed to parse config file %s", config_file_yaml, exc_info=True
+                )
 
         # Priority 3: Platform specific settings.json (legacy)
         config_file_json = config_dir / "settings.json"
@@ -40,7 +42,9 @@ class FileConfigSettingsSource(PydanticBaseSettingsSource):
             try:
                 return json.loads(config_file_json.read_text()) or {}
             except Exception:
-                pass
+                logger.warning(
+                    "Failed to parse config file %s", config_file_json, exc_info=True
+                )
 
         return {}
 

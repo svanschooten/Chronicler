@@ -65,10 +65,15 @@ class RemoteServerStep(WizardStep):
         print("Connect to an existing Chronicler Server.")
         settings.server_url = input("Enter server URL (e.g. http://localhost:8000): ").strip()
 
-        api_key = input("Enter API key [leave blank to generate]: ").strip()
-        if not api_key:
-            api_key = secrets.token_urlsafe(32)
-            print(f"No API key provided. Generated: {api_key}")
+        # Unlike ApiKeyStep (setting up a new server, where generating a fresh key is
+        # correct), this key must match one the server operator already configured -
+        # generating a random one here would silently guarantee every request 403s.
+        while True:
+            api_key = input("Enter API key (ask the server operator for it): ").strip()
+            if api_key:
+                break
+            print("An API key is required and must match the target server's - it")
+            print("cannot be generated here.")
         settings.api_key = api_key
 
     def is_satisfied(self, settings: Settings) -> bool:

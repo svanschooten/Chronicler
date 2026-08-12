@@ -96,3 +96,71 @@ def test_load_settings(tmp_path, monkeypatch):
     # Wait, in my impl it's Priority 2: settings.yaml, Priority 3: settings.json
     settings = Settings()
     assert str(settings.workspace_path) == workspace_str_yaml
+
+
+def test_malformed_config_file_logs_warning_instead_of_silent_failure(
+    tmp_path, monkeypatch, caplog
+):
+    def mock_user_config_dir(app_name):
+        return str(tmp_path)
+
+    monkeypatch.setattr("chronicler.core.config.user_config_dir", mock_user_config_dir)
+
+    config_file_yaml = tmp_path / "settings.yaml"
+    config_file_yaml.write_text("workspace_path: [this is not: valid: yaml")
+
+    with caplog.at_level("WARNING", logger="chronicler.core.config"):
+        settings = Settings()
+
+    # Malformed config falls back to defaults rather than crashing...
+    assert settings.workspace_path is None
+    # ...but it must not fail silently: a warning naming the broken file is logged.
+    assert any(
+        "Failed to parse config file" in record.message and str(config_file_yaml) in record.message
+        for record in caplog.records
+    )
+
+
+def test_server_mode_requires_workspace_and_api_key(tmp_path):
+    settings = Settings(workspace_path=None, api_key=None)
+    assert settings.validate_for_mode("server") is False
+
+    settings.workspace_path = tmp_path
+    assert settings.validate_for_mode("server") is False  # Missing API key
+
+    settings.api_key = "some-key"
+    assert settings.validate_for_mode("server") is True
+
+
+def test_webclient_mode_requires_server_url_and_api_key(tmp_path):
+    settings = Settings(server_url=None, api_key=None)
+    assert settings.validate_for_mode("client:web") is False
+
+    settings.server_url = "http://localhost:8000"
+    assert settings.validate_for_mode("client:web") is False  # Missing API key
+
+    settings.api_key = "some-key"
+    assert settings.validate_for_mode("client:web") is True
+
+
+def test_desktop_mode_requires_either(tmp_path):
+    settings = Settings(workspace_path=None, server_url=None)
+    assert settings.validate_for_mode("client:desktop") is False
+
+    # Reject empty string
+    settings.server_url = ""
+    assert settings.validate_for_mode("client:desktop") is False
+
+    settings.workspace_path = tmp_path
+    assert settings.validate_for_mode("client:desktop") is True
+
+    settings.workspace_path = None
+    settings.server_url = "http://localhost:8000"
+    assert settings.validate_for_mode("client:desktop") is True
+
+
+def test_unknown_mode_is_always_valid():
+    # validate_for_mode falls through to True for any mode string it doesn't
+    # recognize, rather than rejecting unknown modes outright.
+    settings = Settings()
+    assert settings.validate_for_mode("some-future-mode") is True

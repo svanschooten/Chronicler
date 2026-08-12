@@ -155,42 +155,28 @@ def test_api_key_step_generates_on_empty_input():
         assert "Generated API key:" in fake_out.getvalue()
 
 
-def test_server_mode_requires_workspace_and_api_key(tmp_path):
-    settings = Settings(workspace_path=None, api_key=None)
-    assert settings.validate_for_mode("server") is False
+def test_remote_server_step_reprompts_on_empty_api_key():
+    """RemoteServerStep connects to an existing server, so the key must match one the
+    server operator already configured - generating a random one on blank input (the
+    old behavior) silently guaranteed every subsequent request would 403. It must
+    re-prompt instead of ever inventing a key.
+    """
+    settings = Settings()
+    # First attempt left blank, second attempt provides the real key.
+    inputs = ["http://localhost:8000", "", "the-real-server-key"]
 
-    settings.workspace_path = tmp_path
-    assert settings.validate_for_mode("server") is False  # Missing API key
+    with (
+        patch("builtins.input", side_effect=inputs),
+        patch("sys.stdout", new=StringIO()) as fake_out,
+    ):
+        from chronicler.core.wizard import RemoteServerStep
 
-    settings.api_key = "some-key"
-    assert settings.validate_for_mode("server") is True
+        step = RemoteServerStep()
+        step.run(settings)
 
-
-def test_webclient_mode_requires_server_url_and_api_key(tmp_path):
-    settings = Settings(server_url=None, api_key=None)
-    assert settings.validate_for_mode("client:web") is False
-
-    settings.server_url = "http://localhost:8000"
-    assert settings.validate_for_mode("client:web") is False  # Missing API key
-
-    settings.api_key = "some-key"
-    assert settings.validate_for_mode("client:web") is True
-
-
-def test_desktop_mode_requires_either(tmp_path):
-    settings = Settings(workspace_path=None, server_url=None)
-    assert settings.validate_for_mode("client:desktop") is False
-
-    # Reject empty string
-    settings.server_url = ""
-    assert settings.validate_for_mode("client:desktop") is False
-
-    settings.workspace_path = tmp_path
-    assert settings.validate_for_mode("client:desktop") is True
-
-    settings.workspace_path = None
-    settings.server_url = "http://localhost:8000"
-    assert settings.validate_for_mode("client:desktop") is True
+        assert settings.server_url == "http://localhost:8000"
+        assert settings.api_key == "the-real-server-key"
+        assert "cannot be generated here" in fake_out.getvalue()
 
 
 @patch("chronicler.core.wizard.WorkspaceStep.run")
