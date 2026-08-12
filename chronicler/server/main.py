@@ -37,9 +37,13 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
     container = Container()
     container.register_instance(DatabaseManager, db_manager)
     container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-    container.register_factory(ChronicleRepository, SQLiteChronicleRepository)
-    container.register_factory(TaskRepository, SQLiteTaskRepository)
-    container.register_factory(TagRepository, SQLiteTagRepository)
+    # Container.register_factory's generics don't fully accommodate the
+    # interface-to-implementation registration pattern it's designed for - mypy treats
+    # passing an ABC as the `type[T]` key as if T itself were being instantiated.
+    # Pre-existing tension in Container's typing, not something this sprint redesigns.
+    container.register_factory(ChronicleRepository, SQLiteChronicleRepository)  # type: ignore[type-abstract]
+    container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
+    container.register_factory(TagRepository, SQLiteTagRepository)  # type: ignore[type-abstract]
 
     from chronicler.core.services import (
         ChronicleService,

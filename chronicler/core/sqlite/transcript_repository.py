@@ -73,4 +73,7 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         await self.session.commit()
 
     async def search(self, query: str) -> list[TranscriptLine]:
-        pass # TODO implement search
+        # Not implemented yet (SQLite FTS - see TODO.md). Raising rather than silently
+        # returning None against a `-> list[...]` annotation, which is a real footgun
+        # for any caller (see SearchService, which had exactly this bug).
+        raise NotImplementedError("Transcript full-text search is not implemented yet")

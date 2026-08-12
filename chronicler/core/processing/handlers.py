@@ -70,7 +70,10 @@ class WorkerHandlers:
             speaker_map = {}
             for line in lines:
                 if line.speaker_name not in speaker_map:
-                    speaker = await repo.get_or_create_speaker(line.speaker_name)
+                    # TranscriptLine.speaker_name is typed str | None for the general
+                    # case, but every current producer (RegexImporter, TranscriptCleaner)
+                    # always sets a real string. Pre-existing gap, not addressed here.
+                    speaker = await repo.get_or_create_speaker(line.speaker_name)  # type: ignore[arg-type]
                     speaker_map[line.speaker_name] = speaker.id
 
                 line.speaker_id = speaker_map[line.speaker_name]
@@ -112,7 +115,10 @@ class WorkerHandlers:
             speaker_map = {}
             for line in cleaned_lines:
                 if line.speaker_name not in speaker_map:
-                    speaker = await repo.get_or_create_speaker(line.speaker_name)
+                    # TranscriptLine.speaker_name is typed str | None for the general
+                    # case, but every current producer (RegexImporter, TranscriptCleaner)
+                    # always sets a real string. Pre-existing gap, not addressed here.
+                    speaker = await repo.get_or_create_speaker(line.speaker_name)  # type: ignore[arg-type]
                     speaker_map[line.speaker_name] = speaker.id
 
                 line.speaker_id = speaker_map[line.speaker_name]

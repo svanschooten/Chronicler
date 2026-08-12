@@ -61,17 +61,10 @@ jobs:
           key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
 
       - name: Check Ruff
-        continue-on-error: true
         run: |
           .venv/bin/ruff check chronicler tests
 
-      - name: Check Flake8
-        continue-on-error: true
-        run: |
-          .venv/bin/flake8 chronicler tests
-
       - name: Check Mypy
-        continue-on-error: true
         run: |
           .venv/bin/mypy chronicler tests
 
@@ -114,7 +107,7 @@ jobs:
 
       - name: Run the tests
         run: |
-          .venv/bin/pytest -v -s --junitxml=junit.xml --cov=chronicler --cov-report=xml --cov-report=term
+          .venv/bin/pytest -v -s --junitxml=junit.xml --cov=chronicler --cov-report=xml --cov-report=term --cov-fail-under=68
 
       - name: Upload Test and Coverage Reports
         if: always()

@@ -1,4 +1,5 @@
 import json
+from typing import Any
 from uuid import UUID
 
 from chronicler.core.models import Task, TaskType
@@ -23,7 +24,7 @@ class TaskService:
         speaker_group: int = 1,
         text_group: int = 2,
     ):
-        data = {"file_path": file_path}
+        data: dict[str, Any] = {"file_path": file_path}
         if regex:
             assert_safe_pattern(regex)
             data["regex"] = regex

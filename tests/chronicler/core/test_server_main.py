@@ -21,9 +21,10 @@ def _build_server_app(tmp_path, api_key: str = "test-key"):
     container = Container()
     container.register_instance(DatabaseManager, db_manager)
     container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-    container.register_factory(ChronicleRepository, SQLiteChronicleRepository)
-    container.register_factory(TaskRepository, SQLiteTaskRepository)
-    container.register_factory(TagRepository, SQLiteTagRepository)
+    # See the matching comment in chronicler/server/main.py.
+    container.register_factory(ChronicleRepository, SQLiteChronicleRepository)  # type: ignore[type-abstract]
+    container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
+    container.register_factory(TagRepository, SQLiteTagRepository)  # type: ignore[type-abstract]
 
     server = RpcServer(
         container,
@@ -106,10 +107,10 @@ async def test_server_routes_respond_with_valid_key(tmp_path):
             assert resp.json() == []
 
             # NOTE: /search/* routes are intentionally not exercised here past auth.
-            # SearchService's methods are still `pass` stubs (Sprint 4 scope) that return
-            # None against a `-> list[...]` annotation, which FastAPI turns into a 500
-            # ResponseValidationError rather than a clean null. That's a real, separate
-            # bug from the one this test file targets (SQLiteTagRepository.search
-            # missing), tracked in TODO.md rather than fixed here.
+            # SearchService's methods raise NotImplementedError (Sprint 4 scope, see
+            # search_service.py) - a 500 either way, but a clear one now rather than the
+            # confusing ResponseValidationError they used to produce by returning None
+            # against a `-> list[...]` annotation. That's separate from the bug this
+            # test file targets (SQLiteTagRepository.search missing).
     finally:
         await db_manager.close_all()

@@ -26,7 +26,7 @@ class RpcServer:
     def __init__(
         self,
         container: Any = None,
-        services: list[type] = None,
+        services: list[type] | None = None,
         api_key: str | None = None,
     ):
         self.container = container

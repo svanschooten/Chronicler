@@ -7,13 +7,19 @@ from typing import Any
 
 import yaml
 from platformdirs import user_config_dir
+from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
 
 class FileConfigSettingsSource(PydanticBaseSettingsSource):
-    def get_field_value(self, field_name: str, field: Any) -> tuple[Any, str, bool]:
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        # Vestigial: __call__ below is fully overridden and never calls this, but the
+        # base class declares it @abstractmethod so it must exist with a matching
+        # signature (the previous (field_name, field) parameter order didn't match the
+        # supertype's (field, field_name), which would have misdirected the two values
+        # into each other's parameters had pydantic-settings ever called it directly).
         return None, field_name, False
 
     def __call__(self) -> dict[str, Any]:

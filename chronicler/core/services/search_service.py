@@ -17,20 +17,20 @@ class SearchService:
 
     async def search_chronicle_meta(self, query: str) -> list[Chronicle]:
         # TODO search both the chronicle metadata and the tags and merge the results
-        pass
+        raise NotImplementedError("search_chronicle_meta is not implemented yet")
 
     async def search_chronicle_content(self, query: str) -> list[Chronicle]:
         # TODO do full text search on the chronicle line content
-        pass
+        raise NotImplementedError("search_chronicle_content is not implemented yet")
 
     async def search_tags(self, query: str) -> list[Tag]:
         # TODO search both the tag name and the tag description
-        pass
+        raise NotImplementedError("search_tags is not implemented yet")
 
     async def search_tasks(self, query: str) -> list[Task]:
         # TODO search both the task name, the task description, and the task payload
-        pass
+        raise NotImplementedError("search_tasks is not implemented yet")
 
     async def search_speakers(self, query: str) -> list[Speaker]:
         # TODO search the speaker by name
-        pass
+        raise NotImplementedError("search_speakers is not implemented yet")
