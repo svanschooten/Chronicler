@@ -15,8 +15,11 @@
 > Sprint 1 ("stop the bleeding") landed 2026-08-13: all six items below are fixed and
 > tested. Sprint 2 ("make the foundation honest") also landed 2026-08-13:
 > session-per-operation, atomic task claiming/retry, transactional import/clean, and
-> Alembic are all done. Remaining work is Sprint 3 (DesktopApp onto the Container, Thin
-> Client mode, server-mode worker manager) and Sprint 4 (first genuinely useful feature).
+> Alembic are all done. Sprint 3 ("deliver the promised modes") also landed 2026-08-13:
+> DesktopApp resolves through Container/RemoteContainer, Thin Client mode works
+> end-to-end (including transcript viewing), server mode runs its own WorkerManager,
+> the chosen mode is persisted, SettingsView is real. Remaining work is Sprint 4 (first
+> genuinely useful feature).
 
 ---
 
@@ -65,6 +68,29 @@ New known limitation (Sprint 2, 2026-08-13):
   2026-08-13 at the user's request (disposable test data, not real content) — confirmed
   the fresh workspace stamps correctly at head with the full current schema.
 
+Fixed in Sprint 3 (2026-08-13), found by an actual live smoke test (a real running
+`chronicler server`, driven over genuine HTTP — not `ASGITransport`, not mocks) that
+every `ASGITransport`-based test in the sprint had missed:
+
+* [x] **Thin Client mode was a `sys.exit(1)` stub.** `DesktopApp` now resolves services
+  through `Container` (full-stack) or `RemoteContainer` (thin client) via
+  `chronicler/desktop/runtime.py::build_runtime`, chosen from `Settings.mode`. Includes
+  transcript viewing (`TranscriptService` redesigned to be project-scoped and reachable
+  over RPC) and file import (`FileStager`: copy locally, upload via `/upload` remotely).
+* [x] **`RemoteServiceProxy` couldn't serialize `UUID` arguments at all.** Every argument is
+  now serialized via `TypeAdapter(declared_param_type)` keyed off the method's real type
+  hints, not guessed from the runtime value. `chronicle_id: UUID` is the single most common
+  argument shape in this codebase; this silently broke almost any real remote call.
+* [x] **`RpcServer._add_route` made every optional parameter mandatory over RPC.** It wrapped
+  every parameter as `Body(..., ...)` unconditionally (Ellipsis = required in FastAPI),
+  discarding the method's own default. Omitting an optional argument, or explicitly
+  sending `null` for one, both 422'd — including from the desktop app's own existing
+  calls (e.g. `create_chronicle` with only some optional kwargs set), the moment they ran
+  in thin-client mode. Now preserves the method's actual default.
+* [x] **`TaskService.queue_import`/`queue_clean` had no return type annotation** — silently
+  returned a raw `dict` instead of a `Task` to any `RemoteContainer` caller. Added `-> Task`
+  to both.
+
 ---
 
 ## Phase 0 — Project foundation
@@ -93,11 +119,12 @@ New known limitation (Sprint 2, 2026-08-13):
 * [x] Create first-run wizard
 * [x] Select workspace location
 * [x] Validate workspace permissions
-* [~] Automatic configuration validation for different run modes
-    * Validation exists, but the chosen mode is never persisted — there is no `mode` field on
-      `Settings`, so "the active mode is determined by the configuration" is not yet true.
+* [x] Automatic configuration validation for different run modes
+    * `Settings.mode` added 2026-08-13, set by `ConfigWizard` at every point it already
+      knows which of the four concrete setups was chosen — "the active mode is
+      determined by the configuration" is now true.
 * [x] Use argparse for command-line arguments and --verbose mode
-* [ ] Persist the deployment mode in settings
+* [x] Persist the deployment mode in settings
 * [x] Stop generating an API key when the user leaves it blank in thin-client setup
     * Fixed 2026-08-13: `RemoteServerStep` now re-prompts with an explanation instead of
       generating a key that can't possibly match the server's.
@@ -108,8 +135,13 @@ New known limitation (Sprint 2, 2026-08-13):
 ## Architecture alignment
 
 * [x] Implement DI container for service resolution
-* [ ] Refactor DesktopApp to use DI container — still wires everything by hand in `app.py`
-* [ ] Support switching between local and remote services based on settings
+* [x] Refactor DesktopApp to use DI container
+    * Done 2026-08-13. `chronicler/desktop/runtime.py::build_runtime` builds a
+      `Container` (full-stack) or `RemoteContainer` (thin client) from `Settings.mode`;
+      `DesktopApp.update_view()` resolves services through it instead of constructing
+      repositories by hand.
+* [x] Support switching between local and remote services based on settings
+    * Same mechanism as above — `build_runtime` is the switch.
 * [ ] Ensure all business logic is strictly in Services
 
 ---
@@ -206,7 +238,11 @@ The UI and services should not depend directly on SQLite.
   imperatively in `desktop/app.py`
 * [ ] Implement Scribe workers with concurrency configuration — the loop is strictly
   sequential in a single coroutine
-* [ ] Run a worker manager in server mode (server mode currently executes no tasks at all)
+* [x] Run a worker manager in server mode
+    * Fixed 2026-08-13: `server/main.py` builds a `WorkerManager` the same way
+      `desktop/app.py` does (own dedicated session, IMPORT/CLEAN handlers) and runs it
+      alongside `uvicorn.Server(...).serve()` via `asyncio.gather()`. Verified live: a
+      queued task went PENDING -> DONE on a real server with no client polling it.
 * [ ] **Per-task CPU timeout.** The regex ReDoS guard (`chronicler/core/processing/
   regex_guard.py`) is a static shape check, not a CPU-time bound — Python threads can't
   be force-killed and CPython's regex matcher doesn't release the GIL during
@@ -235,7 +271,10 @@ Future:
 
 * [x] Application shell
 * [x] Navigation
-* [~] Theme support — hardcoded dark mode; the Settings toggle is inert
+* [x] Theme support
+    * Fixed 2026-08-13: `Settings.dark_mode` persisted; startup respects it (was
+      hardcoded `ft.ThemeMode.DARK`); the Settings toggle actually updates
+      `page.theme_mode` and saves.
 
 ---
 
@@ -276,8 +315,10 @@ Future:
 
 ## Settings view
 
-* [ ] Replace the static mock with real settings — workspace path, connection mode and theme
-  are all hardcoded strings today
+* [x] Replace the static mock with real settings
+    * Fixed 2026-08-13: workspace path/connection mode/theme all reflect real
+      `Settings`. Editing settings from within the running app is still out of scope
+      (connection mode isn't switchable at runtime).
 
 ---
 
@@ -369,7 +410,10 @@ Future:
       invalid, unsafe combination, and unnecessary since auth is a header, not a cookie).
 * [ ] Add server storage management
 * [x] Add remote repository implementation
-* [ ] Connect desktop client to server
+* [x] Connect desktop client to server
+    * Fixed 2026-08-13: Thin Client mode (`chronicler/desktop/runtime.py`). Verified
+      live against a real running server, not just `ASGITransport` — which is what
+      surfaced the three RPC-layer bugs listed under "Known blockers" above.
 * [x] Fix server startup (see Known blockers)
 * [x] Harden `/upload` — filename sanitisation, size limit, collision handling
     * Fixed 2026-08-13: server-generated `uuid4()` filenames (whitelisted extension
@@ -439,6 +483,12 @@ Possible tools:
 * [x] Migration tests (added 2026-08-13 — `alembic_version` stamped at head, idempotent
   re-init/re-open)
 * [x] `SQLiteTagRepository` tests (was zero coverage, fixed 2026-08-13)
+* [x] Thin Client end-to-end tests (added 2026-08-13) — `RemoteContainer` round-trips
+  through a real `RpcServer`, plus one actual live smoke test against a real running
+  `chronicler server` process (not `ASGITransport`), which is what caught the three RPC
+  bugs under "Known blockers" that every `ASGITransport`-based test had missed. Worth
+  remembering as a general lesson: in-process ASGI transport tests don't exercise real
+  JSON (de)serialization the same way a genuine HTTP round-trip does.
 
 ---
 
