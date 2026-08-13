@@ -1,6 +1,18 @@
 from pathlib import Path
 
-from chronicler.core.file_staging import sanitize_stage_name, stage_local_file
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from chronicler.core.container import Container
+from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.file_staging import (
+    LocalFileStager,
+    RemoteFileStager,
+    sanitize_stage_name,
+    stage_local_file,
+)
+from chronicler.core.local_container import register_local_repositories
+from chronicler.core.rpc import RpcServer
 
 
 def test_sanitize_stage_name_keeps_only_whitelisted_extension():
@@ -72,3 +84,49 @@ def test_stage_local_file_result_is_relative_to_imports_dir(tmp_path):
     staged = stage_local_file(source_file, imports_dir)
 
     assert Path(staged).resolve().is_relative_to(imports_dir.resolve())
+
+
+@pytest.mark.asyncio
+async def test_local_file_stager_copies_into_imports_dir(tmp_path):
+    imports_dir = tmp_path / "imports"
+    imports_dir.mkdir()
+    source_file = tmp_path / "recording.mp3"
+    source_file.write_text("fake audio")
+
+    stager = LocalFileStager(imports_dir)
+    staged_path = await stager.stage(str(source_file))
+
+    assert Path(staged_path).resolve().is_relative_to(imports_dir.resolve())
+    assert Path(staged_path).name != "recording.mp3"
+
+
+@pytest.mark.asyncio
+async def test_remote_file_stager_uploads_and_returns_server_path(tmp_path):
+    """Same primitive as LocalFileStager (turn a local path into something safe to
+    queue), but for thin-client mode: actually upload it via /upload, the same
+    endpoint the web client's proxy already uses.
+    """
+    db_manager = DatabaseManager(tmp_path)
+    try:
+        await db_manager.init_archive()
+
+        container = Container()
+        register_local_repositories(container, db_manager)
+        upstream_app = RpcServer(container, services=[], api_key="secret-key").build()
+
+        source_file = tmp_path / "picked" / "transcript.txt"
+        source_file.parent.mkdir()
+        source_file.write_text("Alice: hi\n")
+
+        transport = ASGITransport(app=upstream_app)
+        async with AsyncClient(transport=transport, base_url="http://upstream") as client:
+            stager = RemoteFileStager("http://upstream", "secret-key", client=client)
+            staged_path = await stager.stage(str(source_file))
+
+        assert Path(staged_path).resolve().is_relative_to(
+            db_manager.get_imports_path().resolve()
+        )
+        assert Path(staged_path).name != "transcript.txt"
+        assert Path(staged_path).read_text() == "Alice: hi\n"
+    finally:
+        await db_manager.close_all()

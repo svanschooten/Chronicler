@@ -1,24 +1,21 @@
 import asyncio
 import logging
 from enum import Enum
-from pathlib import Path
 
 import flet as ft
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chronicler.core.database_manager import DatabaseManager
-from chronicler.core.file_staging import stage_local_file
+from chronicler.core.container import Container
 from chronicler.core.models import TaskType
 from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.remote import RemoteContainer
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
-from chronicler.core.sqlite import (
-    SQLiteChronicleRepository,
-    SQLiteTaskRepository,
-)
+from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTaskRepository
 from chronicler.core.workers import WorkerManager
 from chronicler.desktop.components.sidebar import Sidebar
+from chronicler.desktop.runtime import DesktopRuntime
 from chronicler.desktop.views.archive import ArchiveView
 from chronicler.desktop.views.settings import SettingsView
 from chronicler.desktop.views.tasks import TasksView
@@ -45,19 +42,27 @@ class AppState:
 
 
 class DesktopApp:
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, runtime: DesktopRuntime):
         self.content_area = None
         self.sidebar = None
         self.worker_manager = None
         self.page = None
         self.state = AppState()
-        self.db_manager = db_manager
-        # The session backing whatever view is currently on screen. Closed and
-        # replaced on every navigation (update_view) rather than held for the app's
-        # lifetime - see ASSESSMENT.md §2.1/§2.2. Sequential reuse *within* one view
-        # visit is fine (Flet handlers run one at a time); what isn't safe is sharing
-        # this with the background worker loop, which gets its own session below.
-        self._view_session: AsyncSession | None = None
+        self.runtime = runtime
+        self.resolver = runtime.resolver
+        # None in thin-client mode - there's no local workspace at all. Used to decide
+        # whether this instance owns a WorkerManager (thin client has no local tasks;
+        # the server it's pointed at runs its own, see server/main.py).
+        self.db_manager = runtime.db_manager
+        self.file_stager = runtime.file_stager
+        # The Container scope backing whatever view is currently on screen (None for a
+        # RemoteContainer resolver, which has no session/scope to manage - each remote
+        # call is already scoped per-request server-side). Closed and replaced on
+        # every navigation (update_view) rather than held for the app's lifetime - see
+        # ASSESSMENT.md §2.1/§2.2. Sequential reuse *within* one view visit is fine
+        # (Flet handlers run one at a time); what isn't safe is sharing this with the
+        # background worker loop, which gets its own session below.
+        self._view_scope: Container | None = None
         # Dedicated to the WorkerManager background loop - never touched by the UI.
         # The UI and the worker loop run as separate coroutines on the same event
         # loop, so an await in either one can interleave with the other's in-flight
@@ -71,17 +76,7 @@ class DesktopApp:
         self.page.title = "Chronicler"
         self.page.theme_mode = ft.ThemeMode.DARK
 
-        self._worker_session = self.db_manager.get_archive_session()
-        worker_task_repo = SQLiteTaskRepository(self._worker_session)
-        worker_chronicle_repo = SQLiteChronicleRepository(self._worker_session)
-
-        self.worker_manager = WorkerManager(worker_task_repo)
-        handlers = WorkerHandlers(self.db_manager, chronicle_repo=worker_chronicle_repo)
-        self.worker_manager.register_handler(TaskType.IMPORT, handlers.handle_import)
-        self.worker_manager.register_handler(TaskType.CLEAN, handlers.handle_clean)
-
-        # Start worker manager in background
-        asyncio.create_task(self.worker_manager.run_forever())
+        self._maybe_start_worker_manager()
 
         self.page.on_disconnect = self.cleanup
         self.page.on_close = self.cleanup
@@ -106,6 +101,27 @@ class DesktopApp:
 
         await self.update_view()
 
+    def _maybe_start_worker_manager(self):
+        """Full-stack mode only - thin client has no local tasks to run, the server
+        it's pointed at runs its own WorkerManager (see server/main.py). Extracted
+        from main() so this decision is testable without needing a real, fully
+        page-attached Flet control tree.
+        """
+        if self.db_manager is None:
+            return
+
+        self._worker_session = self.db_manager.get_archive_session()
+        worker_task_repo = SQLiteTaskRepository(self._worker_session)
+        worker_chronicle_repo = SQLiteChronicleRepository(self._worker_session)
+
+        self.worker_manager = WorkerManager(worker_task_repo)
+        handlers = WorkerHandlers(self.db_manager, chronicle_repo=worker_chronicle_repo)
+        self.worker_manager.register_handler(TaskType.IMPORT, handlers.handle_import)
+        self.worker_manager.register_handler(TaskType.CLEAN, handlers.handle_clean)
+
+        # Start worker manager in background
+        asyncio.create_task(self.worker_manager.run_forever())
+
     async def on_sidebar_nav_change(self, view_id: str):
         if view_id == "archive":
             self.state.navigate_to(ViewType.ARCHIVE)
@@ -124,59 +140,58 @@ class DesktopApp:
         await self.update_view()
 
     async def cleanup(self, e):
-        self.worker_manager.stop()
-        await self._close_view_session()
+        if self.worker_manager is not None:
+            self.worker_manager.stop()
+        await self._close_view_scope()
         if self._worker_session is not None:
             await self._worker_session.close()
-        await self.db_manager.close_all()
+        if self.db_manager is not None:
+            await self.db_manager.close_all()
 
-    async def _close_view_session(self):
-        if self._view_session is not None:
-            await self._view_session.close()
-            self._view_session = None
+    async def _close_view_scope(self):
+        if self._view_scope is not None and self._view_scope.is_registered(AsyncSession):
+            await self._view_scope.resolve(AsyncSession).close()
+        self._view_scope = None
 
-    async def stage_file(self, local_path: str) -> str:
-        """Passed into ArchiveView so it never has to know whether it's running in
-        full-stack (copy to local imports/) or thin-client mode (upload to the
-        server's /upload - wired in when DesktopApp moves onto Container/
-        RemoteContainer)."""
-        staged = stage_local_file(Path(local_path), self.db_manager.get_imports_path())
-        return str(staged)
+    def _new_scope(self) -> Container | RemoteContainer:
+        """A fresh resolution scope for the view about to be shown - a real scope
+        (fresh session on next resolve) for a local Container, or the RemoteContainer
+        itself for thin-client mode, which has no session of its own to keep fresh
+        (RpcServer already scopes each call server-side)."""
+        if isinstance(self.resolver, Container):
+            scope = self.resolver.create_scope()
+            self._view_scope = scope
+            return scope
+        return self.resolver
 
     async def update_view(self):
         logger.debug(f"Navigating to view: {self.state.current_view}")
         # Whatever the previous view opened, close it before opening what the new
         # view needs - each navigation gets a fresh session rather than accumulating
         # open ones (the project-session path used to leak one per visit) or reusing
-        # one for the app's whole lifetime.
-        await self._close_view_session()
+        # one for the app's whole lifetime. Scope creation is deliberately per-branch,
+        # not unconditional up front - SettingsView doesn't touch the database at all,
+        # so it shouldn't cause a session to be opened (and then immediately closed on
+        # the next navigation) for no reason.
+        await self._close_view_scope()
 
         if self.state.current_view == ViewType.ARCHIVE:
-            session = self.db_manager.get_archive_session()
-            self._view_session = session
-            chronicle_service = ChronicleService(SQLiteChronicleRepository(session))
-            task_service = TaskService(SQLiteTaskRepository(session))
+            scope = self._new_scope()
+            chronicle_service = scope.resolve(ChronicleService)
+            task_service = scope.resolve(TaskService)
             self.content_area.content = ArchiveView(
-                chronicle_service, task_service, self.open_chronicle, self.stage_file
+                chronicle_service, task_service, self.open_chronicle, self.file_stager.stage
             )
         elif self.state.current_view == ViewType.TASKS:
-            session = self.db_manager.get_archive_session()
-            self._view_session = session
-            task_service = TaskService(SQLiteTaskRepository(session))
+            scope = self._new_scope()
+            task_service = scope.resolve(TaskService)
             self.content_area.content = TasksView(task_service)
         elif self.state.current_view == ViewType.SETTINGS:
             self.content_area.content = SettingsView()
         elif self.state.current_view == ViewType.TRANSCRIPT:
-            # TranscriptService is project-scoped (see transcript_service.py) - it
-            # opens its own project session per call given a chronicle_id, so unlike
-            # the branches above there's no project session to track/close here. It
-            # still needs an archive-level ChronicleRepository (to look up
-            # chronicle.project_path for linked/external chronicles), so that part of
-            # the session lifecycle is still ours to manage.
+            scope = self._new_scope()
             chronicle = self.state.selected_chronicle
-            session = self.db_manager.get_archive_session()
-            self._view_session = session
-            service = TranscriptService(self.db_manager, SQLiteChronicleRepository(session))
+            service = scope.resolve(TranscriptService)
             self.content_area.content = TranscriptView(
                 chronicle, self.go_back, transcript_service=service
             )
@@ -185,6 +200,6 @@ class DesktopApp:
         self.page.update()
 
 
-def run_app(db_manager: DatabaseManager):
-    app = DesktopApp(db_manager)
+def run_app(runtime: DesktopRuntime):
+    app = DesktopApp(runtime)
     ft.run(app.main)

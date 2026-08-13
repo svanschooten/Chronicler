@@ -2,8 +2,8 @@ import asyncio
 import logging
 
 from chronicler.core.config import get_settings
-from chronicler.core.database_manager import DatabaseManager
 from chronicler.desktop.app import run_app
+from chronicler.desktop.runtime import build_runtime
 
 
 def run_desktop():
@@ -18,18 +18,10 @@ def run_desktop():
         run_wizard(mode="client:desktop")
         settings = get_settings()
 
-    if not settings.workspace_path:
-        # If we are here and workspace_path is missing, it means server_url was set,
-        # otherwise the block above would have triggered the wizard.
-        print("\nThin Client mode is not yet fully implemented for the Desktop application.")
-        print("Please run in Full Stack mode for now (option 1 in the wizard).")
-        import sys
+    runtime = build_runtime(settings)
 
-        sys.exit(1)
+    if runtime.db_manager is not None:
+        # Initialize archive database
+        asyncio.run(runtime.db_manager.init_archive())
 
-    db_manager = DatabaseManager(settings.workspace_path)
-
-    # Initialize archive database
-    asyncio.run(db_manager.init_archive())
-
-    run_app(db_manager)
+    run_app(runtime)

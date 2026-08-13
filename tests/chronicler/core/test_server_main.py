@@ -4,13 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.local_container import register_local_repositories
 from chronicler.core.models import Chronicle, TranscriptLine
-from chronicler.core.repositories import ChronicleRepository, TagRepository, TaskRepository
+from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import RpcServer, service
 from chronicler.core.services import ChronicleService, SearchService, TaskService, TranscriptService
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
-    SQLiteTagRepository,
     SQLiteTaskRepository,
     SQLiteTranscriptRepository,
 )
@@ -35,12 +35,7 @@ def _build_server_app(tmp_path, api_key: str = "test-key"):
     db_manager = DatabaseManager(tmp_path)
 
     container = Container()
-    container.register_instance(DatabaseManager, db_manager)
-    container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-    # See the matching comment in chronicler/server/main.py.
-    container.register_factory(ChronicleRepository, SQLiteChronicleRepository)  # type: ignore[type-abstract]
-    container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
-    container.register_factory(TagRepository, SQLiteTagRepository)  # type: ignore[type-abstract]
+    register_local_repositories(container, db_manager)
 
     server = RpcServer(
         container,
@@ -70,11 +65,7 @@ async def test_search_service_resolves(tmp_path):
         await db_manager.init_archive()
 
         container = Container()
-        container.register_instance(DatabaseManager, db_manager)
-        container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-        container.register_factory(ChronicleRepository, SQLiteChronicleRepository)
-        container.register_factory(TaskRepository, SQLiteTaskRepository)
-        container.register_factory(TagRepository, SQLiteTagRepository)
+        register_local_repositories(container, db_manager)
 
         search_service = container.resolve(SearchService)
         assert search_service is not None
