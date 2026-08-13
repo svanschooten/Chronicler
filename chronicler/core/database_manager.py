@@ -1,7 +1,9 @@
 import logging
 from pathlib import Path
 
-from sqlalchemy import inspect, text
+from alembic import command
+from alembic.config import Config
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -9,10 +11,24 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from chronicler.core.database import Base as ArchiveBase
-from chronicler.core.project_database import ProjectBase
-
 logger = logging.getLogger(__name__)
+
+_MIGRATIONS_ROOT = Path(__file__).resolve().parent.parent / "migrations"
+
+
+def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
+    """Run one migration chain ("archive" or "project") to head against an
+    already-open sync connection - see chronicler/migrations/<chain>/env.py, which
+    picks this connection up via config.attributes["connection"] instead of opening
+    its own engine. No static alembic.ini: the project chain runs against a different
+    project.db file per chronicle, so there's no single fixed URL to put in a config
+    file - the already-open connection carries that instead.
+    """
+    logger.info(f"Running {chain} migrations")
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / chain))
+    cfg.attributes["connection"] = connection
+    command.upgrade(cfg, "head")
 
 
 class DatabaseManager:
@@ -29,8 +45,7 @@ class DatabaseManager:
         self.workspace_path.mkdir(parents=True, exist_ok=True)
         (self.workspace_path / "imports").mkdir(parents=True, exist_ok=True)
         async with self.archive_engine.begin() as conn:
-            await conn.run_sync(ArchiveBase.metadata.create_all)
-            await conn.run_sync(self._migrate_schema_sync, ArchiveBase)
+            await conn.run_sync(_run_alembic_upgrade, "archive")
 
     def get_imports_path(self) -> Path:
         path = self.workspace_path / "imports"
@@ -53,50 +68,12 @@ class DatabaseManager:
 
             engine = create_async_engine(f"sqlite+aiosqlite:///{project_db_path}")
             async with engine.begin() as conn:
-                await conn.run_sync(ProjectBase.metadata.create_all)
-                await conn.run_sync(self._migrate_schema_sync, ProjectBase)
+                await conn.run_sync(_run_alembic_upgrade, "project")
             self._project_engines[chronicle_id] = engine
 
         engine = self._project_engines[chronicle_id]
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         return session_factory()
-
-    def _migrate_schema_sync(self, conn, base):
-        inspector = inspect(conn)
-        for table_name, table in base.metadata.tables.items():
-            if table_name not in inspector.get_table_names():
-                continue
-
-            existing_columns = {c["name"] for c in inspector.get_columns(table_name)}
-            for column in table.columns:
-                if column.name not in existing_columns:
-                    logger.info(f"Adding missing column {column.name} to table {table_name}")
-                    # Basic SQLite column addition
-                    type_str = str(column.type.compile(dialect=conn.dialect))
-
-                    # Handle defaults for NOT NULL columns in SQLite
-                    default_str = ""
-                    if not column.nullable:
-                        if column.default is not None and not callable(column.default.arg):
-                            val = column.default.arg
-                            if isinstance(val, str):
-                                default_str = f" DEFAULT '{val}'"
-                            else:
-                                default_str = f" DEFAULT {val}"
-                        elif "INT" in type_str.upper():
-                            default_str = " DEFAULT 0"
-                        elif "VARCHAR" in type_str.upper() or "TEXT" in type_str.upper():
-                            default_str = " DEFAULT ''"
-                        else:
-                            # If it's NOT NULL but we don't know a good default,
-                            # SQLite might complain if there are existing rows.
-                            # But for this app, these defaults should cover most cases.
-                            default_str = " DEFAULT ''"
-
-                    query = (
-                        f"ALTER TABLE {table_name} ADD COLUMN {column.name} {type_str}{default_str}"
-                    )
-                    conn.execute(text(query))
 
     async def close_all(self):
         await self.archive_engine.dispose()

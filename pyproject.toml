@@ -31,6 +31,7 @@ dependencies = [
     "SQLAlchemy>=2,<3",
     "aiosqlite>=0.20,<1",
     "PyYAML>=6,<7",
+    "alembic>=1.13,<2",
 ]
 
 [project.optional-dependencies]
@@ -72,6 +73,10 @@ addopts = "-ra"
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# Alembic-generated migration files use its own script.py.mako boilerplate style
+# (Union/Sequence, unsorted imports) - every future `alembic revision --autogenerate`
+# produces the same, so excluding rather than hand-fixing each one.
+extend-exclude = ["chronicler/migrations/*/versions/*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
