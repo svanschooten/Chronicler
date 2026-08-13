@@ -2,31 +2,36 @@ from collections.abc import Callable
 
 import flet as ft
 
+from chronicler.desktop.theme import theme_colors
+
 
 class Sidebar(ft.Container):
-    def __init__(self, on_nav_change: Callable[[str], None], initial_view: str = "archive"):
+    def __init__(
+        self,
+        on_nav_change: Callable[[str], None],
+        initial_view: str = "archive",
+        dark_mode: bool = True,
+    ):
         self.on_nav_change = on_nav_change
         self.selected_view = initial_view
+        self.colors = theme_colors(dark_mode)
         super().__init__(
             width=280,
             padding=ft.Padding.all(24),
-            bgcolor=ft.Colors.BLUE_GREY_900,
+            bgcolor=self.colors.sidebar,
         )
         self.content = self._build()
 
     def nav_item(self, icon: ft.IconData | str, label: str, view_id: str) -> ft.Container:
         is_selected = self.selected_view == view_id
+        item_color = self.colors.text if is_selected else self.colors.muted
         return ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Icon(
-                        icon,
-                        color=ft.Colors.WHITE if is_selected else ft.Colors.BLUE_GREY_400,
-                        size=20,
-                    ),
+                    ft.Icon(icon, color=item_color, size=20),
                     ft.Text(
                         label,
-                        color=ft.Colors.WHITE if is_selected else ft.Colors.BLUE_GREY_400,
+                        color=item_color,
                         size=16,
                         weight=ft.FontWeight.BOLD if is_selected else None,
                     ),
@@ -35,7 +40,7 @@ class Sidebar(ft.Container):
             ),
             padding=ft.Padding.symmetric(vertical=10, horizontal=12),
             border_radius=8,
-            bgcolor=ft.Colors.BLUE_GREY_700 if is_selected else None,
+            bgcolor=self.colors.card if is_selected else None,
             on_click=self.handle_nav_click,
             data=view_id,
         )
@@ -47,6 +52,17 @@ class Sidebar(ft.Container):
         self.update()
         await self.on_nav_change(view_id)
 
+    def set_dark_mode(self, dark_mode: bool):
+        """Colors are baked into the built controls (same pattern every other view
+        uses) - called from DesktopApp.on_dark_mode_change since, unlike the content
+        views, the sidebar is built once in main() and never naturally rebuilt on
+        navigation.
+        """
+        self.colors = theme_colors(dark_mode)
+        self.bgcolor = self.colors.sidebar
+        self.content = self._build()
+        self.update()
+
     def _build(self):
         return ft.Column(
             controls=[
@@ -54,23 +70,23 @@ class Sidebar(ft.Container):
                     "CHRONICLER",
                     size=20,
                     weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.WHITE,
+                    color=self.colors.text,
                 ),
-                ft.Text("Preserve conversations.", size=12, color=ft.Colors.BLUE_GREY_400),
+                ft.Text("Preserve conversations.", size=12, color=self.colors.muted),
                 ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
                 self.nav_item(ft.Icons.SPEAKER_NOTES, "Chronicles", "archive"),
                 self.nav_item(ft.Icons.PENDING_ACTIONS, "Tasks", "tasks"),
                 self.nav_item(ft.Icons.SETTINGS, "Settings", "settings"),
                 ft.Container(expand=True),
-                ft.Divider(height=1, thickness=1, color=ft.Colors.BLACK_26),
+                ft.Divider(height=1, thickness=1, color=self.colors.border),
                 ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.FOLDER_OPEN, color=ft.Colors.BLUE_GREY_400, size=16),
-                        ft.Text("Local workspace", size=12, color=ft.Colors.BLUE_GREY_400),
+                        ft.Icon(ft.Icons.FOLDER_OPEN, color=self.colors.muted, size=16),
+                        ft.Text("Local workspace", size=12, color=self.colors.muted),
                     ],
                     spacing=8,
                 ),
-                ft.Text("v0.1.0-alpha", size=12, color=ft.Colors.BLUE_GREY_400),
+                ft.Text("v0.1.0-alpha", size=12, color=self.colors.muted),
             ],
             expand=True,
         )

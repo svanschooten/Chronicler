@@ -22,7 +22,7 @@ class SQLiteTaskRepository(TaskRepository):
         self.session = session
 
     async def get_all(self) -> list[Task]:
-        result = await self.session.execute(select(DBTask))
+        result = await self.session.execute(select(DBTask).order_by(DBTask.created_at.desc()))
         db_tasks = result.scalars().all()
         return [Task.model_validate(t) for t in db_tasks]
 
@@ -125,6 +125,7 @@ class SQLiteTaskRepository(TaskRepository):
             select(DBTask)
             .outerjoin(DBChronicle)
             .where(or_(DBTask.type.ilike(f"%{query}%"), DBChronicle.title.ilike(f"%{query}%")))
+            .order_by(DBTask.created_at.desc())
         )
         db_tasks = result.scalars().all()
         return [Task.model_validate(t) for t in db_tasks]

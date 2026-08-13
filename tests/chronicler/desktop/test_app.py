@@ -163,6 +163,165 @@ async def test_on_dark_mode_change_updates_page_and_persists(desktop_app, monkey
 
 
 @pytest.mark.asyncio
+async def test_on_dark_mode_change_rebuilds_current_view_with_new_colors(
+    desktop_app, monkeypatch
+):
+    """Regression test: toggling dark mode used to only flip page.theme_mode - the
+    content_area background and every view's hardcoded colors stayed exactly as dark
+    as before, since views bake their colors in at construction time and nothing
+    rebuilt them. The current view (ARCHIVE, by AppState's default) must be
+    reconstructed with the new dark_mode so its colors actually change.
+    """
+    monkeypatch.setattr(type(desktop_app.runtime.settings), "save", MagicMock())
+
+    await desktop_app.on_dark_mode_change(False)
+
+    from chronicler.desktop.theme import theme_colors
+
+    assert desktop_app.content_area.bgcolor == theme_colors(False).surface
+    assert desktop_app.content_area.content.colors == theme_colors(False)
+
+
+async def _create_chronicle(desktop_app, title: str):
+    """A throwaway scope just to create a test fixture, closed immediately after -
+    unlike desktop_app._view_scope (torn down by update_view()/cleanup()), a scope
+    created ad hoc in a test body is otherwise never closed, and SQLAlchemy warns
+    about the abandoned connection when it's garbage collected.
+    """
+    from chronicler.core.services.chronicle_service import ChronicleService
+
+    scope = desktop_app._new_scope()
+    chronicle = await scope.resolve(ChronicleService).create_chronicle(title)
+    await scope.resolve(AsyncSession).close()
+    return chronicle
+
+
+@pytest.mark.asyncio
+async def test_maybe_start_worker_manager_wires_event_bus(desktop_app, monkeypatch):
+    monkeypatch.setattr(asyncio, "create_task", lambda coro: (coro.close(), MagicMock())[1])
+
+    desktop_app._maybe_start_worker_manager()
+
+    from chronicler.core.task_events import TaskEventBus
+
+    assert isinstance(desktop_app.event_bus, TaskEventBus)
+    assert desktop_app.worker_manager.event_bus is desktop_app.event_bus
+
+
+@pytest.mark.asyncio
+async def test_on_task_completed_refreshes_transcript_view_for_matching_chronicle(desktop_app):
+    from chronicler.core.models import TaskStatus, TaskType
+    from chronicler.core.task_events import TaskCompletedEvent
+
+    chronicle = await _create_chronicle(desktop_app, "Recording")
+
+    desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
+    await desktop_app.update_view()
+    view_before = desktop_app.content_area.content
+
+    await desktop_app._on_task_completed(
+        TaskCompletedEvent(
+            task_id=chronicle.id,  # any uuid - not read for this decision
+            task_type=TaskType.TRANSCRIBE,
+            status=TaskStatus.DONE,
+            chronicle_id=chronicle.id,
+        )
+    )
+
+    assert desktop_app.content_area.content is not view_before
+
+
+@pytest.mark.asyncio
+async def test_on_task_completed_skips_refresh_for_a_different_chronicle(desktop_app):
+    from uuid import uuid4
+
+    from chronicler.core.models import TaskStatus, TaskType
+    from chronicler.core.task_events import TaskCompletedEvent
+
+    chronicle = await _create_chronicle(desktop_app, "Recording")
+
+    desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
+    await desktop_app.update_view()
+    view_before = desktop_app.content_area.content
+
+    await desktop_app._on_task_completed(
+        TaskCompletedEvent(
+            task_id=uuid4(),
+            task_type=TaskType.TRANSCRIBE,
+            status=TaskStatus.DONE,
+            chronicle_id=uuid4(),  # a different chronicle
+        )
+    )
+
+    assert desktop_app.content_area.content is view_before
+
+
+@pytest.mark.asyncio
+async def test_on_task_completed_skips_settings_view(desktop_app):
+    from uuid import uuid4
+
+    from chronicler.core.models import TaskStatus, TaskType
+    from chronicler.core.task_events import TaskCompletedEvent
+
+    desktop_app.state.navigate_to(ViewType.SETTINGS)
+    await desktop_app.update_view()
+    view_before = desktop_app.content_area.content
+
+    await desktop_app._on_task_completed(
+        TaskCompletedEvent(
+            task_id=uuid4(), task_type=TaskType.IMPORT, status=TaskStatus.DONE, chronicle_id=None
+        )
+    )
+
+    assert desktop_app.content_area.content is view_before
+
+
+@pytest.mark.asyncio
+async def test_update_view_transcript_refetches_chronicle(desktop_app):
+    """Regression target: TranscriptView bakes speakers_count/duration/status/tags
+    into its UI at construction time from whatever Chronicle object it's given -
+    reusing state.selected_chronicle as-is (a snapshot from whenever the user
+    navigated here) would keep showing stale values after a background task (e.g.
+    transcription) changes the chronicle.
+    """
+    from chronicler.core.services.chronicle_service import ChronicleService
+
+    chronicle = await _create_chronicle(desktop_app, "Recording")
+
+    desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
+    await desktop_app.update_view()
+    assert desktop_app.content_area.content.chronicle.duration is None
+
+    # Reuse the view's own (already-tracked, closed by the next navigation) scope
+    # rather than opening an extra untracked one just for this update.
+    chronicle_service = desktop_app._view_scope.resolve(ChronicleService)
+    chronicle.duration = "1h 0m"
+    await chronicle_service.update_chronicle(chronicle)
+
+    await desktop_app.update_view()
+
+    assert desktop_app.content_area.content.chronicle.duration == "1h 0m"
+    assert desktop_app.state.selected_chronicle.duration == "1h 0m"
+
+
+@pytest.mark.asyncio
+async def test_update_view_transcript_goes_back_if_chronicle_was_deleted(desktop_app):
+    from chronicler.core.services.chronicle_service import ChronicleService
+
+    chronicle = await _create_chronicle(desktop_app, "Doomed")
+    desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
+
+    scope = desktop_app._new_scope()
+    await scope.resolve(ChronicleService).delete_chronicle(chronicle.id)
+    await scope.resolve(AsyncSession).close()
+    desktop_app._view_scope = None  # this ad hoc scope isn't the tracked view scope
+
+    await desktop_app.update_view()
+
+    assert desktop_app.state.current_view == ViewType.ARCHIVE
+
+
+@pytest.mark.asyncio
 async def test_thin_client_resolves_a_working_remote_service(tmp_path):
     """DesktopApp resolved through a RemoteContainer must get a proxy that actually
     round-trips to a live server, not just an object of the right type."""

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Callable
 from enum import Enum
 
 import flet as ft
@@ -13,9 +14,11 @@ from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTaskRepository
+from chronicler.core.task_events import TaskCompletedEvent, TaskEventBus
 from chronicler.core.workers import WorkerManager
 from chronicler.desktop.components.sidebar import Sidebar
 from chronicler.desktop.runtime import DesktopRuntime
+from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.archive import ArchiveView
 from chronicler.desktop.views.settings import SettingsView
 from chronicler.desktop.views.tasks import TasksView
@@ -68,6 +71,10 @@ class DesktopApp:
         # loop, so an await in either one can interleave with the other's in-flight
         # operation; AsyncSession does not allow that on a shared instance.
         self._worker_session: AsyncSession | None = None
+        # Set together with worker_manager in _maybe_start_worker_manager() - both
+        # None in thin-client mode. See _on_task_completed for what this is for.
+        self.event_bus: TaskEventBus | None = None
+        self._unsubscribe_task_events: Callable[[], None] | None = None
         logger.debug("DesktopApp constructed")
 
     async def main(self, page: ft.Page):
@@ -84,8 +91,14 @@ class DesktopApp:
         self.page.on_close = self.cleanup
 
         # Initialize UI components
-        self.sidebar = Sidebar(self.on_sidebar_nav_change)
-        self.content_area = ft.Container(expand=True, padding=30, bgcolor=ft.Colors.BLUE_GREY_800)
+        self.sidebar = Sidebar(
+            self.on_sidebar_nav_change, dark_mode=self.runtime.settings.dark_mode
+        )
+        self.content_area = ft.Container(
+            expand=True,
+            padding=30,
+            bgcolor=theme_colors(self.runtime.settings.dark_mode).surface,
+        )
 
         self.page.add(
             ft.SafeArea(
@@ -116,13 +129,42 @@ class DesktopApp:
         worker_task_repo = SQLiteTaskRepository(self._worker_session)
         worker_chronicle_repo = SQLiteChronicleRepository(self._worker_session)
 
-        self.worker_manager = WorkerManager(worker_task_repo)
+        # Full-stack desktop mode is the one case where the WorkerManager and the UI
+        # genuinely share a process/event loop, so a live refresh on task completion
+        # is actually achievable here - see _on_task_completed. TaskEventBus itself
+        # doesn't know or care that it's desktop-only; a future websocket/SSE-backed
+        # implementation for thin-client/web could subscribe the same way once RPC
+        # has a push mechanism to build one on (it doesn't today).
+        self.event_bus = TaskEventBus()
+        self._unsubscribe_task_events = self.event_bus.subscribe(self._on_task_completed)
+
+        self.worker_manager = WorkerManager(worker_task_repo, event_bus=self.event_bus)
         handlers = WorkerHandlers(self.db_manager, chronicle_repo=worker_chronicle_repo)
         self.worker_manager.register_handler(TaskType.IMPORT, handlers.handle_import)
         self.worker_manager.register_handler(TaskType.CLEAN, handlers.handle_clean)
+        self.worker_manager.register_handler(TaskType.TRANSCRIBE, handlers.handle_transcribe)
 
         # Start worker manager in background
         asyncio.create_task(self.worker_manager.run_forever())
+
+    async def _on_task_completed(self, event: TaskCompletedEvent) -> None:
+        """Refreshes whatever view is currently on screen if a just-finished task
+        could plausibly have changed what it's showing - a chronicle's transcript,
+        speaker count, duration, status or tags after import/clean/transcribe, or
+        the task list itself. Settings has nothing task-related to refresh.
+        """
+        if self.state.current_view == ViewType.SETTINGS:
+            return
+        if (
+            self.state.current_view == ViewType.TRANSCRIPT
+            and self.state.selected_chronicle is not None
+            and event.chronicle_id is not None
+            and event.chronicle_id != self.state.selected_chronicle.id
+        ):
+            return  # a different chronicle's task - nothing on screen changed
+
+        logger.debug(f"Refreshing current view after task {event.task_id} completed")
+        await self.update_view()
 
     async def on_sidebar_nav_change(self, view_id: str):
         if view_id == "archive":
@@ -145,11 +187,21 @@ class DesktopApp:
         self.runtime.settings.dark_mode = dark_mode
         self.runtime.settings.save()
         self.page.theme_mode = ft.ThemeMode.DARK if dark_mode else ft.ThemeMode.LIGHT
-        self.page.update()
+        self.content_area.bgcolor = theme_colors(dark_mode).surface
+        # The sidebar is built once in main() and, unlike content_area's view, is
+        # never naturally reconstructed on navigation - it needs an explicit nudge.
+        if self.sidebar is not None:
+            self.sidebar.set_dark_mode(dark_mode)
+        # Views bake their colors in at construction time (same pattern as
+        # SettingsView already used) - rebuild whichever one is on screen now that
+        # dark_mode has changed, rather than trying to mutate every control in place.
+        await self.update_view()
 
     async def cleanup(self, e):
         if self.worker_manager is not None:
             self.worker_manager.stop()
+        if self._unsubscribe_task_events is not None:
+            self._unsubscribe_task_events()
         await self._close_view_scope()
         if self._worker_session is not None:
             await self._worker_session.close()
@@ -183,27 +235,54 @@ class DesktopApp:
         # the next navigation) for no reason.
         await self._close_view_scope()
 
+        dark_mode = self.runtime.settings.dark_mode
+
         if self.state.current_view == ViewType.ARCHIVE:
             scope = self._new_scope()
             chronicle_service = scope.resolve(ChronicleService)
             task_service = scope.resolve(TaskService)
+            transcript_service = scope.resolve(TranscriptService)
             self.content_area.content = ArchiveView(
-                chronicle_service, task_service, self.open_chronicle, self.file_stager.stage
+                chronicle_service,
+                task_service,
+                self.open_chronicle,
+                self.file_stager.stage,
+                transcript_service,
+                dark_mode=dark_mode,
             )
         elif self.state.current_view == ViewType.TASKS:
             scope = self._new_scope()
             task_service = scope.resolve(TaskService)
-            self.content_area.content = TasksView(task_service)
+            self.content_area.content = TasksView(task_service, dark_mode=dark_mode)
         elif self.state.current_view == ViewType.SETTINGS:
             self.content_area.content = SettingsView(
                 self.runtime.settings, self.on_dark_mode_change
             )
         elif self.state.current_view == ViewType.TRANSCRIPT:
             scope = self._new_scope()
-            chronicle = self.state.selected_chronicle
+            chronicle_service = scope.resolve(ChronicleService)
             service = scope.resolve(TranscriptService)
+            transcript_task_service = scope.resolve(TaskService)
+            # Re-fetched rather than reusing self.state.selected_chronicle as-is: that's
+            # a snapshot from whenever the user navigated here, and TranscriptView
+            # bakes speakers_count/duration/status/tags into its UI at construction
+            # time from whatever Chronicle it's given - a live refresh after a
+            # background task finishes (see _on_task_completed) would otherwise still
+            # show stale values.
+            chronicle_id = self.state.selected_chronicle.id
+            chronicle = await chronicle_service.get_chronicle(chronicle_id)
+            if chronicle is None:
+                # Deleted out from under this view - go back rather than render a
+                # transcript view for a chronicle that no longer exists.
+                await self.go_back()
+                return
+            self.state.selected_chronicle = chronicle
             self.content_area.content = TranscriptView(
-                chronicle, self.go_back, transcript_service=service
+                chronicle,
+                self.go_back,
+                transcript_service=service,
+                task_service=transcript_task_service,
+                dark_mode=dark_mode,
             )
 
         self.content_area.update()

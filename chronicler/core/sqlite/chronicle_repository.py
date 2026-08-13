@@ -4,7 +4,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chronicler.core.database import DBChronicle
+from chronicler.core.database import DBChronicle, DBTag, DBTask, chronicle_tags
 from chronicler.core.models import Chronicle
 from chronicler.core.repositories import ChronicleRepository
 
@@ -65,6 +65,16 @@ class SQLiteChronicleRepository(ChronicleRepository):
         raise ValueError(f"Chronicle {chronicle.id} not found")
 
     async def delete(self, chronicle_id: UUID) -> None:
+        # DBTask.chronicle_id and chronicle_tags have no ondelete=CASCADE at the
+        # schema level (SQLite doesn't enforce FKs by default here anyway - see
+        # database.py), so orphaned Task rows and tag associations are cleaned up
+        # explicitly, in the same transaction as the chronicle row itself.
+        await self.session.execute(
+            sa_delete(chronicle_tags).where(chronicle_tags.c.chronicle_id == str(chronicle_id))
+        )
+        await self.session.execute(
+            sa_delete(DBTask).where(DBTask.chronicle_id == str(chronicle_id))
+        )
         await self.session.execute(
             sa_delete(DBChronicle).where(DBChronicle.id == str(chronicle_id))
         )
@@ -76,3 +86,22 @@ class SQLiteChronicleRepository(ChronicleRepository):
         )
         db_chronicles = result.scalars().all()
         return [Chronicle.model_validate(db) for db in db_chronicles]
+
+    async def add_tag(self, chronicle_id: UUID, tag_name: str) -> None:
+        result = await self.session.execute(
+            select(DBChronicle).where(DBChronicle.id == str(chronicle_id))
+        )
+        db_chronicle = result.scalar_one_or_none()
+        if not db_chronicle:
+            raise ValueError(f"Chronicle {chronicle_id} not found")
+
+        tag_result = await self.session.execute(select(DBTag).where(DBTag.name == tag_name))
+        db_tag = tag_result.scalar_one_or_none()
+        if not db_tag:
+            db_tag = DBTag(name=tag_name)
+            self.session.add(db_tag)
+            await self.session.flush()
+
+        if db_tag not in db_chronicle.tags:
+            db_chronicle.tags.append(db_tag)
+            await self.session.commit()

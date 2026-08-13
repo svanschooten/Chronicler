@@ -34,6 +34,15 @@ async def test_database_manager_project_session(tmp_path):
     await db_manager.close_all()
 
 
+def test_get_chronicle_sources_path_creates_directory(tmp_path):
+    db_manager = DatabaseManager(tmp_path)
+
+    path = db_manager.get_chronicle_sources_path("test-chronicle")
+
+    assert path == tmp_path / "chronicles" / "test-chronicle" / "sources"
+    assert path.is_dir()
+
+
 def _head_revision(chain: str) -> str:
     from alembic.config import Config
     from alembic.script import ScriptDirectory

@@ -107,7 +107,7 @@ jobs:
 
       - name: Run the tests
         run: |
-          .venv/bin/pytest -v -s --junitxml=junit.xml --cov=chronicler --cov-report=xml --cov-report=term --cov-fail-under=78
+          .venv/bin/pytest -v -s --junitxml=junit.xml --cov=chronicler --cov-report=xml --cov-report=term --cov-fail-under=80
 
       - name: Upload Test and Coverage Reports
         if: always()

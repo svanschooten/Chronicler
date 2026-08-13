@@ -29,6 +29,12 @@ class ChronicleRepository(ABC):
     async def search(self, query: str) -> list[Chronicle]:
         pass
 
+    @abstractmethod
+    async def add_tag(self, chronicle_id: UUID, tag_name: str) -> None:
+        """Attach a tag to a chronicle, creating the tag if a tag with this name
+        doesn't exist yet. A no-op if the chronicle is already tagged with it."""
+        pass
+
 
 class TagRepository(ABC):
     @abstractmethod
@@ -119,6 +125,13 @@ class TranscriptRepository(ABC):
     async def delete_all_lines(self) -> None:
         """Delete every transcript line. Deliberately does not touch speakers - see
         the SQLite implementation for why."""
+        pass
+
+    @abstractmethod
+    async def delete_lines_by_speaker(self, speaker_id: UUID) -> None:
+        """Delete only this speaker's lines, leaving every other speaker's lines
+        untouched - used when re-transcribing a single audio source (one source =
+        one speaker's track), not the whole chronicle's transcript."""
         pass
 
     @abstractmethod

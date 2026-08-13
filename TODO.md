@@ -18,8 +18,29 @@
 > Alembic are all done. Sprint 3 ("deliver the promised modes") also landed 2026-08-13:
 > DesktopApp resolves through Container/RemoteContainer, Thin Client mode works
 > end-to-end (including transcript viewing), server mode runs its own WorkerManager,
-> the chosen mode is persisted, SettingsView is real. Remaining work is Sprint 4 (first
-> genuinely useful feature).
+> the chosen mode is persisted, SettingsView is real.
+>
+> Sprint 4 ("core loop": manage Chronicles, import audio, transcribe with
+> faster-whisper, export text/html/pdf) landed 2026-08-13, in four passes:
+> Item 0 (unblock the UI — dead snackbars, un-awaited per-card button callbacks);
+> a UI-fixes pass covering seven issues found in real use (consistent header button
+> styling, theme-aware colors across every desktop view, Chronicle metadata editing,
+> tagging + speaker-count backfill on import, an overwrite/append confirmation before
+> a second transcript import can silently destroy the first, hiding completed tasks
+> by default, a working Export dropdown); a second UI-fixes round on things only
+> visible after actually running the app (a client-crashing `FilePicker`
+> registration bug, an `AlertDialog` that resolved correctly but never visually
+> closed, sidebar/border colors that were still wrong in light mode, task ordering +
+> timestamps + logging); a plaintext-export correction once real output didn't match
+> what was actually wanted (padded, colon-aligned speaker column, original line
+> breaks preserved — not word-wrapped); and the close-out pass — Chronicle delete
+> (UI + cascade), real audio import (routed to a new `TRANSCRIBE` task instead of
+> the text path that was guaranteed to fail on audio), and a faster-whisper
+> `TRANSCRIBE` handler with the model downloaded lazily on first real use, not at
+> startup. Text export is done; HTML/PDF/DOCX and Markdown export remain future work
+> (see Phase 6), along with tag *management* UI, chronicle search (FTS), and
+> real speaker diarization — see the still-open `[ ]`/`[~]` items throughout for
+> what Sprint 5 should pick up.
 
 ---
 
@@ -104,8 +125,10 @@ every `ASGITransport`-based test in the sprint had missed:
     * [x] Optimized multi-job workflow with caching
     * [x] Make quality checks blocking (`continue-on-error` removed 2026-08-13)
     * [x] Drop flake8 (redundant with ruff — removed 2026-08-13)
-    * [x] Enforce a coverage threshold (`--cov-fail-under=74`, re-measured 2026-08-13
-      after Sprint 2 - baseline was 76.2%)
+    * [x] Enforce a coverage threshold (`--cov-fail-under=80`, raised 2026-08-13 from 78
+      after the Sprint 4 UI-fixes pass measured 83% - kept a few points of headroom
+      since audio import/transcription work still to come will add untested surface
+      before its own tests land)
     * [ ] Fix `.venv` cache reuse before re-enabling the macOS matrix entry
 
 ---
@@ -275,6 +298,47 @@ Future:
     * Fixed 2026-08-13: `Settings.dark_mode` persisted; startup respects it (was
       hardcoded `ft.ThemeMode.DARK`); the Settings toggle actually updates
       `page.theme_mode` and saves.
+    * Extended 2026-08-13 (Sprint 4 UI fixes): that first fix only flipped
+      `page.theme_mode`, which every *unstyled* Flet control follows automatically —
+      but ArchiveView, TasksView and `DesktopApp.content_area` all hardcoded
+      `BLUE_GREY_800/700` backgrounds regardless of theme (only SettingsView and
+      TranscriptView's own inline ternaries were theme-aware, and TranscriptView's
+      `dark_mode` param was never actually passed a real value from `app.py`). Toggling
+      to light mode left cards/content area exactly as dark as before, with
+      default-adaptive text/icons now landing on the wrong side of the contrast for a
+      still-dark surface — the "light text on light background" symptom. Extracted the
+      already-correct settings.py palette into `chronicler/desktop/theme.py`
+      (`theme_colors(dark_mode) -> ThemeColors`), applied it in all four views plus
+      `content_area`, and made `on_dark_mode_change` rebuild the current view (colors
+      are baked in at construction) instead of only flipping `page.theme_mode`.
+    * Extended again 2026-08-13 (found in live use after the above): the sidebar
+      (`components/sidebar.py`) was still hardcoded `BLUE_GREY_900` and never
+      considered `dark_mode` at all, and three spots used a bare `ft.Colors.AMBER_300`
+      accent for status text/icons (TranscriptView's "Imported" badge, SettingsView's
+      connection badge, TasksView's WORKING icon) — bright enough to read on dark
+      surfaces but low-contrast on the new light-mode `WHITE` ones. Added `accent` and
+      `sidebar` to `ThemeColors` (`AMBER_300`/`BLUE_GREY_900` dark,
+      `AMBER_800`/`AMBER_50` light); `Sidebar` takes `dark_mode` at construction and
+      gained `set_dark_mode()` since - unlike the content views - it's built once in
+      `main()` and never naturally rebuilt on navigation, so `on_dark_mode_change`
+      calls it explicitly.
+    * Extended a third time 2026-08-13 (still wrong in live use): the light-mode
+      `sidebar`/`border` picks from the previous fix were themselves bad choices -
+      `AMBER_50` sidebar read as an odd yellow/brown tint next to the rest of the now
+      pure-white light theme instead of a deliberate accent, and `AMBER_100` borders
+      are a near-white pale yellow, practically invisible against a white surface.
+      `sidebar` is now the same `WHITE` as `surface` (matches the rest of the app, as
+      asked, rather than introducing its own tint); `border` is `BROWN_200` - keeps
+      the app's warm palette but is actually visible.
+* [x] Fix "Unknown control: FilePicker" client error
+    * Fixed 2026-08-13 (found in live use): `ft.FilePicker` is a `Service`
+      (`flet.controls.services.service.Service`), not a visual control - adding it to
+      `page.overlay` (which expects renderable widgets, same list `AlertDialog`/
+      `SnackBar` use) makes the client fail outright with "Unknown control:
+      FilePicker" the moment that view mounts. Services register through
+      `page.services` instead. `TranscriptView` did this wrong outright (visible
+      crash); `ArchiveView` never registered its `file_picker` *anywhere* (a
+      pre-existing latent bug this also fixed) - both now use `page.services`.
 
 ---
 
@@ -290,8 +354,60 @@ Future:
 * [ ] Filter by tags
 * [x] Open Chronicle
 * [x] Import Transcript (via Header)
-* [ ] Fix un-awaited coroutines in card action callbacks (`clean_clicked`, per-card imports)
-* [ ] Fix snackbars — `page.snack_bar = ...` is the pre-0.70 Flet API and no longer displays
+* [x] Edit Chronicle metadata (title/description/kind/duration)
+    * Added 2026-08-13 (Sprint 4 UI fixes): `ChronicleService.update_chronicle` already
+      worked end-to-end, there was just no UI calling it anywhere. Per-card "Edit"
+      button opens a dialog pre-filled from the Chronicle, saves via the existing
+      service method.
+* [x] Delete Chronicle
+    * Fixed 2026-08-13: `ChronicleService.delete_chronicle` worked but had no UI and
+      no cascade (`DBTask.chronicle_id` and `chronicle_tags` have no
+      `ondelete=CASCADE`, and SQLite doesn't enforce FKs by default here anyway - see
+      `database.py`). `SQLiteChronicleRepository.delete()` now cleans up `DBTask` rows
+      and `chronicle_tags` associations in the same transaction as the chronicle row.
+      `ChronicleService` gained a `DatabaseManager` dependency (auto-wired by
+      `Container` the same way `TranscriptService` already gets it) so it can also
+      remove the on-disk `chronicles/<id>/` directory - but only for a chronicle whose
+      data actually lives there (`project_path` unset); a linked chronicle's
+      externally-located `project.db` is never touched. Per-card "Delete" button asks
+      for confirmation via `page.show_dialog()`/`pop_dialog()` (the correct pattern -
+      see the overwrite/append dialog's regression note above for why the earlier
+      raw-`page.overlay` approach silently failed to close).
+* [x] Consistent header button styling
+    * Fixed 2026-08-13: "New Chronicle" (`ElevatedButton`) and "Import" (a manually
+      styled `Container`, since `PopupMenuButton` needs a custom `content` to look like
+      a button) had different padding/shape/elevation. Gave `ElevatedButton` a matching
+      `ButtonStyle` (radius 8, same padding, `elevation=0`) so they read as one style.
+    * Superseded 2026-08-13 (still didn't actually look identical in live use -
+      `ElevatedButton` carries its own Material minimum-tap-target/ink/icon-gap
+      defaults that `style=` can't fully cancel out): replaced `ElevatedButton`
+      entirely with the same manually-styled `Container` pattern "Import" already
+      used, extracted into one shared builder, `chronicler/desktop/widgets.py::
+      amber_button()`. Both buttons now go through the identical code path, so they're
+      guaranteed pixel-identical rather than independently tuned to look close. Also
+      used for the transcript view's "Export" button. Bonus: drops the
+      `ElevatedButton` deprecation warning (deprecated since Flet 0.80, removed in 1.0).
+* [x] Dropdown affordance on menu-opening buttons
+    * Added 2026-08-13: "Import" and "Export" open a `PopupMenuButton` menu but looked
+      identical to a plain action button, no visual hint they'd expand. `amber_button()`
+      takes a `dropdown=True` flag that appends a thin separator + a small
+      `EXPAND_MORE` chevron after the label.
+* [x] Fix un-awaited coroutines in card action callbacks (`clean_clicked`, per-card imports)
+    * Fixed 2026-08-13 (Sprint 4 item 0): Flet's dispatcher only awaits a handler when
+      `inspect.iscoroutinefunction(handler)` is true of the object assigned to
+      `on_click` itself — a `lambda e, i=x: self.async_method(e, i)` fails that check,
+      so the coroutine it returns was created and silently dropped. Per-card controls
+      now bind the bound async method directly and carry the chronicle id via `data`
+      (read back as `e.control.data`) instead of a lambda closure. Regression test:
+      `test_card_action_controls_bind_async_handlers_directly` asserts
+      `inspect.iscoroutinefunction` on every per-card `on_click` — the same predicate
+      Flet uses — so this class of bug fails CI instead of surviving unnoticed again.
+* [x] Fix snackbars — `page.snack_bar = ...` is the pre-0.70 Flet API and no longer displays
+    * Fixed 2026-08-13 (Sprint 4 item 0): `ArchiveView.show_snackbar` now calls
+      `page.show_dialog(ft.SnackBar(...))`, verified against the installed flet 0.86.4
+      API (`ft.Page` has no `snack_bar` attribute at all). Regression test:
+      `test_show_snackbar_uses_page_show_dialog` uses a `spec=ft.Page` mock, so it fails
+      if `show_dialog` is ever renamed/removed again.
 
 ---
 
@@ -308,8 +424,62 @@ Future:
 ## Task monitor
 
 * [x] View active tasks
-* [~] Show progress — rendered, but the view never polls, so it does not update live
+* [~] Show progress — rendered, and the tasks/archive/transcript views now refresh
+  automatically when a task *finishes* (see "Live refresh on task completion"
+  below), but a WORKING task's progress percentage still doesn't animate live
+  between start and finish - `TaskEventBus` only publishes on terminal states
+  (DONE/FAILED), not on every `update_progress()` call. Manual refresh still shows
+  the latest percentage; it just doesn't self-update while watching.
 * [ ] Retry failures
+* [x] Hide completed tasks by default
+    * Fixed 2026-08-13: the "Hide completed tasks" checkbox existed but defaulted to
+      unchecked, so a growing pile of DONE tasks was the first thing shown. Now
+      defaults to `True`.
+* [x] Order tasks newest first; show started/completed timestamps
+    * Fixed 2026-08-13: `get_all()`/`search()` had no `ORDER BY` at all (whatever order
+      SQLite happened to return). Added `ORDER BY created_at DESC`. No schema change
+      needed for the timestamps either - `claimed_at` (set by `claim_next()`) is
+      "started", and `updated_at` (bumped by `onupdate=datetime.now` on every write,
+      including the final `update_status(..., DONE)`) is "completed" once the task
+      reaches a terminal state. Each task row now shows Created/Started/Completed.
+* [x] More task logging
+    * Fixed 2026-08-13 (reported: "I only see the transcript started, not finished or
+      intermediate states"): `WorkerManager._execute_task` now logs the claim, every
+      `update_progress()` call, and completion generically for every task type,
+      instead of relying on each handler to log its own bookends. `handle_import`/
+      `handle_clean` additionally log line/speaker counts at parse and finish, so a
+      real import's log trail now reads claim → parsed N lines → progress 50% →
+      finished: N lines, M speakers → completed, not just the one start line.
+* [x] Live refresh on task completion (desktop mode)
+    * Added 2026-08-13 (reported: "the chronicle does not update when a task
+      finishes"): `chronicler/core/task_events.py` adds `TaskEventBus` - a small
+      in-process publish/subscribe. `WorkerManager` takes an optional `event_bus` and
+      publishes a `TaskCompletedEvent` once a task reaches a terminal state (DONE, or
+      FAILED with no retries left - a retry that goes back to PENDING does *not*
+      publish one, since nothing's "completed" yet). `DesktopApp` is the only current
+      subscriber: full-stack desktop mode is the one case where the WorkerManager and
+      the UI genuinely share a process/event loop, so a live refresh is actually
+      achievable - `_on_task_completed` calls `update_view()` to refresh whatever's
+      on screen (skipping Settings, and skipping the transcript view if the finished
+      task belongs to a *different* chronicle than the one being viewed). Also fixed
+      along the way: `update_view()`'s TRANSCRIPT branch used to reuse
+      `state.selected_chronicle` as-is (a snapshot from whenever the user navigated
+      there) - `TranscriptView` bakes speakers_count/duration/status/tags into its UI
+      at construction time from whatever `Chronicle` it's given, so without a
+      re-fetch the refresh would rebuild the view with the same stale data. Now
+      re-fetches by id on every `update_view()` call (going back to the archive list
+      if the chronicle was deleted out from under an open view).
+    * Explicitly *not* built: any transport for thin-client/web. `TaskEventBus`'s
+      `subscribe()`/`publish()` shape is deliberately transport-agnostic - a future
+      websocket/SSE-backed implementation could plug into `WorkerManager` the same
+      way `DesktopApp`'s does - but today's RPC (`RemoteServiceProxy`) is
+      request/response only, with no server-push mechanism to build that on. Server
+      mode's `WorkerManager` (`server/main.py`) doesn't get an `event_bus` yet since
+      nothing would consume the events.
+    * Follow-up planned 2026-08-13, not yet implemented: **Server-Sent Events**,
+      decided over WebSocket - see Phase 7's "Task event stream" entry for the full
+      analysis and concrete server/desktop-thin-client design, and Phase 8's "Live
+      updates in the browser" for the web client half.
 
 ---
 
@@ -337,16 +507,142 @@ Future:
     * Static pre-filter added 2026-08-13 (`regex_guard.py`) — rejects patterns over 500
       chars and patterns shaped for catastrophic backtracking. Not a CPU-time bound; see
       the new item under Phase 3.
+* [x] Overwrite/append confirmation
+    * Fixed 2026-08-13 (Sprint 4 UI fixes): `handle_import` unconditionally called
+      `delete_all_lines()` before writing the new file's lines — importing a second
+      transcript into a chronicle that already had one silently destroyed it, no
+      warning. `TaskService.queue_import`/`handle_import` gained an `append: bool`
+      flag (skips the delete; offsets the new lines' `start_time` past the existing
+      max instead). Fixed a related latent bug in the process: `RegexImporter` gave
+      every line `start_time=0.0`, so `get_lines()`'s `ORDER BY start_time` had no real
+      tiebreaker for text imports — it "worked" only by accident of SQLite's scan
+      order. Now assigns sequential per-file indices, so append has a real offset to
+      build on and ordering is deterministic. `ArchiveView` checks for an existing
+      transcript before importing into a chronicle and asks Overwrite/Append/Cancel.
+    * Fixed 2026-08-13 (found in live use): the confirmation dialog's buttons worked
+      (the future resolved, the import proceeded correctly) but the dialog itself
+      never visually closed. Root cause: `_ask_overwrite_or_append` built the dialog
+      by hand (`page.overlay.append(dialog)`, `dialog.open = True/False`,
+      `page.update()`) and removed it from `page.overlay` immediately after setting
+      `open = False` - `AlertDialog`'s close is animated client-side, and Flet's own
+      `BasePage._wrap_dialog_on_dismiss` comment says removing a dialog before the
+      client confirms the animation finished "can drop the post-animation dismiss
+      callback entirely." Switched to `page.show_dialog()`/`page.pop_dialog()`, which
+      wrap `on_dismiss` and only remove the dialog once the client actually reports
+      it closed. `create_dialog`/`transcript_dialog`/`edit_dialog` in this same file
+      use the older raw-`page.overlay` pattern too, but as *persistent* dialogs (added
+      once, never removed, only `open` toggles) rather than a fresh instance per call
+      - not hit by this specific bug, but the same underlying risk if that ever
+      changes; worth a look if any of them are ever reported not closing.
+* [x] Tag imported chronicles + backfill speaker count
+    * Fixed 2026-08-13 (Sprint 4 UI fixes): two dead-data-model items reopened in the
+      2026-08-13 re-baseline are now live for the import/clean path specifically.
+      `handle_import` already built a full `speaker_map` as a side effect of parsing —
+      it just never wrote it anywhere. Now backfills `Chronicle.speakers_count` after
+      every import/clean (counting distinct speaker names across every line
+      currently in the transcript, not just the just-parsed ones — matters for append
+      mode) and tags the chronicle `"Transcript"` via the new
+      `ChronicleRepository.add_tag` (get-or-create by name, since `DBTag.name` is
+      unique; idempotent). A manual "Identify Speakers" per-card action
+      (`TranscriptService.refresh_speaker_count`) covers reconciling chronicles
+      imported before this existed, or hand-edited since. `chronicle_tags` and
+      `speakers_count` are no longer fully dead — see the still-open items below for
+      what's left (tag *creation*/*management* UI, tags beyond "Transcript").
+* [x] Import transcript with timestamps
+    * Added 2026-08-13: `RegexImporter` takes an optional `timestamp_group` - when
+      given, that capture group is parsed (`chronicler/core/formatting.py::
+      parse_timestamp`, accepts `H:MM:SS`/`HH:MM:SS`/`MM:SS` and an optional
+      fractional-seconds suffix) into the line's real `start_time`, instead of the
+      synthetic per-line index used when no timestamp is captured. `end_time` is
+      derived from the *next* line's `start_time` (only a start is captured per
+      cue); the last line is zero-length rather than guessing. `TaskService.
+      queue_import`/`handle_import` thread `timestamp_group` through; `ArchiveView`'s
+      Import Transcript dialog gained a "Timestamp Group Index (optional)" field.
+      `DefaultImporter` (the no-regex-specified path) has no timestamp support - a
+      fixed pattern with no timestamp group in it, by definition; timestamped import
+      is only available via a user-supplied regex. Append mode's existing offset
+      logic (shift new lines past the current max `end_time`) needed no changes -
+      "this content comes after what's already there" is the same operation whether
+      the shifted values are synthetic indices or real seconds.
 
 ---
 
 ## Transcription
 
-* [ ] Whisper integration
-* [ ] Transcription worker
-* [ ] Timestamp handling
-* [ ] Speaker assignment
-* [ ] Retry support
+* [x] Whisper integration
+    * Added 2026-08-13 (Sprint 4 close-out): `chronicler/core/processing/transcriber.py`
+      wraps `faster_whisper.WhisperModel`. `WhisperModel` is only constructed inside
+      `_get_model()`, called only from `transcribe_audio()`, called only from
+      `WorkerHandlers.handle_transcribe` when a TRANSCRIBE task actually runs - nothing
+      at module import or app-startup time touches it, so the (~150MB, `"base"` size)
+      model only downloads on first real transcription, not on every app launch.
+      Loaded models are cached by size so a second task doesn't reload/redownload.
+      `model_size` isn't a `Settings` field yet (hardcoded `DEFAULT_MODEL_SIZE =
+      "base"` in `transcriber.py`) - nobody's asked to tune it; trivial to add if
+      needed later.
+* [x] Transcription worker
+    * `WorkerHandlers.handle_transcribe` registered in both `desktop/app.py` and
+      `server/main.py` alongside IMPORT/CLEAN. `transcribe_audio()` is synchronous and
+      CPU-bound (real transcription can take minutes) - run via `asyncio.to_thread()`
+      so it doesn't block the event loop the desktop UI shares with the worker loop in
+      full-stack mode. A missing `transcription` extra raises a clear failed-task
+      message (`RuntimeError` with the `pip install` hint) instead of crashing the
+      whole worker loop.
+* [x] Timestamp handling — faster-whisper's segment `start`/`end` (real seconds) are
+  used directly as `TranscriptLine.start_time`/`end_time`, giving `get_lines()`'s
+  `ORDER BY start_time` real, meaningful values for once (text imports only ever had
+  synthetic per-line indices - see the append/overwrite entry above).
+* [x] Real audio import
+    * Fixed 2026-08-13: `ArchiveView`'s "Import Audio" used to call
+      `TaskService.queue_import()` (the text path, which opened the audio file as
+      UTF-8 and failed every time) or, briefly mid-Sprint-4, immediately queued a
+      transcription. Redesigned 2026-08-13 (see the multi-track item below) so
+      importing an audio source and transcribing it are two separate, explicit
+      actions: `ChronicleService.add_audio_source()` just moves the staged file into
+      a durable `chronicles/<id>/sources/` and returns - no task, no transcription -
+      so a user can gather every track for a session before transcribing any of them.
+* [x] Multi-track / per-speaker transcription
+    * Redesigned 2026-08-13 after real usage clarified the actual recording setup:
+      each "chronicle" (podcast episode) is recorded as *separate single-speaker
+      audio tracks* (one per Discord participant, via a per-user recording bot) plus
+      a separate music track - not one multi-speaker file. `TaskType.TRANSCRIBE` now
+      requires a `speaker_name` (`TaskService.queue_transcribe(chronicle_id,
+      file_path, speaker_name)`) - transcribing one track is explicitly "this whole
+      track is speaker X". `handle_transcribe` only deletes *that speaker's* existing
+      lines (`TranscriptRepository.delete_lines_by_speaker`) before inserting the new
+      ones, so re-transcribing (or transcribing) one participant's track never
+      touches another's already-transcribed lines. Segment timestamps are used
+      as-is, not offset: separate per-participant tracks from the same Discord
+      session are already time-aligned on a shared timeline, so sorting the combined
+      transcript by `start_time` interleaves speakers correctly for free. The
+      transcript view gained a "Sources" panel (`TranscriptService.list_audio_sources`
+      lists the sources/ directory) - each track has a "Transcribe" action that asks
+      which speaker it is (existing speaker names shown as a hint;
+      `get_or_create_speaker` matches by exact name, so typing one exactly reuses
+      that speaker rather than creating a near-duplicate).
+    * Explicitly out of scope for now (the user's own words): real diarization
+      (multiple speakers auto-identified within one track) - every source is assumed
+      single-speaker. The music track mentioned as part of the recording setup isn't
+      given any special handling either - it's just not one anyone would click
+      "Transcribe" on; mixing tracks into one podcast file is a distinct, larger,
+      not-yet-scoped feature.
+* [ ] Retry support — inherited for free from the existing task retry mechanism
+  (`mark_failed_or_retry`), but a transient failure partway through a multi-minute
+  transcription re-runs the whole thing from scratch; no resumability.
+* [x] Chronicle duration and status backfill
+    * Fixed 2026-08-13 (reported: "after transcribing the duration is not updated";
+      "the state of the chronicle should not be [stuck at] 'Imported' after audio
+      transcription"): `Chronicle.duration` was never computed anywhere - always
+      "Unknown duration". `handle_transcribe` now backfills it from the *whole*
+      transcript's longest line (`max(end_time)` across every speaker's track, not
+      just the one just transcribed - two participants' tracks can run different
+      lengths), formatted via the new `chronicler/core/formatting.py::format_duration`
+      ("1h 24m"). Text imports/cleans still don't touch `duration` - their
+      `start_time`/`end_time` are synthetic per-line indices, not real time, and
+      would produce a meaningless value. `status` also defaults to "Imported" and is
+      never otherwise updated - `handle_transcribe` now sets it to "Transcribed", but
+      only if it's still the untouched default (won't stomp a chronicle whose status
+      was already something else on purpose).
 
 ---
 
@@ -371,6 +667,18 @@ Future:
 ## Transcript viewer
 
 * [x] Display transcript
+* [x] Show line timestamps (optional)
+    * Added 2026-08-13: a "Show timestamps" checkbox in the transcript panel prefixes
+      each line with `[HH:MM:SS]` (`chronicler/core/formatting.py::format_timestamp`,
+      the same helper used by timestamped export, so the two always agree). Toggling
+      reformats the already-fetched lines in place rather than re-querying the
+      transcript, so it doesn't flash "Loading..." or cost a round trip. No
+      distinction is made between "real" timestamps (from whisper) and the synthetic
+      per-line indices text import uses when no `timestamp_group` is given - the
+      checkbox shows whatever `start_time` actually holds either way; a text-imported
+      chronicle without real timestamps will show small ascending values
+      (`00:00:00`, `00:00:01`, ...), not a claim of precision that isn't there, but
+      also not hidden behind a "is this real" flag that doesn't exist in the schema.
 * [ ] **Edit text** — reopened. The text field is `read_only=True` and
   `TranscriptService.update_line` returns its input without persisting.
 * [ ] Search within Chronicle
@@ -386,15 +694,58 @@ Future:
 
 Initial:
 
-* [ ] Plain text export
+* [x] Plain text export
+    * Added 2026-08-13 (Sprint 4 UI fixes): `TranscriptService.export_plaintext`
+      wraps each line at 140 columns with a hanging indent under `"Speaker: "` (width
+      varies per speaker name), dropping lines with no real text. Verified against a
+      real fixture, not just hand-written expectations:
+      `test_export_plaintext_matches_cleaned_example_after_import_and_clean` imports
+      `examples/example_transcript_001.txt`, runs Clean, exports, and asserts the
+      result is byte-for-byte identical to `examples/example_transcript_001_cleaned.txt`
+      (which predates this code — a genuine format-compatibility check).
+    * Corrected 2026-08-13 (real exported output didn't match what was actually
+      wanted, once seen): the speaker column wasn't padded/colon-aligned, and a
+      multi-line turn (`"Sergus: Yes.\nI think we left one at least."`) got flattened
+      into one wrapped paragraph instead of keeping each original line as its own
+      indented output line — matching `examples/example_transcript_001_cleaned.txt`
+      turned out not to be the right target after all; the *raw* file's own
+      convention (`examples/example_transcript_001.txt`: padded speaker column,
+      original line breaks preserved) was. `RegexImporter` now joins a turn's
+      continuation lines with `"\n"` instead of `" "` so that structure survives
+      into the database (`TranscriptCleaner` already normalizes all whitespace
+      including `"\n"` when merging same-speaker lines, so Cleaned output is
+      unaffected). `export_plaintext` pads every speaker name to the widest one
+      actually present in that transcript (not a hardcoded width — the raw example
+      file's own width of 8 is wider than its longest name, 6, for reasons lost to
+      whatever produced it), and prints each of a turn's original lines separately,
+      only falling back to word-wrap for an individual line/merged-turn long enough
+      to need it. Old fixture-diff test replaced with one pinned to a real excerpt of
+      `example_transcript_001.txt` (the Windrider/Maldal exchange) plus targeted unit
+      tests for padding, wrapping, and blank-line handling.
+* [x] Export with timestamps
+    * Added 2026-08-13: `export_plaintext(chronicle_id, include_timestamps=False)` -
+      when true, prefixes each line with `[HH:MM:SS]` (same `format_timestamp` helper
+      the transcript view's timestamp toggle uses) ahead of the padded speaker
+      column, using the exact same wrap/hanging-indent rules either way - the
+      timestamp prefix is a fixed 11 characters (`"[HH:MM:SS] "`), so it just widens
+      the continuation-line indent, nothing about the alignment logic itself changed.
+      Export dropdown gained a second item, "Plain text with timestamps (.txt)".
 * [ ] Markdown export
-* [ ] Wire up the Export button in the transcript view (currently has no handler)
+* [x] Wire up the Export button in the transcript view (currently has no handler)
+    * Fixed 2026-08-13: replaced with a dropdown (`PopupMenuButton`) — "Plain text" is
+      live (`FilePicker.save_file` + write); HTML/PDF/"Chronicle .zip" are listed but
+      `disabled=True` ("coming soon") rather than silently absent, so it's honest about
+      what's not built yet instead of just missing.
 
 Future:
 
-* [ ] PDF
+* [ ] PDF — no library chosen yet. Leaning `xhtml2pdf` (pure Python) over `weasyprint`
+  (needs system Cairo/Pango) since PyInstaller packaging is on the roadmap (Phase 9)
+  and native deps there are a known pain point — open to revisiting if PDF fidelity
+  matters more than packaging simplicity.
 * [ ] DOCX
 * [ ] HTML
+* [ ] Chronicle export (zip the chronicle's workspace directory to a chosen location)
 
 ---
 
@@ -420,6 +771,98 @@ Future:
       only), 500MB size cap with partial-file cleanup on overflow, collisions are
       statistically impossible by construction.
 * [x] Move `python-multipart` into base dependencies (`/upload` 500s without it)
+* [ ] Task event stream — push `TaskCompletedEvent` to remote clients (SSE)
+    * Planned 2026-08-13 (analysis below), not yet implemented. Follows on from
+      "Live refresh on task completion" (Transcription section) landing
+      desktop-full-stack-only, with `TaskEventBus`'s subscribe/publish shape
+      deliberately left transport-agnostic for exactly this.
+    * **Decision: Server-Sent Events, not WebSocket.** Both were considered (the
+      user had no strong preference - WebSocket "aligns with the current RPC
+      mindset", SSE "is more fitting, read only"). Concrete reasons SSE wins for
+      *this* codebase specifically, not in the abstract:
+        - The data flow is 100% one-directional (server → client task-completion
+          events). Every client-initiated action already has a channel - the
+          existing `POST /api/{service}/{method}` RPC routes. Nothing needs to ride
+          a bidirectional connection; WebSocket's extra capability (client → server
+          messages) would be unused surface area, not a feature this needs.
+        - Zero new dependencies either way on the server (`StreamingResponse` with
+          `media_type="text/event-stream"` is plain Starlette, already a dependency
+          via FastAPI - no need for `sse-starlette`) *or* for WebSocket (`websockets`
+          is already present transitively via `uvicorn[standard]`). But on the
+          **desktop thin client**, which only depends on `httpx` (not
+          `uvicorn[standard]` - that's the `[server]` extra, not installed for a
+          thin-client-only install), consuming SSE needs nothing beyond
+          `httpx.AsyncClient.stream()` and parsing a trivial `data: ...\n\n` format
+          by hand. Consuming WebSocket would need adding `websockets` (or
+          `httpx-ws`) as a new **base** dependency just for this. Checked directly,
+          not assumed: `pip show websockets` in this venv resolves it only via the
+          `uvicorn[standard]` server extra today.
+        - The browser side has one well-known SSE wrinkle - the native
+          `EventSource` object can't set custom headers, so it can't carry
+          `X-API-Key` the way every other request in this app does. It doesn't
+          matter here: per the existing proxy design, the browser never talks to
+          the real API-key-protected server directly, only to the web client's own
+          local proxy (see Phase 8). That hop's auth is whatever "Shared-password
+          login with a signed session cookie" (Phase 8, still open) ends up being -
+          and `EventSource` *does* send cookies automatically, so native
+          `EventSource` is actually the right fit for the browser once that lands,
+          not a workaround.
+        - SSE gets native auto-reconnect in the browser (`EventSource`) for free;
+          WebSocket reconnect is hand-rolled either way. The thin client needs a
+          hand-rolled reconnect-with-backoff loop regardless of which is chosen (SSE
+          or WS), since httpx has no built-in client for either.
+    * **Server side** (`chronicler/core/rpc.py`, `chronicler/server/main.py`):
+        - `RpcServer` gains an optional `event_bus: TaskEventBus | None` constructor
+          param (mirrors `WorkerManager`'s). `server/main.py::run_server` constructs
+          one `TaskEventBus`, passes it to *both* `_build_worker_manager` (so
+          `WorkerManager` actually publishes) and `RpcServer` (so the route below
+          can subscribe to it) - today `_build_worker_manager` takes no `event_bus`
+          at all, since nothing consumed it yet.
+        - New route in `RpcServer.build()`, alongside `/upload` (not a `@service`
+          method - `_register_service` only picks up coroutine functions meant as
+          request/response RPC, and a stream doesn't fit that shape):
+          `GET /events`, protected by the same `verify_api_key` dependency every
+          other route already has (it's applied app-wide via `FastAPI(dependencies=
+          [Depends(verify_api_key)])`, so this needs no special-casing). Handler:
+          create an `asyncio.Queue`, subscribe a listener that does
+          `queue.put_nowait(event)` to `self.event_bus`, return a
+          `StreamingResponse` whose generator does `while True: event =
+          await queue.get(); yield f"data: {json}\n\n"` - unsubscribing (the
+          `TaskEventBus.subscribe()` return value already *is* the unsubscribe
+          callable) in a `finally` block when the client disconnects.
+        - `TaskCompletedEvent` → JSON: it's a plain frozen dataclass, but pydantic
+          v2's `TypeAdapter` handles plain dataclasses natively (UUID/Enum → str
+          included) - reuse the exact same
+          `TypeAdapter(...).dump_python(event, mode="json")` pattern
+          `RemoteServiceProxy` already uses for arguments, no new serialization code
+          needed.
+        - Server mode already runs `WorkerManager.run_forever()` and uvicorn's
+          `Server.serve()` concurrently on *one* event loop
+          (`server/main.py::_serve_and_work`, `asyncio.gather`) - so
+          `TaskEventBus.publish()` (called from the worker loop) and an SSE route's
+          queue (awaited from a request handler) are already on the same loop with
+          no cross-process signaling to design.
+    * **Desktop thin client side** (`chronicler/core/remote.py`,
+      `chronicler/desktop/app.py`):
+        - New class in `remote.py`, e.g. `RemoteTaskEventSource` - not a
+          `RemoteServiceProxy` (this isn't a request/response method call). Opens
+          `client.stream("GET", f"{base_url}/events", headers={"X-API-Key":
+          api_key})`, reads and parses the `data: ...\n\n` lines, deserializes each
+          via `TypeAdapter(TaskCompletedEvent).validate_python(json.loads(data))`,
+          and `.publish()`es into a `TaskEventBus`. Runs as a background
+          `asyncio.create_task()` loop with reconnect-with-backoff around the
+          stream (a dropped connection - server restart, network blip - must not
+          silently stop live updates forever).
+        - `DesktopApp` in thin-client mode constructs its *own* local
+          `TaskEventBus` (today only full-stack mode does, inside
+          `_maybe_start_worker_manager`) and subscribes `_on_task_completed` to it
+          exactly as full-stack mode does, then starts a `RemoteTaskEventSource`
+          feeding that bus instead of a local `WorkerManager`. Net effect:
+          `_on_task_completed` and the refresh logic become **identical code for
+          both desktop modes** - only where events originate differs (local
+          `WorkerManager` vs. a remote SSE stream). This is the actual payoff of
+          having built `TaskEventBus` as a transport-agnostic interface rather than
+          wiring `WorkerManager` straight to `DesktopApp`.
 
 ---
 
@@ -436,8 +879,81 @@ Future:
 * [x] Basic UI for creating Chronicles
 * [x] UI for importing audio files via upload
 * [ ] Basic UI for viewing a Chronicle
-* [ ] Shared-password login with a signed session cookie
+* [ ] Browser-facing auth for the web client — **deferred, not current scope**
+    * Re-planned 2026-08-13: the web client as a whole is a "much later" concern,
+      so this moved from "next thing to design" to "direction captured, not
+      queued" - written down here so the reasoning isn't lost before it's picked
+      back up, not because it's about to be built.
+    * **Unchanged and not part of this item:** server ↔ (thin-client desktop | web
+      client proxy) keeps using the existing `X-API-Key` header exactly as today -
+      one uniform communication strategy for both remote-client shapes, API key
+      only. This item is only about the separate, currently-unauthenticated
+      *browser* ↔ *web client* hop (`chronicler/webclient/main.py` has zero auth
+      dependencies on any route today).
+    * First direction explored: HTTP Basic Auth (FastAPI's built-in `HTTPBasic`,
+      a bcrypt-hashed shared password in `Settings`, applied app-wide the same way
+      `RpcServer.build()` already gates every route with `verify_api_key`). Simple
+      - a few lines, no session store, no CSRF surface - and it incidentally
+      solves `EventSource`'s "can't set custom headers" limitation for the live
+      updates item below, since the browser auto-reattaches
+      `Authorization: Basic ...` to every request to the origin once challenged
+      once, `EventSource` included.
+    * **Reconsidered:** Basic Auth sends the password (base64-encoded, not
+      encrypted) on every single request, so it's only meaningfully safe over
+      TLS - and Chronicler has no built-in TLS story today, so this would make
+      "protect the web client" and "stand up TLS" the same prerequisite. Current
+      preference is a simple client-side-hashed login instead, specifically to
+      avoid that hard coupling to TLS.
+    * **Caveat worth remembering when this is actually designed:** naively
+      hashing the password in the browser before sending it
+      (`sha256(password)`, sent as-is as the credential) does *not* by itself
+      remove the need for TLS. An eavesdropper who captures that hash can just
+      replay it - from the network's point of view the hash *becomes* the
+      password, no more protected than sending it in the clear, since the server
+      still accepts that exact value every time. Getting a genuine improvement
+      out of client-side hashing needs a per-attempt challenge: the server issues
+      a random single-use nonce, the client sends `hash(password + nonce)` (or an
+      HMAC over the nonce), and the server checks it against a hash it computes
+      the same way with that nonce - a captured value is useless on replay
+      because the nonce won't be accepted twice. This is essentially what HTTP
+      Digest Auth (RFC 7616) already standardizes; a small hand-rolled
+      nonce+HMAC exchange for a single login page would work too and is simpler
+      to reason about than adopting Digest wholesale. Whichever it ends up being,
+      the open question to resolve later is "recommend/require TLS and keep
+      Basic Auth's simplicity" vs. "take on nonce-challenge complexity to reduce
+      the TLS dependency" - genuinely a trade-off, not resolved here.
 * [x] Stop exposing the upstream server URL to the browser
+* [ ] Live updates in the browser (proxy the SSE task event stream) — **also
+  deferred**, same reason as browser-facing auth above: the web client is a later
+  concern, this is design intent captured early, not queued work.
+    * Planned 2026-08-13 - see Phase 7's "Task event stream" entry for the full
+      SSE-vs-WebSocket analysis and server-side design; this is the browser-facing
+      half of the same feature.
+        - `chronicler/webclient/main.py` gains `GET /events`, proxied the same way
+          `/api/upload` and `/api/{service}/{method}` already are: open
+          `httpx.AsyncClient().stream("GET", f"{settings.server_url}/events",
+          headers={"X-API-Key": settings.api_key})` and re-stream each chunk to the
+          browser via a `StreamingResponse` with `media_type="text/event-stream"`.
+          Same "upstream unreachable → 502" handling as the other two proxy routes.
+        - Browser JS (`chronicler/webclient/src/app.js`, currently plain `fetch()`
+          calls, no live-update mechanism yet): `new EventSource('/events')`, same
+          origin as the page itself. Works with zero browser-facing auth today,
+          matching the web client's current state - whatever auth scheme "Browser-
+          facing auth for the web client" (above) eventually lands with, the
+          browser will already be attaching it (a header the browser caches and
+          re-sends, or a cookie) to every same-origin request automatically,
+          `EventSource` included, with no extra plumbing needed here regardless of
+          which direction that item settles on. On each message, re-fetch whatever
+          the current view depends on (chronicle list, or the open chronicle's
+          detail) rather than trying to patch the DOM from the event payload
+          directly - simplest thing that works, matches "Basic UI for viewing a
+          Chronicle" not existing yet either.
+        - Depends on "Basic UI for viewing a Chronicle" existing first for the
+          "refresh the open chronicle" half to have anywhere to land; the "refresh
+          the chronicle list" half doesn't. Does *not* depend on "Browser-facing
+          auth" landing first - works with zero auth today (matching the web
+          client's current state), and picks up whatever that item lands with for
+          free whenever it does, same as every other route.
 
 ---
 

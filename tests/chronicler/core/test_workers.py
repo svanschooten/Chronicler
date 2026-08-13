@@ -1,4 +1,5 @@
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from chronicler.core.database import Base
 from chronicler.core.models import Task, TaskStatus, TaskType
 from chronicler.core.sqlite import SQLiteTaskRepository
+from chronicler.core.task_events import TaskEventBus
 from chronicler.core.workers import WorkerManager
 
 
@@ -39,6 +41,31 @@ async def test_worker_manager_process_task(async_session):
 
     fetched = await repo.get_by_id(task.id)
     assert fetched.status == TaskStatus.DONE
+
+
+@pytest.mark.asyncio
+async def test_worker_manager_logs_claim_progress_and_completion(async_session, caplog):
+    """Regression test: previously only a handler's own start-of-work log line was
+    visible - nothing logged the claim, progress updates, or successful completion
+    generically, so "did this task ever finish?" wasn't answerable from the logs
+    alone.
+    """
+    repo = SQLiteTaskRepository(async_session)
+
+    async def handler(task, update_progress):
+        await update_progress(50)
+
+    manager = WorkerManager(repo)
+    manager.register_handler(TaskType.IMPORT, handler)
+    task = await repo.create(Task(type=TaskType.IMPORT))
+
+    with caplog.at_level("INFO", logger="chronicler.core.workers"):
+        await manager.process_tasks()
+
+    assert f"Task {task.id}" in caplog.text
+    assert "claimed, starting" in caplog.text
+    assert "progress: 50%" in caplog.text
+    assert "completed" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -148,3 +175,69 @@ async def test_claim_next_skips_tasks_already_claimed(async_session):
     assert second_claim.claimed_by == "worker-b"
 
     assert await repo.claim_next("worker-c") is None
+
+
+@pytest.mark.asyncio
+async def test_completed_task_publishes_event_with_chronicle_id(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    event_bus = TaskEventBus()
+    received = []
+    event_bus.subscribe(lambda event: received.append(event))
+
+    manager = WorkerManager(repo, event_bus=event_bus)
+    manager.register_handler(TaskType.IMPORT, AsyncMock())
+
+    chronicle_id = uuid4()
+    task = await repo.create(Task(type=TaskType.IMPORT, chronicle_id=chronicle_id))
+
+    await manager.process_tasks()
+
+    assert len(received) == 1
+    assert received[0].task_id == task.id
+    assert received[0].status == TaskStatus.DONE
+    assert received[0].chronicle_id == chronicle_id
+
+
+@pytest.mark.asyncio
+async def test_failed_task_with_no_retries_left_publishes_event(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    event_bus = TaskEventBus()
+    received = []
+    event_bus.subscribe(lambda event: received.append(event))
+
+    manager = WorkerManager(repo, event_bus=event_bus)
+    manager.register_handler(TaskType.IMPORT, AsyncMock(side_effect=Exception("boom")))
+
+    await repo.create(Task(type=TaskType.IMPORT, max_attempts=1))
+    await manager.process_tasks()
+
+    assert len(received) == 1
+    assert received[0].status == TaskStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_task_retry_does_not_publish_event_yet(async_session):
+    """A task that still has retries left goes back to PENDING, not a terminal
+    state - nothing has "completed" from a listener's point of view yet."""
+    repo = SQLiteTaskRepository(async_session)
+    event_bus = TaskEventBus()
+    received = []
+    event_bus.subscribe(lambda event: received.append(event))
+
+    manager = WorkerManager(repo, event_bus=event_bus)
+    manager.register_handler(TaskType.IMPORT, AsyncMock(side_effect=Exception("boom")))
+
+    await repo.create(Task(type=TaskType.IMPORT, max_attempts=3))
+    await manager.process_tasks()
+
+    assert received == []
+
+
+@pytest.mark.asyncio
+async def test_no_event_bus_configured_does_not_raise(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    manager = WorkerManager(repo)  # no event_bus
+    manager.register_handler(TaskType.IMPORT, AsyncMock())
+
+    await repo.create(Task(type=TaskType.IMPORT))
+    await manager.process_tasks()  # must not raise

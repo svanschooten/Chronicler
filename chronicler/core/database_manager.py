@@ -52,6 +52,17 @@ class DatabaseManager:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def get_chronicle_sources_path(self, chronicle_id: str) -> Path:
+        """Durable per-chronicle storage for audio sources (as opposed to
+        get_imports_path()'s shared scratch space, which a worker is free to
+        overwrite/lose). Used by both ChronicleService (adding a source) and
+        WorkerHandlers (transcribing one), so it needs to be computed identically in
+        both places.
+        """
+        path = self.workspace_path / "chronicles" / chronicle_id / "sources"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def get_archive_session(self) -> AsyncSession:
         return self.archive_session_factory()
 

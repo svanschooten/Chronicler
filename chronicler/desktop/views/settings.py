@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 import flet as ft
 
 from chronicler.core.config import Settings
+from chronicler.desktop.theme import theme_colors
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +20,12 @@ class SettingsView(ft.Column):
         self.on_dark_mode_change = on_dark_mode_change
         dark_mode = settings.dark_mode
 
-        surface = ft.Colors.BLUE_GREY_700 if dark_mode else ft.Colors.WHITE
-        text_color = ft.Colors.WHITE if dark_mode else ft.Colors.BROWN_900
-        muted = ft.Colors.BLUE_GREY_200 if dark_mode else ft.Colors.BROWN_500
-        border_color = ft.Colors.BLUE_GREY_600 if dark_mode else ft.Colors.AMBER_100
+        colors = theme_colors(dark_mode)
+        surface = colors.card
+        text_color = colors.text
+        muted = colors.muted
+        border_color = colors.border
+        accent = colors.accent
 
         if settings.workspace_path:
             workspace_description = str(settings.workspace_path)
@@ -70,7 +73,7 @@ class SettingsView(ft.Column):
                 self.setting_card(
                     connection_title,
                     connection_description,
-                    ft.Text(connection_badge, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_300),
+                    ft.Text(connection_badge, weight=ft.FontWeight.BOLD, color=accent),
                     surface,
                     text_color,
                     muted,

@@ -23,6 +23,8 @@ class TaskService:
         regex: str | None = None,
         speaker_group: int = 1,
         text_group: int = 2,
+        timestamp_group: int | None = None,
+        append: bool = False,
     ) -> Task:
         data: dict[str, Any] = {"file_path": file_path}
         if regex:
@@ -30,6 +32,10 @@ class TaskService:
             data["regex"] = regex
             data["speaker_group"] = speaker_group
             data["text_group"] = text_group
+            if timestamp_group is not None:
+                data["timestamp_group"] = timestamp_group
+        if append:
+            data["append"] = True
 
         task = Task(
             type=TaskType.IMPORT,
@@ -42,6 +48,18 @@ class TaskService:
         task = Task(
             type=TaskType.CLEAN,
             chronicle_id=chronicle_id,
+        )
+        return await self.repository.create(task)
+
+    async def queue_transcribe(self, chronicle_id: UUID, file_path: str, speaker_name: str) -> Task:
+        # One audio source = one speaker's track (no diarization yet - see
+        # WorkerHandlers.handle_transcribe). Required, not optional: transcribing
+        # without knowing whose track it is isn't a meaningful default, it's a
+        # silent data-quality bug waiting to happen.
+        task = Task(
+            type=TaskType.TRANSCRIBE,
+            chronicle_id=chronicle_id,
+            data=json.dumps({"file_path": file_path, "speaker_name": speaker_name}),
         )
         return await self.repository.create(task)
 

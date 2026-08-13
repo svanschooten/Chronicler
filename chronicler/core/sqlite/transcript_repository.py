@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,6 +79,11 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         # deleting speakers here lets that lookup-by-name reuse the same row, and
         # therefore the same id, across re-imports/cleans of the same chronicle.
         await self.session.execute(sa_delete(DBTranscriptLine))
+
+    async def delete_lines_by_speaker(self, speaker_id: UUID) -> None:
+        await self.session.execute(
+            sa_delete(DBTranscriptLine).where(DBTranscriptLine.speaker_id == str(speaker_id))
+        )
 
     async def search(self, query: str) -> list[TranscriptLine]:
         # Not implemented yet (SQLite FTS - see TODO.md). Raising rather than silently

@@ -65,6 +65,7 @@ def _build_worker_manager(db_manager: DatabaseManager) -> WorkerManager:
     )
     worker_manager.register_handler(TaskType.IMPORT, handlers.handle_import)
     worker_manager.register_handler(TaskType.CLEAN, handlers.handle_clean)
+    worker_manager.register_handler(TaskType.TRANSCRIBE, handlers.handle_transcribe)
     return worker_manager
 
 

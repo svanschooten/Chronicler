@@ -3,42 +3,51 @@ import logging
 import flet as ft
 
 from chronicler.core.services.task_service import TaskService
+from chronicler.desktop.theme import theme_colors
 
 logger = logging.getLogger(__name__)
 
 
 class TasksView(ft.Column):
-    def __init__(self, task_service: TaskService):
+    def __init__(self, task_service: TaskService, dark_mode: bool = True):
         logger.debug("TasksView constructed")
         self.task_service = task_service
+        self.colors = theme_colors(dark_mode)
         self.task_list = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True, spacing=16)
         self.query = ""
-        self.hide_completed = False
+        self.hide_completed = True
 
         super().__init__(
             expand=True,
             spacing=16,
             controls=[
-                ft.Text("Processing tasks", size=30, weight=ft.FontWeight.BOLD),
+                ft.Text(
+                    "Processing tasks", size=30, weight=ft.FontWeight.BOLD, color=self.colors.text
+                ),
                 ft.Text(
                     "Scribes keep work moving, even when you close Chronicler.",
-                    color=ft.Colors.GREY_400,
+                    color=self.colors.muted,
                 ),
-                ft.Divider(color=ft.Colors.BLUE_GREY_600),
+                ft.Divider(color=self.colors.border),
                 ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.SEARCH, color=ft.Colors.GREY_400),
+                        ft.Icon(ft.Icons.SEARCH, color=self.colors.muted),
                         ft.TextField(
                             expand=True,
                             hint_text="Search tasks",
+                            color=self.colors.text,
                             on_change=self.search_changed,
                         ),
                         ft.Checkbox(
                             label="Hide completed tasks",
-                            value=False,
+                            value=True,
                             on_change=self.hide_completed_changed,
                         ),
-                        ft.IconButton(ft.Icons.REFRESH, on_click=self.refresh_clicked),
+                        ft.IconButton(
+                            ft.Icons.REFRESH,
+                            icon_color=self.colors.muted,
+                            on_click=self.refresh_clicked,
+                        ),
                     ],
                 ),
                 self.task_list,
@@ -87,12 +96,24 @@ class TasksView(ft.Column):
         from chronicler.core.models import TaskStatus
 
         state_color = (
-            ft.Colors.AMBER_300 if task.status == TaskStatus.WORKING else ft.Colors.GREY_400
+            self.colors.accent if task.status == TaskStatus.WORKING else self.colors.muted
         )
+
+        # claimed_at/updated_at already exist for claim_next()/update_status() -
+        # "started" and "completed" don't need their own columns. updated_at is
+        # bumped on every write to the row, so once the task has reached a terminal
+        # state it's exactly the completion time.
+        timestamp_format = "%Y-%m-%d %H:%M"
+        timestamps = [f"Created {task.created_at.strftime(timestamp_format)}"]
+        if task.claimed_at:
+            timestamps.append(f"Started {task.claimed_at.strftime(timestamp_format)}")
+        if task.status in (TaskStatus.DONE, TaskStatus.FAILED):
+            timestamps.append(f"Completed {task.updated_at.strftime(timestamp_format)}")
+
         return ft.Container(
-            bgcolor=ft.Colors.BLUE_GREY_700,
+            bgcolor=self.colors.card,
             padding=ft.Padding.all(16),
-            border=ft.Border.all(1, ft.Colors.BLUE_GREY_600),
+            border=ft.Border.all(1, self.colors.border),
             border_radius=12,
             content=ft.Row(
                 controls=[
@@ -105,14 +126,19 @@ class TasksView(ft.Column):
                     ft.Column(
                         expand=True,
                         controls=[
-                            ft.Text(task.type.value, weight=ft.FontWeight.BOLD),
-                            ft.Text(f"Status: {task.status}", color=ft.Colors.GREY_400),
+                            ft.Text(
+                                task.type.value, weight=ft.FontWeight.BOLD, color=self.colors.text
+                            ),
+                            ft.Text(f"Status: {task.status}", color=self.colors.muted),
+                            ft.Text(" · ".join(timestamps), size=12, color=self.colors.muted),
                             ft.ProgressBar(value=task.progress / 100.0)
                             if task.status == TaskStatus.WORKING
                             else ft.Container(),
                         ],
                     ),
-                    ft.Text(f"{task.progress}%", weight=ft.FontWeight.BOLD),
+                    ft.Text(
+                        f"{task.progress}%", weight=ft.FontWeight.BOLD, color=self.colors.text
+                    ),
                 ],
             ),
         )

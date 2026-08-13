@@ -1,8 +1,11 @@
+from datetime import datetime
+
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from chronicler.core.database import Base
+from chronicler.core.database import Base, chronicle_tags
 from chronicler.core.models import Chronicle, Tag, Task, TaskStatus, TaskType
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
@@ -64,6 +67,42 @@ async def test_update_chronicle(async_session):
 
 
 @pytest.mark.asyncio
+async def test_add_tag_creates_tag_and_attaches_it(async_session):
+    repo = SQLiteChronicleRepository(async_session)
+    chronicle = await repo.create(Chronicle(title="Test Chronicle"))
+
+    await repo.add_tag(chronicle.id, "Transcript")
+
+    fetched = await repo.get_by_id(chronicle.id)
+    assert [t.name for t in fetched.tags] == ["Transcript"]
+
+
+@pytest.mark.asyncio
+async def test_add_tag_reuses_existing_tag_by_name(async_session):
+    repo = SQLiteChronicleRepository(async_session)
+    c1 = await repo.create(Chronicle(title="C1"))
+    c2 = await repo.create(Chronicle(title="C2"))
+
+    await repo.add_tag(c1.id, "Transcript")
+    await repo.add_tag(c2.id, "Transcript")
+
+    tags = await SQLiteTagRepository(async_session).get_all()
+    assert len(tags) == 1
+
+
+@pytest.mark.asyncio
+async def test_add_tag_is_idempotent(async_session):
+    repo = SQLiteChronicleRepository(async_session)
+    chronicle = await repo.create(Chronicle(title="Test Chronicle"))
+
+    await repo.add_tag(chronicle.id, "Transcript")
+    await repo.add_tag(chronicle.id, "Transcript")
+
+    fetched = await repo.get_by_id(chronicle.id)
+    assert [t.name for t in fetched.tags] == ["Transcript"]
+
+
+@pytest.mark.asyncio
 async def test_delete_chronicle(async_session):
     repo = SQLiteChronicleRepository(async_session)
     chronicle = await repo.create(Chronicle(title="To be deleted"))
@@ -71,6 +110,34 @@ async def test_delete_chronicle(async_session):
     await repo.delete(chronicle.id)
     fetched = await repo.get_by_id(chronicle.id)
     assert fetched is None
+
+
+@pytest.mark.asyncio
+async def test_delete_chronicle_cascades_tasks_and_tags(async_session):
+    """DBTask.chronicle_id and chronicle_tags have no ondelete=CASCADE at the schema
+    level - deleting a chronicle must clean these up explicitly or they're orphaned
+    forever (a Task row pointing at a chronicle_id that no longer exists, or a tag
+    association nothing will ever read again)."""
+    chronicle_repo = SQLiteChronicleRepository(async_session)
+    task_repo = SQLiteTaskRepository(async_session)
+
+    chronicle = await chronicle_repo.create(Chronicle(title="To be deleted"))
+    await chronicle_repo.add_tag(chronicle.id, "Transcript")
+    task = await task_repo.create(Task(type=TaskType.IMPORT, chronicle_id=chronicle.id))
+    other_chronicle = await chronicle_repo.create(Chronicle(title="Untouched"))
+    other_task = await task_repo.create(
+        Task(type=TaskType.IMPORT, chronicle_id=other_chronicle.id)
+    )
+
+    await chronicle_repo.delete(chronicle.id)
+
+    assert await task_repo.get_by_id(task.id) is None
+    assert await task_repo.get_by_id(other_task.id) is not None
+
+    tags_result = await async_session.execute(
+        select(chronicle_tags).where(chronicle_tags.c.chronicle_id == str(chronicle.id))
+    )
+    assert tags_result.first() is None
 
 
 @pytest.mark.asyncio
@@ -98,6 +165,28 @@ async def test_get_all_tasks(async_session):
     all_tasks = await repo.get_all()
     assert len(all_tasks) == 2
     assert {t.type for t in all_tasks} == {TaskType.IMPORT, TaskType.TRANSCRIBE}
+
+
+@pytest.mark.asyncio
+async def test_get_all_tasks_orders_newest_first(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    older = await repo.create(Task(type=TaskType.IMPORT, created_at=datetime(2026, 1, 1)))
+    newer = await repo.create(Task(type=TaskType.TRANSCRIBE, created_at=datetime(2026, 1, 2)))
+
+    all_tasks = await repo.get_all()
+
+    assert [t.id for t in all_tasks] == [newer.id, older.id]
+
+
+@pytest.mark.asyncio
+async def test_search_tasks_orders_newest_first(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    older = await repo.create(Task(type=TaskType.IMPORT, created_at=datetime(2026, 1, 1)))
+    newer = await repo.create(Task(type=TaskType.IMPORT, created_at=datetime(2026, 1, 2)))
+
+    results = await repo.search("IMPORT")
+
+    assert [t.id for t in results] == [newer.id, older.id]
 
 
 @pytest.mark.asyncio
