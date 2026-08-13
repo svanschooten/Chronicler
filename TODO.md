@@ -13,9 +13,10 @@
 > [ASSESSMENT.md](ASSESSMENT.md) for the full analysis.
 >
 > Sprint 1 ("stop the bleeding") landed 2026-08-13: all six items below are fixed and
-> tested. Remaining work is Sprint 2 (§2 in ASSESSMENT.md: session-per-operation, atomic
-> task claiming/retry, transactional import/clean, Alembic) and Sprint 3 (DesktopApp onto
-> the Container, Thin Client mode, server-mode worker manager).
+> tested. Sprint 2 ("make the foundation honest") also landed 2026-08-13:
+> session-per-operation, atomic task claiming/retry, transactional import/clean, and
+> Alembic are all done. Remaining work is Sprint 3 (DesktopApp onto the Container, Thin
+> Client mode, server-mode worker manager) and Sprint 4 (first genuinely useful feature).
 
 ---
 
@@ -36,15 +37,31 @@ Fixed in Sprint 1 (2026-08-13):
   directory in `handle_import` (`is_relative_to` check). `regex` is statically checked
   for catastrophic-backtracking shapes (`chronicler/core/processing/regex_guard.py`)
   before a task is even created. Note: the static check is a pre-filter, not a CPU-time
-  bound — see the new item under Phase 3 below.
+  bound — see the note under Phase 3 below.
 * [x] **CI gates nothing.** `continue-on-error` removed from ruff/mypy; flake8 dropped
-  (100% overlap with ruff, confirmed by running both); `--cov-fail-under=68` added
-  (measured baseline was 70.4%).
+  (100% overlap with ruff, confirmed by running both); `--cov-fail-under` added.
 
-Still open:
+Fixed in Sprint 2 (2026-08-13):
 
-* [ ] **One `AsyncSession` shared everywhere.** UI, worker loop and every HTTP request share a
-  single session. Not concurrency-safe. Sprint 2.
+* [x] **One `AsyncSession` shared everywhere.** UI, worker loop and every HTTP request used
+  to share a single session — real crash risk (`IllegalStateChangeError`) under any
+  concurrent use. `RpcServer` now resolves a fresh `Container` scope per request
+  (`Container.create_scope()`); `DesktopApp`'s `WorkerManager` gets its own dedicated
+  session, never touched by the UI, and `update_view()` opens a fresh session per
+  navigation instead of holding one for the app's lifetime. Verified live: 30 concurrent
+  requests against a real server, no errors.
+
+New known limitation (Sprint 2, 2026-08-13):
+
+* [ ] **No upgrade path from a pre-Alembic workspace.** Adopting Alembic (below) means any
+  workspace created before this sprint will fail to start (`table already exists`) —
+  verified concretely against a real pre-existing `chronicler.db`. `alembic stamp head`
+  clears the crash but doesn't verify schema compatibility, and that same real database is
+  missing the `claimed_by`/`attempts` columns added this sprint — stamping it would mark it
+  "up to date" while it's actually incomplete, which is worse than the crash. Matches this
+  project's own reasoning for adopting Alembic now ("while there are zero real users") —
+  pre-Alembic workspaces should be deleted and recreated, not migrated in place. No action
+  taken on any existing local workspace.
 
 ---
 
@@ -59,7 +76,8 @@ Still open:
     * [x] Optimized multi-job workflow with caching
     * [x] Make quality checks blocking (`continue-on-error` removed 2026-08-13)
     * [x] Drop flake8 (redundant with ruff — removed 2026-08-13)
-    * [x] Enforce a coverage threshold (`--cov-fail-under=68`, added 2026-08-13)
+    * [x] Enforce a coverage threshold (`--cov-fail-under=74`, re-measured 2026-08-13
+      after Sprint 2 - baseline was 76.2%)
     * [ ] Fix `.venv` cache reuse before re-enabling the macOS matrix entry
 
 ---
@@ -108,6 +126,12 @@ Still open:
   `register_factory(AbstractRepo, ConcreteImpl)` call as `[type-abstract]`. Worked around
   with targeted `# type: ignore[type-abstract]` for now (`server/main.py`,
   `test_server_main.py`); worth revisiting the container's type signature directly.
+* [ ] `DatabaseManager._project_engines` caches an engine per chronicle id forever, no
+  eviction. Not corrupting anything (each chronicle's engine is independent), just a slow
+  resource leak in a long-running process that opens many distinct chronicles. Deferred
+  during the Sprint 2 session-scoping work — a proper fix (LRU with a size cap) is easy to
+  get subtly wrong (evicting an engine mid-use) and lower severity than what that sprint
+  actually fixed.
 * [x] Prepare remote API backend interface — `RemoteContainer` / `RemoteServiceProxy`, tested
 
 Goal:
@@ -126,7 +150,8 @@ The UI and services should not depend directly on SQLite.
     * The `chronicle_tags` table and relationship exist, but nothing ever writes to them.
       There is no tag service, no tag API and no tag UI.
 * [x] Persistent task table
-* [ ] Task claim columns (`claimed_by`, `claimed_at`) and `attempts` / `max_attempts`
+* [x] Task claim columns (`claimed_by`, `claimed_at`) and `attempts` / `max_attempts`
+    * Added 2026-08-13 along with `SQLiteTaskRepository.claim_next()`, an atomic claim.
 
 ---
 
@@ -144,11 +169,14 @@ The UI and services should not depend directly on SQLite.
 
 ## Schema management
 
-* [ ] Replace `DatabaseManager._migrate_schema_sync` with Alembic
-    * The current implementation only adds columns, guesses defaults from type names,
-      interpolates values into raw SQL, and stores no schema version.
-* [ ] Baseline migration for the archive database
-* [ ] Baseline migration for the project database
+* [x] Replace `DatabaseManager._migrate_schema_sync` with Alembic
+    * Done 2026-08-13. Two independent chains (`chronicler/migrations/archive`,
+      `chronicler/migrations/project`), invoked programmatically (no static
+      `alembic.ini` - the project chain runs against a different file per chronicle).
+      Known limitation: no upgrade path from a pre-Alembic workspace - see "Known
+      blockers" at the top of this file.
+* [x] Baseline migration for the archive database
+* [x] Baseline migration for the project database
 
 ---
 
@@ -157,26 +185,32 @@ The UI and services should not depend directly on SQLite.
 * [x] Create worker manager
 * [x] Create worker lifecycle
 * [x] Persistent task handling (store tasks in master database)
-* [ ] **Task claiming** — reopened. `get_pending()` followed by `update_status()` is a race;
-  two processes against one workspace will both run the same task.
-* [~] Task status tracking: WAITING, WORKING, DONE, FAILED
-    * `WAITING` is never used, and `PENDING` / `WAITING` are redundant.
+* [x] **Task claiming**
+    * Fixed 2026-08-13: `SQLiteTaskRepository.claim_next(worker_id)` does a conditional
+      `UPDATE ... WHERE status='PENDING'` + rowcount check - atomic, safe under
+      concurrent callers (two processes against one workspace no longer double-run a
+      task).
+* [x] Task status tracking: WORKING, DONE, FAILED
+    * `WAITING` removed 2026-08-13 - confirmed unused anywhere in the codebase.
 * [x] Task progress tracking
 * [x] Error handling
-* [ ] **Retry support** — reopened. Nothing ever moves a FAILED task back to PENDING, and
-  there is no attempt counter.
+* [x] **Retry support**
+    * Fixed 2026-08-13: `attempts`/`max_attempts` columns, `mark_failed_or_retry()`
+      resets a task to PENDING (below max_attempts) instead of FAILED.
+      `WorkerManager.process_tasks()` bounds each poll cycle to what was pending when
+      the cycle started, so retries spread across poll cycles rather than all firing
+      instantly in one burst.
 * [ ] Implement annotation-based provider registration — handlers are still registered
   imperatively in `desktop/app.py`
 * [ ] Implement Scribe workers with concurrency configuration — the loop is strictly
   sequential in a single coroutine
 * [ ] Run a worker manager in server mode (server mode currently executes no tasks at all)
-* [ ] **Per-task CPU timeout.** Sprint 1 added a static pre-filter for catastrophic-backtracking
-  regex patterns (`chronicler/core/processing/regex_guard.py`) but that's a shape check, not
-  a CPU-time bound — Python threads can't be force-killed and CPython's regex matcher
-  doesn't release the GIL during backtracking, so a real bound needs a subprocess-based
-  watchdog. Build this as a general per-task timeout in the worker loop (not
-  regex-specific) when doing the concurrency/atomic-claiming rework above, rather than
-  building a one-off version now and redoing it here.
+* [ ] **Per-task CPU timeout.** The regex ReDoS guard (`chronicler/core/processing/
+  regex_guard.py`) is a static shape check, not a CPU-time bound — Python threads can't
+  be force-killed and CPython's regex matcher doesn't release the GIL during
+  backtracking, so a real bound needs a subprocess-based watchdog. Build this as a
+  general per-task timeout in the worker loop (not regex-specific) rather than a
+  one-off version.
 
 Initial tasks:
 
@@ -279,9 +313,13 @@ Future:
 * [x] Text normalization
 * [x] Segment merging
 * [ ] Cleanup markers
-* [ ] Make import/clean transactional — both call `delete_all()` before rewriting, so a crash
-  mid-run destroys the transcript
-* [ ] Stop recreating speaker rows on every clean (speaker IDs change each run)
+* [x] Make import/clean transactional
+    * Fixed 2026-08-13: repository methods no longer commit internally; `handle_import`/
+      `handle_clean` commit once at the end, rollback + re-raise on any exception.
+* [x] Stop recreating speaker rows on every clean (speaker IDs change each run)
+    * Fixed 2026-08-13: `delete_all()` renamed to `delete_all_lines()` and no longer
+      touches `DBSpeaker` - `get_or_create_speaker()`'s lookup-by-name now naturally
+      reuses the same row across re-imports/cleans.
 
 ---
 
@@ -395,8 +433,9 @@ Possible tools:
       commit) of what they targeted, so reconstructing them would just be guessing.
 * [x] Server startup smoke test
 * [x] Web client auth / proxy tests
-* [ ] Worker claiming and retry tests
-* [ ] Migration tests
+* [x] Worker claiming and retry tests (added 2026-08-13)
+* [x] Migration tests (added 2026-08-13 — `alembic_version` stamped at head, idempotent
+  re-init/re-open)
 * [x] `SQLiteTagRepository` tests (was zero coverage, fixed 2026-08-13)
 
 ---
