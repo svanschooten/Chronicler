@@ -1,5 +1,4 @@
 import inspect
-import logging
 import secrets
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -184,11 +183,3 @@ class RpcServer:
             self._register_service(self._app, service_cls)
 
         return self._app
-
-    def run(self, host: str = "0.0.0.0", port: int = 8000):
-        import uvicorn
-
-        logger = logging.getLogger(__name__)
-        logger.info(f"RPC Server API Key: {self.api_key}")
-        app = self.build()
-        uvicorn.run(app, host=host, port=port, log_config=None)
