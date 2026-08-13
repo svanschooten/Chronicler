@@ -61,3 +61,11 @@ class DBTask(Base):
         DateTime, default=datetime.now, onupdate=datetime.now
     )
     chronicle_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("chronicles.id"))
+    # Identifies which WorkerManager instance currently owns this task, set atomically
+    # together with the PENDING -> WORKING transition (see
+    # SQLiteTaskRepository.claim_next). Cleared whenever the task goes back to PENDING
+    # for a retry.
+    claimed_by: Mapped[str | None] = mapped_column(String(36))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    attempts: Mapped[int] = mapped_column(default=0)
+    max_attempts: Mapped[int] = mapped_column(default=3)

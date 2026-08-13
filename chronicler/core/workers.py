@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -10,8 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class WorkerManager:
-    def __init__(self, repository: TaskRepository):
+    def __init__(self, repository: TaskRepository, worker_id: str | None = None):
         self.repository = repository
+        # Identifies this WorkerManager instance for claim_next()'s claimed_by column
+        # - useful when more than one process (desktop + server) points at the same
+        # workspace, and for any future stale-claim recovery.
+        self.worker_id = worker_id or str(uuid.uuid4())
         self.handlers: dict[TaskType, Callable[[Task, Callable[[int], Any]], Any]] = {}
         self._running = False
 
@@ -35,17 +40,32 @@ class WorkerManager:
         logger.info("Worker manager stopped")
 
     async def process_tasks(self):
-        pending_tasks = await self.repository.get_pending()
-
-        for task in pending_tasks:
+        # Bounded to what was pending *before* this cycle started: a task that
+        # mark_failed_or_retry() puts back to PENDING mid-cycle (see _execute_task)
+        # is immediately re-claimable, and an unbounded claim loop would burn through
+        # all of a task's retries in one instant burst instead of spreading them
+        # across poll cycles - which defeats the point of retrying at all, since an
+        # instant re-attempt gives a transient failure no time to clear.
+        pending_count = len(await self.repository.get_pending())
+        for _ in range(pending_count):
+            task = await self.repository.claim_next(self.worker_id)
+            if task is None:
+                return
             await self._execute_task(task)
 
     async def _execute_task(self, task: Task):
         if task.type not in self.handlers:
+            # claim_next() already moved this task to WORKING - there's no handler
+            # that will ever appear for it, so retrying wouldn't help. Fail it
+            # outright rather than leaving it stuck in WORKING or busy-looping it
+            # through repeated claim/no-handler/reclaim cycles.
             logger.warning(f"No handler registered for task type: {task.type}")
+            await self.repository.update_status(
+                task.id,
+                TaskStatus.FAILED,
+                error=f"No handler registered for task type: {task.type}",
+            )
             return
-
-        await self.repository.update_status(task.id, TaskStatus.WORKING)
 
         async def update_progress(progress: int):
             await self.repository.update_progress(task.id, progress)
@@ -59,7 +79,7 @@ class WorkerManager:
             await self.repository.update_status(task.id, TaskStatus.DONE)
         except Exception as e:
             logger.exception(f"Error executing task {task.id}")
-            await self.repository.update_status(task.id, TaskStatus.FAILED, error=str(e))
+            await self.repository.mark_failed_or_retry(task.id, str(e))
 
 
 async def perform_test_task(task: Task, update_progress: Callable[[int], Any]):

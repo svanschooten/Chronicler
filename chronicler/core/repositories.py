@@ -66,7 +66,23 @@ class TaskRepository(ABC):
         pass
 
     @abstractmethod
+    async def claim_next(self, worker_id: str) -> Task | None:
+        """Atomically claim one PENDING task (PENDING -> WORKING, stamped with
+        worker_id/claimed_at) and return it, or None if there's nothing to claim.
+        Safe under concurrent callers - at most one caller ever gets a given task.
+        """
+        pass
+
+    @abstractmethod
     async def update_status(self, task_id: UUID, status: str, error: str | None = None) -> None:
+        pass
+
+    @abstractmethod
+    async def mark_failed_or_retry(self, task_id: UUID, error: str) -> None:
+        """Record a failed attempt. If the task still has attempts remaining, reset it
+        to PENDING (clearing claimed_by/claimed_at) so it's eligible to be claimed
+        again; otherwise mark it FAILED.
+        """
         pass
 
     @abstractmethod

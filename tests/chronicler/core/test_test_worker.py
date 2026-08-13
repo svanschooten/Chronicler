@@ -49,7 +49,9 @@ async def test_task_failure_recording(async_session):
         raise ValueError("Specific error")
 
     manager.register_handler(TaskType.TEST, failing_handler)
-    task = await repo.create(Task(type=TaskType.TEST))
+    # max_attempts=1: this test is about failure recording, not retry - see
+    # tests/chronicler/core/test_workers.py for the retry-specific tests.
+    task = await repo.create(Task(type=TaskType.TEST, max_attempts=1))
 
     await manager.process_tasks()
 

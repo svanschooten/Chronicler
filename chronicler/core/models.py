@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class TaskStatus(str, Enum):
     PENDING = "PENDING"
-    WAITING = "WAITING"
     WORKING = "WORKING"
     DONE = "DONE"
     FAILED = "FAILED"
@@ -78,5 +77,9 @@ class Task(BaseModel):
     chronicle_id: uuid.UUID | None = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+    claimed_by: str | None = None
+    claimed_at: datetime | None = None
+    attempts: int = 0
+    max_attempts: int = 3
 
     model_config = ConfigDict(from_attributes=True)
