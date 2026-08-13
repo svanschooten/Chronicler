@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     workspace_path: Path | None = None
     server_url: str | None = None
     api_key: str | None = None
+    # One of "server", "client:web", "desktop:full_stack", "desktop:thin_client" - set
+    # by ConfigWizard once it knows which of the four concrete setups was chosen.
+    # Desktop's two sub-modes aren't otherwise distinguishable from settings alone
+    # (both can have workspace_path/server_url set at once, e.g. after switching modes
+    # once); this records the actual choice rather than re-deriving it.
+    mode: str | None = None
 
     @property
     def config_dir(self) -> Path:

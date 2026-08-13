@@ -96,8 +96,10 @@ class ConfigWizard:
             if mode == "server":
                 self._run_step(WorkspaceStep())
                 self._run_step(ApiKeyStep())
+                self.settings.mode = "server"
             elif mode == "client:web":
                 self._run_step(RemoteServerStep())
+                self.settings.mode = "client:web"
             elif mode == "client:desktop":
                 # For desktop we don't know if they want full stack or thin client
                 # so we show the main choice
@@ -129,16 +131,20 @@ class ConfigWizard:
             if choice == "1":
                 self._run_step(WorkspaceStep())
                 self._run_step(ApiKeyStep())
+                self.settings.mode = "desktop:full_stack"
                 break
             elif choice == "2":
                 self._run_step(RemoteServerStep())
+                self.settings.mode = "desktop:thin_client"
                 break
             elif choice == "3":
                 self._run_step(WorkspaceStep())
                 self._run_step(ApiKeyStep())
+                self.settings.mode = "server"
                 break
             elif choice == "4":
                 self._run_step(RemoteServerStep())
+                self.settings.mode = "client:web"
                 break
             else:
                 print("Invalid choice. Please select 1, 2, 3 or 4.")

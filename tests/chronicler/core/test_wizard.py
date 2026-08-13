@@ -35,6 +35,7 @@ def test_wizard_full_stack(tmp_path):
         assert saved_settings.server_url is None
         assert saved_settings.api_key is not None
         assert len(saved_settings.api_key) > 0
+        assert saved_settings.mode == "desktop:full_stack"
 
 
 def test_wizard_full_stack_manual_api_key(tmp_path):
@@ -78,6 +79,7 @@ def test_wizard_thin_client(tmp_path):
         assert saved_settings.server_url == "http://remote:8000"
         assert saved_settings.api_key == "secret-key"
         assert saved_settings.workspace_path is None
+        assert saved_settings.mode == "desktop:thin_client"
 
 
 def test_wizard_reports_correct_path(tmp_path):
@@ -116,6 +118,7 @@ def test_wizard_server(tmp_path):
         saved_settings = Settings()
         assert saved_settings.workspace_path == tmp_path / "srv-workspace"
         assert saved_settings.api_key is not None
+        assert saved_settings.mode == "server"
 
 
 def test_wizard_web_client(tmp_path):
@@ -134,6 +137,7 @@ def test_wizard_web_client(tmp_path):
         saved_settings = Settings()
         assert saved_settings.server_url == "http://server:8000"
         assert saved_settings.api_key == "web-key"
+        assert saved_settings.mode == "client:web"
 
 
 def test_api_key_step_generates_on_empty_input():
@@ -189,6 +193,7 @@ def test_wizard_run_server_mode(mock_api, mock_ws, tmp_path):
 
     mock_ws.assert_called_once()
     mock_api.assert_called_once()
+    assert settings.mode == "server"
 
 
 @patch("chronicler.core.wizard.RemoteServerStep.run")
@@ -199,6 +204,7 @@ def test_wizard_run_webclient_mode(mock_remote, tmp_path):
         wizard.run(mode="client:web")
 
     mock_remote.assert_called_once()
+    assert settings.mode == "client:web"
 
 
 @patch("chronicler.core.wizard.ConfigWizard._show_main_choice")
