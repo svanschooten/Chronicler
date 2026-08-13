@@ -238,3 +238,45 @@ async def test_transcript_reachable_over_rpc(tmp_path):
             assert data[0]["speaker_name"] == "Alice"
     finally:
         await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_thin_client_full_flow_via_remote_container(tmp_path):
+    """End-to-end thin-client story through RemoteContainer specifically (not raw
+    HTTP): create a chronicle, queue a task, let the server's own WorkerManager pick
+    it up, then read it back - exactly the flow a live smoke test against a real
+    running server exercised, which is what surfaced two real bugs this covers as
+    regressions: RemoteServiceProxy failing to serialize UUID arguments at all
+    (test_remote.py), and queue_import/queue_clean missing return type annotations,
+    which silently made RemoteContainer callers get a raw dict back instead of a Task
+    (fixed in task_service.py).
+    """
+    from chronicler.core.remote import RemoteContainer
+    from chronicler.core.workers import WorkerManager
+    from chronicler.server.main import _build_worker_manager
+
+    db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
+    try:
+        await db_manager.init_archive()
+        worker_manager: WorkerManager = _build_worker_manager(db_manager)
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
+            chronicle_service = remote.resolve(ChronicleService)
+            task_service = remote.resolve(TaskService)
+
+            chronicle = await chronicle_service.create_chronicle("Thin Client Flow")
+            assert isinstance(chronicle, Chronicle)
+
+            task = await task_service.queue_clean(chronicle.id)
+            assert task.status.value == "PENDING"
+
+            await worker_manager.process_tasks()
+
+            tasks = await task_service.list_tasks()
+            (updated_task,) = [t for t in tasks if t.id == task.id]
+            assert updated_task.status.value == "DONE"
+    finally:
+        await worker_manager.repository.session.close()  # type: ignore[attr-defined]
+        await db_manager.close_all()

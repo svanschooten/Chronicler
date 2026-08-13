@@ -33,19 +33,27 @@ class RemoteServiceProxy:
             setattr(self, name, self._make_remote_method(name, method))
 
     def _make_remote_method(self, name: str, method: Callable):
+        sig = inspect.signature(method)
+        param_hints = get_type_hints(method)
+
         async def remote_method(*args, **kwargs):
-            sig = inspect.signature(method)
             # Map args to their names
             bound_args = sig.bind(None, *args, **kwargs)  # 'None' for self
             payload = {k: v for k, v in bound_args.arguments.items() if k != "self"}
 
-            # Serialize payload: Pydantic models in payload need to be converted to dicts
-            # FastAPI handles this on server side, but httpx needs dicts/json.
-            # We can use TypeAdapter to serialize the whole payload if we had a model for it,
-            # but for now let's just use a simple approach.
+            # Serialize each argument per its *declared* parameter type via
+            # TypeAdapter, not by inspecting the runtime value - handles UUID,
+            # datetime, Path, Enums and pydantic models uniformly and correctly,
+            # rather than only pydantic models (the previous `hasattr(v,
+            # "model_dump")` check left everything else, e.g. a bare UUID chronicle_id
+            # - the single most common argument shape in this codebase - to fall
+            # through unserialized and fail httpx's JSON encoding entirely.
             json_payload = {}
             for k, v in payload.items():
-                if hasattr(v, "model_dump"):
+                param_type = param_hints.get(k)
+                if param_type is not None:
+                    json_payload[k] = TypeAdapter(param_type).dump_python(v, mode="json")
+                elif hasattr(v, "model_dump"):
                     json_payload[k] = v.model_dump()
                 else:
                     json_payload[k] = v
@@ -61,8 +69,7 @@ class RemoteServiceProxy:
             data = response.json()
 
             # Deserialize response
-            hints = get_type_hints(method)
-            return_type = hints.get("return")
+            return_type = param_hints.get("return")
 
             if return_type:
                 # TypeAdapter can handle list[Model], Model | None, etc.

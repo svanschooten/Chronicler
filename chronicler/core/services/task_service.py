@@ -23,7 +23,7 @@ class TaskService:
         regex: str | None = None,
         speaker_group: int = 1,
         text_group: int = 2,
-    ):
+    ) -> Task:
         data: dict[str, Any] = {"file_path": file_path}
         if regex:
             assert_safe_pattern(regex)
@@ -38,7 +38,7 @@ class TaskService:
         )
         return await self.repository.create(task)
 
-    async def queue_clean(self, chronicle_id: UUID):
+    async def queue_clean(self, chronicle_id: UUID) -> Task:
         task = Task(
             type=TaskType.CLEAN,
             chronicle_id=chronicle_id,

@@ -72,8 +72,18 @@ class RpcServer:
                 new_params.append(param)
                 continue
 
-            # Treat all parameters as body fields
-            new_param = param.replace(default=Body(..., alias=param_name, embed=True))
+            # Treat all parameters as body fields, preserving the method's own
+            # default (including None) rather than always using Body(...) (Ellipsis =
+            # required) - that unconditionally made every parameter mandatory
+            # regardless of the method's actual signature, so any caller (a
+            # RemoteContainer proxy or otherwise) that omitted or explicitly passed
+            # None for a genuinely optional argument got a 422.
+            original_default = (
+                param.default if param.default is not inspect.Parameter.empty else ...
+            )
+            new_param = param.replace(
+                default=Body(original_default, alias=param_name, embed=True)
+            )
             new_params.append(new_param)
 
         new_sig = sig.replace(parameters=new_params)

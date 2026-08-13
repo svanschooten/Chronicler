@@ -23,6 +23,9 @@ class MockService:
     async def add_item(self, name: str) -> Item:
         return Item(id=2, name=name)
 
+    async def add_item_with_note(self, name: str, note: str | None = None) -> Item:
+        return Item(id=3, name=f"{name} ({note})" if note else name)
+
 
 @pytest.mark.asyncio
 async def test_rpc_server_and_remote_proxy():
@@ -49,6 +52,51 @@ async def test_rpc_server_and_remote_proxy():
         )
         assert resp.status_code == 200
         assert resp.json() == [{"id": 1, "name": "Test Item"}]
+
+
+@pytest.mark.asyncio
+async def test_optional_parameters_stay_optional_over_rpc():
+    """_add_route used to wrap every parameter as Body(..., ...) unconditionally -
+    Ellipsis means required in FastAPI/Pydantic, discarding the method's own default
+    regardless of what it was. That made every optional parameter on every service
+    method mandatory over RPC: omitting it, or explicitly sending null for it, both
+    422'd. Found via a live smoke test of Thin Client mode - ArchiveView's own
+    existing calls (e.g. create_chronicle with only some of its optional kwargs set)
+    would have broken the moment they ran against a real server.
+    """
+    container = Container()
+    api_key = "test-secret-key"
+    server = RpcServer(container, services=[MockService], api_key=api_key)
+    app = server.build()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"X-API-Key": api_key}
+
+        # Omitted entirely - falls back to the method's own default (None).
+        resp = await client.post(
+            "http://test/mock/add_item_with_note", json={"name": "a"}, headers=headers
+        )
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "a"
+
+        # Explicit null - also valid for an Optional[str] parameter.
+        resp = await client.post(
+            "http://test/mock/add_item_with_note",
+            json={"name": "b", "note": None},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "b"
+
+        # A real value still works as before.
+        resp = await client.post(
+            "http://test/mock/add_item_with_note",
+            json={"name": "c", "note": "urgent"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "c (urgent)"
 
 
 def test_cors_does_not_combine_wildcard_with_credentials():
