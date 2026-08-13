@@ -5,13 +5,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.repositories import ChronicleRepository, TagRepository, TaskRepository
-from chronicler.core.rpc import RpcServer
+from chronicler.core.rpc import RpcServer, service
 from chronicler.core.services import ChronicleService, SearchService, TaskService
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
     SQLiteTagRepository,
     SQLiteTaskRepository,
 )
+
+
+@service
+class _SessionIdProbeService:
+    """Test-only service exposing which AsyncSession backs its repository, so tests
+    can prove each request gets a fresh one rather than reaching into RpcServer
+    internals.
+    """
+
+    def __init__(self, repository: TaskRepository):
+        self.repository = repository
+
+    async def session_id(self) -> int:
+        return id(self.repository.session)  # type: ignore[attr-defined]
 
 
 def _build_server_app(tmp_path, api_key: str = "test-key"):
@@ -112,5 +126,80 @@ async def test_server_routes_respond_with_valid_key(tmp_path):
             # confusing ResponseValidationError they used to produce by returning None
             # against a `-> list[...]` annotation. That's separate from the bug this
             # test file targets (SQLiteTagRepository.search missing).
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_each_request_gets_a_fresh_session(tmp_path):
+    """Before this sprint, RpcServer resolved each service once at build() time, so
+    every request shared one AsyncSession for the server's entire lifetime - unsafe
+    under concurrent use. Each request must now see a distinct session.
+    """
+    db_manager = DatabaseManager(tmp_path)
+    try:
+        await db_manager.init_archive()
+
+        container = Container()
+        container.register_instance(DatabaseManager, db_manager)
+        container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
+        container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
+
+        server = RpcServer(
+            container, services=[_SessionIdProbeService], api_key="probe-key"
+        )
+        app = server.build()
+
+        headers = {"X-API-Key": "probe-key"}
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp1 = await client.post(
+                "/_sessionidprobe/session_id", json={}, headers=headers
+            )
+            resp2 = await client.post(
+                "/_sessionidprobe/session_id", json={}, headers=headers
+            )
+            assert resp1.status_code == 200
+            assert resp2.status_code == 200
+            assert resp1.json() != resp2.json()
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_request_scoped_session_is_closed_after_request(tmp_path, monkeypatch):
+    db_manager = DatabaseManager(tmp_path)
+    try:
+        await db_manager.init_archive()
+
+        container = Container()
+        container.register_instance(DatabaseManager, db_manager)
+        container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
+        container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
+
+        server = RpcServer(
+            container, services=[_SessionIdProbeService], api_key="probe-key"
+        )
+        app = server.build()
+
+        close_calls = 0
+        original_close = AsyncSession.close
+
+        async def counting_close(self):
+            nonlocal close_calls
+            close_calls += 1
+            await original_close(self)
+
+        monkeypatch.setattr(AsyncSession, "close", counting_close)
+
+        headers = {"X-API-Key": "probe-key"}
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/_sessionidprobe/session_id", json={}, headers=headers
+            )
+            assert resp.status_code == 200
+
+        assert close_calls == 1
     finally:
         await db_manager.close_all()

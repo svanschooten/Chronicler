@@ -33,33 +33,33 @@ class RpcServer:
         self.services = services
         self.api_key = api_key or secrets.token_urlsafe(32)
         self._app: Any = None
-        self._instances: list[Any] = []
+        self._service_classes: list[type] = []
 
-    def register(self, instance: Any):
-        self._instances.append(instance)
+    def register(self, service_cls: type):
+        self._service_classes.append(service_cls)
 
-    def _register_instance(self, app: Any, instance: Any):
+    def _register_service(self, app: Any, service_cls: type):
         from fastapi import APIRouter
 
-        cls_name = instance.__class__.__name__
-        service_name = cls_name
-        if service_name.endswith("Service"):
-            prefix = "/" + service_name[:-7].lower()
+        cls_name = service_cls.__name__
+        if cls_name.endswith("Service"):
+            prefix = "/" + cls_name[:-7].lower()
         else:
-            prefix = "/" + service_name.lower()
+            prefix = "/" + cls_name.lower()
 
         router = APIRouter(prefix=prefix)
 
-        for name, method in inspect.getmembers(instance, inspect.iscoroutinefunction):
+        for name, method in inspect.getmembers(service_cls, inspect.iscoroutinefunction):
             if name.startswith("_"):
                 continue
 
-            self._add_route(router, method, name)
+            self._add_route(router, service_cls, method, name)
 
         app.include_router(router)
 
-    def _add_route(self, router: Any, method: Callable, name: str):
+    def _add_route(self, router: Any, service_cls: type, method: Callable, name: str):
         from fastapi import Body
+        from sqlalchemy.ext.asyncio import AsyncSession
 
         sig = inspect.signature(method)
 
@@ -80,7 +80,25 @@ class RpcServer:
         new_sig = sig.replace(parameters=new_params)
 
         async def wrapper(*args, **kwargs):
-            return await method(*args, **kwargs)
+            # A fresh scope per request: a fresh AsyncSession, fresh repositories, a
+            # fresh service instance. Only DatabaseManager (an explicit singleton) is
+            # shared across requests - see Container.create_scope(). Without this,
+            # every request would share one AsyncSession for the server's entire
+            # lifetime, which isn't safe under concurrent use.
+            if self.container is None:
+                raise RuntimeError("RpcServer has no container configured")
+            scope = self.container.create_scope()
+            try:
+                instance = scope.resolve(service_cls)
+                bound_method = getattr(instance, name)
+                return await bound_method(*args, **kwargs)
+            finally:
+                # Only if this scope actually built one - a service with no
+                # database dependency (e.g. tests using a bare Container()) should
+                # not trigger Container's auto-build fallback for AsyncSession, which
+                # isn't constructible without a bound engine and would raise.
+                if scope.is_registered(AsyncSession):
+                    await scope.resolve(AsyncSession).close()
 
         wrapper.__signature__ = new_sig  # type: ignore
         wrapper.__name__ = name
@@ -165,11 +183,10 @@ class RpcServer:
         if self.container:
             target_services = self.services if self.services is not None else get_services()
             for cls in target_services:
-                instance = self.container.resolve(cls)
-                self.register(instance)
+                self.register(cls)
 
-        for instance in self._instances:
-            self._register_instance(self._app, instance)
+        for service_cls in self._service_classes:
+            self._register_service(self._app, service_cls)
 
         return self._app
 
