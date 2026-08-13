@@ -122,7 +122,7 @@ class TranscriptView(ft.Column):
 
     async def load_transcript(self):
         try:
-            lines = await self.transcript_service.get_transcript()
+            lines = await self.transcript_service.get_transcript(self.chronicle.id)
             if not lines:
                 self.transcript_area.value = "Transcript is empty or still processing."
             else:

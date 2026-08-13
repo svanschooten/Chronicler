@@ -16,7 +16,6 @@ from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
     SQLiteTaskRepository,
-    SQLiteTranscriptRepository,
 )
 from chronicler.core.workers import WorkerManager
 from chronicler.desktop.components.sidebar import Sidebar
@@ -168,14 +167,16 @@ class DesktopApp:
         elif self.state.current_view == ViewType.SETTINGS:
             self.content_area.content = SettingsView()
         elif self.state.current_view == ViewType.TRANSCRIPT:
+            # TranscriptService is project-scoped (see transcript_service.py) - it
+            # opens its own project session per call given a chronicle_id, so unlike
+            # the branches above there's no project session to track/close here. It
+            # still needs an archive-level ChronicleRepository (to look up
+            # chronicle.project_path for linked/external chronicles), so that part of
+            # the session lifecycle is still ours to manage.
             chronicle = self.state.selected_chronicle
-            custom_path = Path(chronicle.project_path) if chronicle.project_path else None
-            session = await self.db_manager.get_project_session(
-                str(chronicle.id), custom_path=custom_path
-            )
+            session = self.db_manager.get_archive_session()
             self._view_session = session
-            repo = SQLiteTranscriptRepository(session)
-            service = TranscriptService(repo)
+            service = TranscriptService(self.db_manager, SQLiteChronicleRepository(session))
             self.content_area.content = TranscriptView(
                 chronicle, self.go_back, transcript_service=service
             )

@@ -4,13 +4,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.repositories import ChronicleRepository, TagRepository, TaskRepository
 from chronicler.core.rpc import RpcServer, service
-from chronicler.core.services import ChronicleService, SearchService, TaskService
+from chronicler.core.services import ChronicleService, SearchService, TaskService, TranscriptService
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
     SQLiteTagRepository,
     SQLiteTaskRepository,
+    SQLiteTranscriptRepository,
 )
 
 
@@ -42,7 +44,7 @@ def _build_server_app(tmp_path, api_key: str = "test-key"):
 
     server = RpcServer(
         container,
-        services=[ChronicleService, SearchService, TaskService],
+        services=[ChronicleService, SearchService, TaskService, TranscriptService],
         api_key=api_key,
     )
     return db_manager, server.build()
@@ -201,5 +203,47 @@ async def test_request_scoped_session_is_closed_after_request(tmp_path, monkeypa
             assert resp.status_code == 200
 
         assert close_calls == 1
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_transcript_reachable_over_rpc(tmp_path):
+    """TranscriptService wasn't registered as an RPC service at all before this sprint
+    - there was no way to reach it remotely, which is why Thin Client transcript
+    viewing didn't work. Confirms it's reachable and returns real data end to end.
+    """
+    db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
+    try:
+        await db_manager.init_archive()
+
+        archive_session = db_manager.get_archive_session()
+        async with archive_session:
+            chronicle = await SQLiteChronicleRepository(archive_session).create(
+                Chronicle(title="Remote Session")
+            )
+
+        project_session = await db_manager.get_project_session(str(chronicle.id))
+        async with project_session:
+            repo = SQLiteTranscriptRepository(project_session)
+            speaker = await repo.get_or_create_speaker("Alice")
+            await repo.add_line(
+                TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Hi")
+            )
+            await project_session.commit()
+
+        headers = {"X-API-Key": "valid-key"}
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/transcript/get_transcript",
+                json={"chronicle_id": str(chronicle.id)},
+                headers=headers,
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data) == 1
+            assert data[0]["text"] == "Hi"
+            assert data[0]["speaker_name"] == "Alice"
     finally:
         await db_manager.close_all()

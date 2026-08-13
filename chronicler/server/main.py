@@ -49,11 +49,12 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
         ChronicleService,
         SearchService,
         TaskService,
+        TranscriptService,
     )
 
     server = RpcServer(
         container,
-        services=[ChronicleService, SearchService, TaskService],
+        services=[ChronicleService, SearchService, TaskService, TranscriptService],
         api_key=settings.api_key,
     )
     server.run(host=host, port=port)
