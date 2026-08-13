@@ -64,22 +64,31 @@ class WorkerHandlers:
         )
         async with session:
             repo = SQLiteTranscriptRepository(session)
-            await repo.delete_all()
+            try:
+                await repo.delete_all_lines()
 
-            final_lines = []
-            speaker_map = {}
-            for line in lines:
-                if line.speaker_name not in speaker_map:
-                    # TranscriptLine.speaker_name is typed str | None for the general
-                    # case, but every current producer (RegexImporter, TranscriptCleaner)
-                    # always sets a real string. Pre-existing gap, not addressed here.
-                    speaker = await repo.get_or_create_speaker(line.speaker_name)  # type: ignore[arg-type]
-                    speaker_map[line.speaker_name] = speaker.id
+                final_lines = []
+                speaker_map = {}
+                for line in lines:
+                    if line.speaker_name not in speaker_map:
+                        # TranscriptLine.speaker_name is typed str | None for the
+                        # general case, but every current producer (RegexImporter,
+                        # TranscriptCleaner) always sets a real string. Pre-existing
+                        # gap, not addressed here.
+                        speaker = await repo.get_or_create_speaker(line.speaker_name)  # type: ignore[arg-type]
+                        speaker_map[line.speaker_name] = speaker.id
 
-                line.speaker_id = speaker_map[line.speaker_name]
-                final_lines.append(line)
+                    line.speaker_id = speaker_map[line.speaker_name]
+                    final_lines.append(line)
 
-            await repo.add_lines(final_lines)
+                await repo.add_lines(final_lines)
+                # One commit for the whole operation: a crash or exception at any
+                # point before this leaves the previous transcript untouched, not
+                # half-deleted (see the except block below).
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
         await update_progress(100)
 
@@ -100,30 +109,36 @@ class WorkerHandlers:
         )
         async with session:
             repo = SQLiteTranscriptRepository(session)
-            lines = await repo.get_lines()
+            try:
+                lines = await repo.get_lines()
 
-            await update_progress(30)
+                await update_progress(30)
 
-            cleaner = TranscriptCleaner()
-            cleaned_lines = cleaner.clean(lines)
+                cleaner = TranscriptCleaner()
+                cleaned_lines = cleaner.clean(lines)
 
-            await update_progress(70)
+                await update_progress(70)
 
-            await repo.delete_all()
+                await repo.delete_all_lines()
 
-            final_lines = []
-            speaker_map = {}
-            for line in cleaned_lines:
-                if line.speaker_name not in speaker_map:
-                    # TranscriptLine.speaker_name is typed str | None for the general
-                    # case, but every current producer (RegexImporter, TranscriptCleaner)
-                    # always sets a real string. Pre-existing gap, not addressed here.
-                    speaker = await repo.get_or_create_speaker(line.speaker_name)  # type: ignore[arg-type]
-                    speaker_map[line.speaker_name] = speaker.id
+                final_lines = []
+                speaker_map = {}
+                for line in cleaned_lines:
+                    if line.speaker_name not in speaker_map:
+                        # TranscriptLine.speaker_name is typed str | None for the
+                        # general case, but every current producer (RegexImporter,
+                        # TranscriptCleaner) always sets a real string. Pre-existing
+                        # gap, not addressed here.
+                        speaker = await repo.get_or_create_speaker(line.speaker_name)  # type: ignore[arg-type]
+                        speaker_map[line.speaker_name] = speaker.id
 
-                line.speaker_id = speaker_map[line.speaker_name]
-                final_lines.append(line)
+                    line.speaker_id = speaker_map[line.speaker_name]
+                    final_lines.append(line)
 
-            await repo.add_lines(final_lines)
+                await repo.add_lines(final_lines)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
         await update_progress(100)

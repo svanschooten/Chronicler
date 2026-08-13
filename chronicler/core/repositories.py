@@ -116,7 +116,9 @@ class TranscriptRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete_all(self) -> None:
+    async def delete_all_lines(self) -> None:
+        """Delete every transcript line. Deliberately does not touch speakers - see
+        the SQLite implementation for why."""
         pass
 
     @abstractmethod

@@ -23,7 +23,10 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         if not db_speaker:
             db_speaker = DBSpeaker(name=name)
             self.session.add(db_speaker)
-            await self.session.commit()
+            # flush (not commit): makes the row visible to refresh() and to later
+            # queries within this same transaction, without ending it - the caller
+            # controls the transaction boundary (see handlers.py).
+            await self.session.flush()
             await self.session.refresh(db_speaker)
         return Speaker.model_validate(db_speaker)
 
@@ -49,7 +52,7 @@ class SQLiteTranscriptRepository(TranscriptRepository):
             text=line.text,
         )
         self.session.add(db_line)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(db_line)
         return TranscriptLine.model_validate(db_line)
 
@@ -65,12 +68,15 @@ class SQLiteTranscriptRepository(TranscriptRepository):
             for line in lines
         ]
         self.session.add_all(db_lines)
-        await self.session.commit()
+        await self.session.flush()
 
-    async def delete_all(self) -> None:
+    async def delete_all_lines(self) -> None:
+        # Deliberately doesn't touch DBSpeaker (this used to be delete_all() and wiped
+        # speakers too, which meant get_or_create_speaker() never found an existing
+        # speaker after a delete - every import/clean assigned fresh speaker ids). Not
+        # deleting speakers here lets that lookup-by-name reuse the same row, and
+        # therefore the same id, across re-imports/cleans of the same chronicle.
         await self.session.execute(sa_delete(DBTranscriptLine))
-        await self.session.execute(sa_delete(DBSpeaker))
-        await self.session.commit()
 
     async def search(self, query: str) -> list[TranscriptLine]:
         # Not implemented yet (SQLite FTS - see TODO.md). Raising rather than silently
