@@ -7,6 +7,7 @@ import flet as ft
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.file_staging import stage_local_file
 from chronicler.core.models import TaskType
 from chronicler.core.processing.handlers import WorkerHandlers
 from chronicler.core.services.chronicle_service import ChronicleService
@@ -135,6 +136,14 @@ class DesktopApp:
             await self._view_session.close()
             self._view_session = None
 
+    async def stage_file(self, local_path: str) -> str:
+        """Passed into ArchiveView so it never has to know whether it's running in
+        full-stack (copy to local imports/) or thin-client mode (upload to the
+        server's /upload - wired in when DesktopApp moves onto Container/
+        RemoteContainer)."""
+        staged = stage_local_file(Path(local_path), self.db_manager.get_imports_path())
+        return str(staged)
+
     async def update_view(self):
         logger.debug(f"Navigating to view: {self.state.current_view}")
         # Whatever the previous view opened, close it before opening what the new
@@ -149,7 +158,7 @@ class DesktopApp:
             chronicle_service = ChronicleService(SQLiteChronicleRepository(session))
             task_service = TaskService(SQLiteTaskRepository(session))
             self.content_area.content = ArchiveView(
-                chronicle_service, task_service, self.open_chronicle
+                chronicle_service, task_service, self.open_chronicle, self.stage_file
             )
         elif self.state.current_view == ViewType.TASKS:
             session = self.db_manager.get_archive_session()

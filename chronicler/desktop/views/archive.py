@@ -1,6 +1,6 @@
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import flet as ft
 
@@ -17,11 +17,17 @@ class ArchiveView(ft.Column):
         chronicle_service: ChronicleService,
         task_service: TaskService,
         on_open_chronicle: Callable[[Chronicle], None],
+        stage_file: Callable[[str], Awaitable[str]],
     ):
         logger.debug("ArchiveView constructed")
         self.chronicle_service = chronicle_service
         self.task_service = task_service
         self.on_open_chronicle = on_open_chronicle
+        # Picked files can be anywhere on disk (e.g. ~/Downloads); handle_import
+        # requires file_path be inside the workspace's imports directory. stage_file
+        # copies (local mode) or uploads (thin client mode, once wired) the picked
+        # file there first and returns the path actually safe to queue.
+        self.stage_file = stage_file
         self.query = ""
         self.file_picker = None
         self.picker_action = None
@@ -215,16 +221,22 @@ class ArchiveView(ft.Column):
 
     async def handle_file_result(self, file_path):
         try:
+            if self.picker_action in ("AUDIO", "TRANSCRIPT"):
+                # Title/source_file below intentionally use the *original* name and
+                # path (for display) - only the queued file_path needs to be staged.
+                original_name = os.path.basename(file_path)
+                staged_path = await self.stage_file(file_path)
+
             if self.picker_action == "AUDIO":
                 if self.current_chronicle_id:
-                    await self.task_service.queue_import(self.current_chronicle_id, file_path)
+                    await self.task_service.queue_import(self.current_chronicle_id, staged_path)
                     self.show_snackbar("Audio import task queued")
                 else:
-                    title = os.path.basename(file_path).rsplit(".", 1)[0]
+                    title = original_name.rsplit(".", 1)[0]
                     chronicle = await self.chronicle_service.create_chronicle(
                         title, source_file=file_path
                     )
-                    await self.task_service.queue_import(chronicle.id, file_path)
+                    await self.task_service.queue_import(chronicle.id, staged_path)
                     self.show_snackbar(f"Created '{title}' and queued audio import")
 
             elif self.picker_action == "TRANSCRIPT":
@@ -235,18 +247,18 @@ class ArchiveView(ft.Column):
                 if self.current_chronicle_id:
                     await self.task_service.queue_import(
                         self.current_chronicle_id,
-                        file_path,
+                        staged_path,
                         regex=regex,
                         speaker_group=speaker_group,
                         text_group=text_group,
                     )
                     self.show_snackbar("Transcript import task queued")
                 else:
-                    title = os.path.basename(file_path).rsplit(".", 1)[0]
+                    title = original_name.rsplit(".", 1)[0]
                     chronicle = await self.chronicle_service.create_chronicle(title)
                     await self.task_service.queue_import(
                         chronicle.id,
-                        file_path,
+                        staged_path,
                         regex=regex,
                         speaker_group=speaker_group,
                         text_group=text_group,

@@ -107,14 +107,12 @@ class RpcServer:
         router.add_api_route(f"/{name}", wrapper, methods=["POST"])
 
     def build(self):
-        import uuid
-        from pathlib import Path
-
         from fastapi import Depends, FastAPI, File, HTTPException, Security, UploadFile, status
         from fastapi.middleware.cors import CORSMiddleware
         from fastapi.security import APIKeyHeader
 
         from chronicler.core.database_manager import DatabaseManager
+        from chronicler.core.file_staging import sanitize_stage_name
 
         api_key_header = APIKeyHeader(name="X-API-Key")
 
@@ -155,10 +153,7 @@ class RpcServer:
             # (e.g. "../../.ssh/authorized_keys" would escape upload_dir). Generate the
             # on-disk name server-side; keep only a whitelisted extension for
             # readability, and store the original name as metadata, not as a path.
-            raw_suffix = Path(file.filename).suffix if file.filename else ""
-            safe_suffix = "".join(c for c in raw_suffix if c.isalnum() or c == ".")[:16]
-            stored_name = f"{uuid.uuid4().hex}{safe_suffix}"
-            file_path = upload_dir / stored_name
+            file_path = upload_dir / sanitize_stage_name(file.filename)
 
             bytes_written = 0
             try:
