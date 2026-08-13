@@ -56,12 +56,14 @@ New known limitation (Sprint 2, 2026-08-13):
 * [ ] **No upgrade path from a pre-Alembic workspace.** Adopting Alembic (below) means any
   workspace created before this sprint will fail to start (`table already exists`) —
   verified concretely against a real pre-existing `chronicler.db`. `alembic stamp head`
-  clears the crash but doesn't verify schema compatibility, and that same real database is
-  missing the `claimed_by`/`attempts` columns added this sprint — stamping it would mark it
-  "up to date" while it's actually incomplete, which is worse than the crash. Matches this
+  clears the crash but doesn't verify schema compatibility, so a stamped-but-actually-old
+  database (e.g. missing the `claimed_by`/`attempts` columns added this sprint) would be
+  marked "up to date" while genuinely incomplete — worse than the crash. Matches this
   project's own reasoning for adopting Alembic now ("while there are zero real users") —
-  pre-Alembic workspaces should be deleted and recreated, not migrated in place. No action
-  taken on any existing local workspace.
+  pre-Alembic workspaces should be deleted and recreated, not migrated in place. The one
+  local dev workspace affected (`~/ChroniclerWorkspace`) was cleared and recreated fresh
+  2026-08-13 at the user's request (disposable test data, not real content) — confirmed
+  the fresh workspace stamps correctly at head with the full current schema.
 
 ---
 
