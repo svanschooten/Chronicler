@@ -20,6 +20,7 @@ class DesktopRuntime:
     resolver: Container | RemoteContainer
     db_manager: DatabaseManager | None
     file_stager: FileStager
+    settings: Settings
 
 
 def build_runtime(settings: Settings) -> DesktopRuntime:
@@ -40,7 +41,9 @@ def build_runtime(settings: Settings) -> DesktopRuntime:
             settings.server_url, api_key=settings.api_key
         )
         remote_stager: FileStager = RemoteFileStager(settings.server_url, settings.api_key)
-        return DesktopRuntime(resolver=resolver, db_manager=None, file_stager=remote_stager)
+        return DesktopRuntime(
+            resolver=resolver, db_manager=None, file_stager=remote_stager, settings=settings
+        )
 
     if not settings.workspace_path:
         raise ValueError("desktop:full_stack mode requires settings.workspace_path")
@@ -48,4 +51,6 @@ def build_runtime(settings: Settings) -> DesktopRuntime:
     container = Container()
     register_local_repositories(container, db_manager)
     local_stager: FileStager = LocalFileStager(db_manager.get_imports_path())
-    return DesktopRuntime(resolver=container, db_manager=db_manager, file_stager=local_stager)
+    return DesktopRuntime(
+        resolver=container, db_manager=db_manager, file_stager=local_stager, settings=settings
+    )

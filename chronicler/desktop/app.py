@@ -74,7 +74,9 @@ class DesktopApp:
         logger.info("DesktopApp main started")
         self.page = page
         self.page.title = "Chronicler"
-        self.page.theme_mode = ft.ThemeMode.DARK
+        self.page.theme_mode = (
+            ft.ThemeMode.DARK if self.runtime.settings.dark_mode else ft.ThemeMode.LIGHT
+        )
 
         self._maybe_start_worker_manager()
 
@@ -139,6 +141,12 @@ class DesktopApp:
         self.state.navigate_to(ViewType.ARCHIVE)
         await self.update_view()
 
+    async def on_dark_mode_change(self, dark_mode: bool):
+        self.runtime.settings.dark_mode = dark_mode
+        self.runtime.settings.save()
+        self.page.theme_mode = ft.ThemeMode.DARK if dark_mode else ft.ThemeMode.LIGHT
+        self.page.update()
+
     async def cleanup(self, e):
         if self.worker_manager is not None:
             self.worker_manager.stop()
@@ -187,7 +195,9 @@ class DesktopApp:
             task_service = scope.resolve(TaskService)
             self.content_area.content = TasksView(task_service)
         elif self.state.current_view == ViewType.SETTINGS:
-            self.content_area.content = SettingsView()
+            self.content_area.content = SettingsView(
+                self.runtime.settings, self.on_dark_mode_change
+            )
         elif self.state.current_view == ViewType.TRANSCRIPT:
             scope = self._new_scope()
             chronicle = self.state.selected_chronicle

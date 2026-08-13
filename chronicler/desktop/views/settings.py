@@ -1,19 +1,44 @@
 import logging
+from collections.abc import Awaitable, Callable
 
 import flet as ft
+
+from chronicler.core.config import Settings
 
 logger = logging.getLogger(__name__)
 
 
 class SettingsView(ft.Column):
-    def __init__(self, dark_mode: bool = True):
+    def __init__(
+        self,
+        settings: Settings,
+        on_dark_mode_change: Callable[[bool], Awaitable[None]] | None = None,
+    ):
         logger.debug("SettingsView constructed")
-        self.dark_mode = dark_mode
+        self.settings = settings
+        self.on_dark_mode_change = on_dark_mode_change
+        dark_mode = settings.dark_mode
 
         surface = ft.Colors.BLUE_GREY_700 if dark_mode else ft.Colors.WHITE
         text_color = ft.Colors.WHITE if dark_mode else ft.Colors.BROWN_900
         muted = ft.Colors.BLUE_GREY_200 if dark_mode else ft.Colors.BROWN_500
         border_color = ft.Colors.BLUE_GREY_600 if dark_mode else ft.Colors.AMBER_100
+
+        if settings.workspace_path:
+            workspace_description = str(settings.workspace_path)
+        elif settings.server_url:
+            workspace_description = "Not configured (thin client mode)"
+        else:
+            workspace_description = "Not configured"
+
+        if settings.server_url:
+            connection_title = "Remote server"
+            connection_description = settings.server_url
+            connection_badge = "Thin Client"
+        else:
+            connection_title = "Service layer"
+            connection_description = "Local desktop services are ready to connect."
+            connection_badge = "Full Stack"
 
         super().__init__(
             expand=True,
@@ -25,7 +50,7 @@ class SettingsView(ft.Column):
                 self.setting_card(
                     "Dark workspace",
                     "Use a low-light interface while reviewing long transcripts.",
-                    ft.Switch(value=dark_mode),
+                    ft.Switch(value=dark_mode, on_change=self._dark_mode_changed),
                     surface,
                     text_color,
                     muted,
@@ -34,8 +59,8 @@ class SettingsView(ft.Column):
                 ft.Text("Workspace", size=18, weight=ft.FontWeight.BOLD),
                 self.setting_card(
                     "Local workspace",
-                    "Not configured",
-                    ft.IconButton(icon=ft.Icons.FOLDER_OPEN, icon_color=muted),
+                    workspace_description,
+                    ft.IconButton(icon=ft.Icons.FOLDER_OPEN, icon_color=muted, disabled=True),
                     surface,
                     text_color,
                     muted,
@@ -43,9 +68,9 @@ class SettingsView(ft.Column):
                 ),
                 ft.Text("Connection", size=18, weight=ft.FontWeight.BOLD),
                 self.setting_card(
-                    "Service layer",
-                    "Local desktop services are ready to connect.",
-                    ft.Text("Local", weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_300),
+                    connection_title,
+                    connection_description,
+                    ft.Text(connection_badge, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_300),
                     surface,
                     text_color,
                     muted,
@@ -82,6 +107,10 @@ class SettingsView(ft.Column):
                 ],
             ),
         )
+
+    async def _dark_mode_changed(self, e):
+        if self.on_dark_mode_change is not None:
+            await self.on_dark_mode_change(e.control.value)
 
     def did_mount(self):
         logger.debug("SettingsView loaded")

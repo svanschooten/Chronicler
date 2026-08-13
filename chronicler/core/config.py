@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     # (both can have workspace_path/server_url set at once, e.g. after switching modes
     # once); this records the actual choice rather than re-deriving it.
     mode: str | None = None
+    dark_mode: bool = True
 
     @property
     def config_dir(self) -> Path:

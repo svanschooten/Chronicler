@@ -144,6 +144,25 @@ async def test_full_stack_starts_a_worker_manager(desktop_app, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_on_dark_mode_change_updates_page_and_persists(desktop_app, monkeypatch):
+    # Settings.save() writing to disk is already covered by test_config.py; here we
+    # only care that on_dark_mode_change calls it, so it doesn't need to actually run.
+    # Settings is a pydantic model - it rejects ad-hoc instance attribute assignment,
+    # so the class method is patched instead.
+    save_mock = MagicMock()
+    monkeypatch.setattr(type(desktop_app.runtime.settings), "save", save_mock)
+
+    await desktop_app.on_dark_mode_change(False)
+
+    assert desktop_app.runtime.settings.dark_mode is False
+    save_mock.assert_called_once()
+    from flet import ThemeMode
+
+    assert desktop_app.page.theme_mode == ThemeMode.LIGHT
+    desktop_app.page.update.assert_called()
+
+
+@pytest.mark.asyncio
 async def test_thin_client_resolves_a_working_remote_service(tmp_path):
     """DesktopApp resolved through a RemoteContainer must get a proxy that actually
     round-trips to a live server, not just an object of the right type."""
