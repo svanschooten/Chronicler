@@ -19,13 +19,8 @@ class SettingsView(ft.Column):
         self.settings = settings
         self.on_dark_mode_change = on_dark_mode_change
         dark_mode = settings.dark_mode
-
-        colors = theme_colors(dark_mode)
-        surface = colors.card
-        text_color = colors.text
-        muted = colors.muted
-        border_color = colors.border
-        accent = colors.accent
+        self.colors = theme_colors(dark_mode)
+        muted = self.colors.muted
 
         if settings.workspace_path:
             workspace_description = str(settings.workspace_path)
@@ -54,56 +49,37 @@ class SettingsView(ft.Column):
                     "Dark workspace",
                     "Use a low-light interface while reviewing long transcripts.",
                     ft.Switch(value=dark_mode, on_change=self._dark_mode_changed),
-                    surface,
-                    text_color,
-                    muted,
-                    border_color,
                 ),
                 ft.Text("Workspace", size=18, weight=ft.FontWeight.BOLD),
                 self.setting_card(
                     "Local workspace",
                     workspace_description,
                     ft.IconButton(icon=ft.Icons.FOLDER_OPEN, icon_color=muted, disabled=True),
-                    surface,
-                    text_color,
-                    muted,
-                    border_color,
                 ),
                 ft.Text("Connection", size=18, weight=ft.FontWeight.BOLD),
                 self.setting_card(
                     connection_title,
                     connection_description,
-                    ft.Text(connection_badge, weight=ft.FontWeight.BOLD, color=accent),
-                    surface,
-                    text_color,
-                    muted,
-                    border_color,
+                    ft.Text(
+                        connection_badge, weight=ft.FontWeight.BOLD, color=self.colors.accent
+                    ),
                 ),
             ],
         )
 
-    def setting_card(
-        self,
-        title: str,
-        description: str,
-        content: ft.Control,
-        surface,
-        text_color,
-        muted,
-        border_color,
-    ) -> ft.Container:
+    def setting_card(self, title: str, description: str, content: ft.Control) -> ft.Container:
         return ft.Container(
-            bgcolor=surface,
+            bgcolor=self.colors.card,
             padding=ft.Padding.all(18),
-            border=ft.Border.all(1, border_color),
+            border=ft.Border.all(1, self.colors.border),
             border_radius=12,
             content=ft.Row(
                 controls=[
                     ft.Column(
                         expand=True,
                         controls=[
-                            ft.Text(title, weight=ft.FontWeight.BOLD, color=text_color),
-                            ft.Text(description, color=muted),
+                            ft.Text(title, weight=ft.FontWeight.BOLD, color=self.colors.text),
+                            ft.Text(description, color=self.colors.muted),
                         ],
                     ),
                     content,

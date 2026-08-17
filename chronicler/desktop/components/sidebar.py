@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import flet as ft
 
@@ -8,7 +8,9 @@ from chronicler.desktop.theme import theme_colors
 class Sidebar(ft.Container):
     def __init__(
         self,
-        on_nav_change: Callable[[str], None],
+        # Awaitable, not None: handle_nav_click awaits this, and DesktopApp's
+        # navigation handler is a coroutine function.
+        on_nav_change: Callable[[str], Awaitable[None]],
         initial_view: str = "archive",
         dark_mode: bool = True,
     ):
@@ -22,7 +24,7 @@ class Sidebar(ft.Container):
         )
         self.content = self._build()
 
-    def nav_item(self, icon: ft.IconData | str, label: str, view_id: str) -> ft.Container:
+    def nav_item(self, icon: ft.IconData, label: str, view_id: str) -> ft.Container:
         is_selected = self.selected_view == view_id
         item_color = self.colors.text if is_selected else self.colors.muted
         return ft.Container(

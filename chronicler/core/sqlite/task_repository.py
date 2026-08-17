@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chronicler.core.database import DBChronicle, DBTask
 from chronicler.core.models import Task, TaskStatus
 from chronicler.core.repositories import TaskRepository
+from chronicler.core.sqlite.patterns import LIKE_ESCAPE, contains_pattern
 
 # How many PENDING candidates to consider per claim_next() call before giving up and
 # waiting for the next poll cycle. Guards against pathologically unlucky contention
@@ -109,8 +110,16 @@ class SQLiteTaskRepository(TaskRepository):
             db_task.status = status
             db_task.error = error
             if status == TaskStatus.PENDING:
+                # Returning a task to the queue means it hasn't been attempted from the
+                # queue's point of view: the previous run's error, progress and claim are
+                # all stale. Same clearing mark_failed_or_retry() does for the same
+                # transition - leaving claimed_by/claimed_at behind made the Tasks view
+                # keep showing the *previous* run's start time until something claimed
+                # it again.
                 db_task.progress = 0
                 db_task.error = None
+                db_task.claimed_by = None
+                db_task.claimed_at = None
             await self.session.commit()
 
     async def update_progress(self, task_id: UUID, progress: int) -> None:
@@ -121,10 +130,16 @@ class SQLiteTaskRepository(TaskRepository):
             await self.session.commit()
 
     async def search(self, query: str) -> list[Task]:
+        pattern = contains_pattern(query)
         result = await self.session.execute(
             select(DBTask)
             .outerjoin(DBChronicle)
-            .where(or_(DBTask.type.ilike(f"%{query}%"), DBChronicle.title.ilike(f"%{query}%")))
+            .where(
+                or_(
+                    DBTask.type.ilike(pattern, escape=LIKE_ESCAPE),
+                    DBChronicle.title.ilike(pattern, escape=LIKE_ESCAPE),
+                )
+            )
             .order_by(DBTask.created_at.desc())
         )
         db_tasks = result.scalars().all()

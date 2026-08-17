@@ -114,11 +114,3 @@ class WorkerManager:
                 chronicle_id=task.chronicle_id,
             )
         )
-
-
-async def perform_test_task(task: Task, update_progress: Callable[[int], Any]):
-    """A test worker that waits, updates progress, waits again, and finishes."""
-    await asyncio.sleep(1)
-    await update_progress(50)
-    await asyncio.sleep(1)
-    await update_progress(100)

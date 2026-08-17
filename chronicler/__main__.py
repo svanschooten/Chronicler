@@ -12,6 +12,14 @@ def main():
         help="Run mode (default: %(default)s)",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help=(
+            "Read and write configuration at PATH instead of the default location. "
+            "Useful for running an isolated instance or a second workspace on one machine."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -21,8 +29,12 @@ def main():
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
 
-    from chronicler.core.config import get_settings, is_config_initialized
+    from chronicler.core.config import get_settings, is_config_initialized, set_config_file_override
     from chronicler.core.wizard import run_wizard
+
+    # Before any get_settings() call - that result is cached.
+    if args.config:
+        set_config_file_override(args.config)
 
     # Map friendly names to internal mode names
     mode_map = {

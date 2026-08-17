@@ -6,19 +6,9 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.config import Settings
-from chronicler.desktop.app import AppState, DesktopApp, ViewType
+from chronicler.desktop.app import DesktopApp
 from chronicler.desktop.runtime import build_runtime
-
-
-def test_app_initial_state():
-    state = AppState()
-    assert state.current_view == ViewType.ARCHIVE
-
-
-def test_app_navigation():
-    state = AppState()
-    state.navigate_to(ViewType.TASKS)
-    assert state.current_view == ViewType.TASKS
+from chronicler.desktop.state import ViewType
 
 
 @pytest_asyncio.fixture
@@ -160,6 +150,48 @@ async def test_on_dark_mode_change_updates_page_and_persists(desktop_app, monkey
 
     assert desktop_app.page.theme_mode == ThemeMode.LIGHT
     desktop_app.page.update.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_on_dark_mode_change_repaints_everything_the_app_owns(desktop_app, monkeypatch):
+    """The sidebar and content area paint themselves, but `page.bgcolor` is what shows
+    behind and around them (SafeArea insets, and any gap while a view is rebuilding) - it
+    was never set at all, so that area used Flet's default instead of the theme surface.
+    The divider between sidebar and content had the same problem in reverse: it was
+    coloured once at construction and never updated on a theme change.
+    """
+    from chronicler.desktop.theme import theme_colors
+
+    monkeypatch.setattr(type(desktop_app.runtime.settings), "save", MagicMock())
+    desktop_app.divider = MagicMock()
+
+    await desktop_app.on_dark_mode_change(False)
+
+    light = theme_colors(False)
+    assert desktop_app.page.bgcolor == light.surface
+    assert desktop_app.content_area.bgcolor == light.surface
+    assert desktop_app.divider.color == light.border
+
+    await desktop_app.on_dark_mode_change(True)
+
+    dark = theme_colors(True)
+    assert desktop_app.page.bgcolor == dark.surface
+    assert desktop_app.divider.color == dark.border
+
+
+def test_apply_theme_tolerates_controls_that_do_not_exist_yet():
+    """main() calls it before content_area and the divider are built, so it has to cope
+    with a partially constructed app."""
+    from chronicler.core.config import Settings
+    from chronicler.desktop.theme import theme_colors
+
+    app = DesktopApp(build_runtime(Settings(server_url="http://x", api_key="k",
+                                            mode="desktop:thin_client")))
+    app.page = MagicMock()
+
+    app._apply_theme(False)
+
+    assert app.page.bgcolor == theme_colors(False).surface
 
 
 @pytest.mark.asyncio

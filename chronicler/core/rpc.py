@@ -32,10 +32,6 @@ class RpcServer:
         self.services = services
         self.api_key = api_key or secrets.token_urlsafe(32)
         self._app: Any = None
-        self._service_classes: list[type] = []
-
-    def register(self, service_cls: type):
-        self._service_classes.append(service_cls)
 
     def _register_service(self, app: Any, service_cls: type):
         from fastapi import APIRouter
@@ -184,12 +180,11 @@ class RpcServer:
 
             return {"file_path": str(file_path), "original_filename": file.filename}
 
+        # Without a container there's nothing to resolve service instances from, so
+        # only /upload (which needs just a DatabaseManager) is worth exposing.
         if self.container:
             target_services = self.services if self.services is not None else get_services()
-            for cls in target_services:
-                self.register(cls)
-
-        for service_cls in self._service_classes:
-            self._register_service(self._app, service_cls)
+            for service_cls in target_services:
+                self._register_service(self._app, service_cls)
 
         return self._app

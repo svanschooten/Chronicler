@@ -8,10 +8,8 @@ from chronicler.core.config import get_settings
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.local_container import register_local_repositories
-from chronicler.core.models import TaskType
-from chronicler.core.processing.handlers import WorkerHandlers
 from chronicler.core.rpc import RpcServer
-from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTaskRepository
+from chronicler.core.worker_wiring import build_worker_runtime
 from chronicler.core.workers import WorkerManager
 
 logger = logging.getLogger(__name__)
@@ -48,25 +46,11 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
     app = rpc_server.build()
     logger.info(f"RPC Server API Key: {settings.api_key}")
 
-    worker_manager = _build_worker_manager(db_manager)
+    # Same wiring the desktop app uses in full-stack mode - see build_worker_runtime
+    # for why the worker loop gets its own session.
+    worker_manager = build_worker_runtime(db_manager).manager
 
     asyncio.run(_serve_and_work(app, worker_manager, host, port))
-
-
-def _build_worker_manager(db_manager: DatabaseManager) -> WorkerManager:
-    # Dedicated session, never touched by HTTP request handling - the worker loop and
-    # request handling are separate coroutines on the same event loop, and
-    # AsyncSession isn't safe to share across coroutines whose operations can
-    # interleave. Same reasoning as DesktopApp's WorkerManager (desktop/app.py).
-    worker_session = db_manager.get_archive_session()
-    worker_manager = WorkerManager(SQLiteTaskRepository(worker_session))
-    handlers = WorkerHandlers(
-        db_manager, chronicle_repo=SQLiteChronicleRepository(worker_session)
-    )
-    worker_manager.register_handler(TaskType.IMPORT, handlers.handle_import)
-    worker_manager.register_handler(TaskType.CLEAN, handlers.handle_clean)
-    worker_manager.register_handler(TaskType.TRANSCRIBE, handlers.handle_transcribe)
-    return worker_manager
 
 
 async def _serve_and_work(app, worker_manager: WorkerManager, host: str, port: int) -> None:

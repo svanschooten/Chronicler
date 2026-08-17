@@ -8,39 +8,129 @@
 | `[~]` | Partially implemented — see the note; do not assume it works end to end |
 | `[ ]` | Not started                                                            |
 
-> Re-baselined 2026-08-13 against the actual source tree. Several items previously marked
-> complete were documentation-only or stubbed; they have been reopened. See
-> [ASSESSMENT.md](ASSESSMENT.md) for the full analysis.
->
-> Sprint 1 ("stop the bleeding") landed 2026-08-13: all six items below are fixed and
-> tested. Sprint 2 ("make the foundation honest") also landed 2026-08-13:
-> session-per-operation, atomic task claiming/retry, transactional import/clean, and
-> Alembic are all done. Sprint 3 ("deliver the promised modes") also landed 2026-08-13:
-> DesktopApp resolves through Container/RemoteContainer, Thin Client mode works
-> end-to-end (including transcript viewing), server mode runs its own WorkerManager,
-> the chosen mode is persisted, SettingsView is real.
->
-> Sprint 4 ("core loop": manage Chronicles, import audio, transcribe with
-> faster-whisper, export text/html/pdf) landed 2026-08-13, in four passes:
-> Item 0 (unblock the UI — dead snackbars, un-awaited per-card button callbacks);
-> a UI-fixes pass covering seven issues found in real use (consistent header button
-> styling, theme-aware colors across every desktop view, Chronicle metadata editing,
-> tagging + speaker-count backfill on import, an overwrite/append confirmation before
-> a second transcript import can silently destroy the first, hiding completed tasks
-> by default, a working Export dropdown); a second UI-fixes round on things only
-> visible after actually running the app (a client-crashing `FilePicker`
-> registration bug, an `AlertDialog` that resolved correctly but never visually
-> closed, sidebar/border colors that were still wrong in light mode, task ordering +
-> timestamps + logging); a plaintext-export correction once real output didn't match
-> what was actually wanted (padded, colon-aligned speaker column, original line
-> breaks preserved — not word-wrapped); and the close-out pass — Chronicle delete
-> (UI + cascade), real audio import (routed to a new `TRANSCRIBE` task instead of
-> the text path that was guaranteed to fail on audio), and a faster-whisper
-> `TRANSCRIBE` handler with the model downloaded lazily on first real use, not at
-> startup. Text export is done; HTML/PDF/DOCX and Markdown export remain future work
-> (see Phase 6), along with tag *management* UI, chronicle search (FTS), and
-> real speaker diarization — see the still-open `[ ]`/`[~]` items throughout for
-> what Sprint 5 should pick up.
+## Where the project stands
+
+Last re-baselined **2026-08-17** against the actual source tree.
+
+The core loop works end to end: create and manage Chronicles, import a transcript or an
+audio source, transcribe audio with faster-whisper, read and export the transcript as
+plain text. All three deployment modes start and function (full stack, server, thin
+client); the web client is a working reverse proxy over the server API.
+
+| Sprint | Theme | Landed |
+| ------ | ----- | ------ |
+| 1 | Stop the bleeding — server startup, API-key leak, path traversal, CI that gates | 2026-08-13 |
+| 2 | Make the foundation honest — session-per-operation, atomic task claiming/retry, transactional import/clean, Alembic | 2026-08-13 |
+| 3 | Deliver the promised modes — DI-resolved DesktopApp, working thin client, worker in server mode, real SettingsView | 2026-08-13 |
+| 4 | The core loop — Chronicle CRUD, audio import, faster-whisper TRANSCRIBE, plain-text export, and four rounds of UI fixes found by actually running the app | 2026-08-13 |
+| 5 | Structure and hygiene — see below | 2026-08-17 |
+| 6 | Low-hanging fruit — see below | 2026-08-17 |
+
+Sprint 4's detailed history is in the git log; [ASSESSMENT.md](ASSESSMENT.md) is the
+Sprint-1-era audit that started the re-baselining and is kept as a historical record.
+
+### Sprint 5 — structure and hygiene (2026-08-17)
+
+* [x] **No source file over ~370 lines.** `views/archive.py` (605) became a package
+  (`view` / `cards` / `forms` / `imports`), `views/transcript.py` (372) became
+  (`view` / `export` / `sources`), `processing/handlers.py` (332) became one module per
+  task type over a shared `HandlerBase`.
+* [x] **Import logic lifted out of the view.** `ImportCoordinator` decides what an audio
+  or transcript import does to the workspace, with no Flet dependency — so it's testable
+  without a page attached, and `ArchiveView` is left with layout plus event plumbing.
+* [x] **One dialog primitive.** The await-a-dialog-choice boilerplate was copy-pasted
+  three times across two views; it's now `chronicler/desktop/dialogs.py`
+  (`ask_choice` / `confirm` / `ask_text`).
+* [x] **Worker wiring shared between entry points.** `core/worker_wiring.py` — a handler
+  registered in only one of desktop/server was a task type that silently never ran in the
+  other.
+* [x] **mypy gates the whole package.** The `ignore_errors` override for
+  `desktop/app.py`, `components/sidebar.py` and `views/archive.py` is gone; the two real
+  Flet-API type errors behind it are fixed.
+* [x] **Tests mirror the package tree** (`tests/chronicler/core/processing/handlers/…`,
+  `tests/chronicler/desktop/views/archive/…`), the four copy-pasted `async_session`
+  fixtures are one shared fixture, and fixture-file paths are anchored in
+  `tests/paths.py` instead of `parents[n]`. Coverage 90% (CI floor 80%).
+* [x] **Dead code removed.** `perform_test_task` moved out of production into the test
+  that uses it; `RpcServer.register`/`_service_classes` double bookkeeping collapsed;
+  `SettingsView.setting_card`'s seven colour parameters replaced by the palette it
+  already had.
+* [x] **`SearchService` is no longer five stubs.** The three methods backed by existing,
+  tested repository queries (`search_chronicle_meta`, `search_tags`, `search_tasks`)
+  are implemented; the two that genuinely need new infrastructure now say so and why
+  (see Phase 3 search items).
+* [x] **`themeMockup/` retired.** It was a fork of Flet's `declarative_trolli` gallery
+  example, so half of it (`components/`, the Pacifico font) was another app's code
+  entirely. The Chronicler-specific parts have all been applied — see
+  [Theme mockup: what was and wasn't applied](#theme-mockup-what-was-and-wasnt-applied)
+  for the remaining gaps, which are now tracked as real items.
+
+### Sprint 6 — low-hanging fruit (2026-08-17)
+
+Small items chosen for value per unit of effort; several turned out to be cheap because
+the mechanism already existed and simply wasn't exposed.
+
+* [x] **Search actually searches.** Chronicle search covered the title only, so a
+  chronicle tagged `product` or described as "roadmap" was unfindable by either word. Now
+  title + description + tag names.
+* [x] **LIKE wildcards are escaped** in all three searching repositories. Typing `%`
+  matched every row before.
+* [x] **Failed tasks can be retried from the UI** — the repository support was already
+  written and tested, just unreachable. Two adjacent bugs fixed on the way: a returned-to-
+  PENDING task kept the previous run's `claimed_by`/`claimed_at` (so the row showed a stale
+  start time), and FAILED shared PENDING's icon (so a failure looked like a queued task).
+* [x] **Task rows name their chronicle**, and show their error inline instead of only
+  recording it in the database.
+* [x] **Chronicle listings have a deterministic order** (`created_at DESC`, matching the
+  task list). Without an `ORDER BY` the archive could reshuffle between two refreshes that
+  changed nothing.
+* [x] **`page.bgcolor` and the sidebar divider follow the theme.**
+* [x] **`--config PATH` / `CHRONICLER_CONFIG_FILE`** for running an isolated instance.
+* [x] **Config tests no longer depend on the developer's machine.** They isolated
+  `user_config_dir` but not `Path.home()`, so `Settings()` inside a test read the real
+  `~/.chronicler_config.yaml` if one existed. This was masking a wrong assertion:
+  `test_desktop_mode_requires_either` asserted that a thin client with no API key
+  validates, which is false — it only passed because the real config supplied a key.
+
+---
+
+## Theme mockup: what was and wasn't applied
+
+`themeMockup/` (added 2026-07-29, removed 2026-08-17) was a static Flet mockup of the
+desktop UI. Its structure, copy and layout **are** what shipped: the sidebar
+(CHRONICLER wordmark, "Preserve conversations.", the same three nav entries, the
+workspace footer), the chronicle card (kind/status header row, title, 2-line
+description, date/duration/speakers row, tag line), the task rows, the settings cards
+(Appearance / Workspace / Connection), and the transcript view's two-panel split with
+its right-hand Chronicle detail panel. The real views have since gone further than the
+mockup in every case.
+
+Still not applied — tracked below rather than lost with the directory:
+
+* [ ] **App icon is not wired up.** `assets/icon.svg` and `assets/icon.png` (preserved
+  from the mockup — they are genuinely Chronicler's, unlike the Pacifico font that came
+  from the Trolli example) are referenced nowhere. Needs `ft.run(..., assets_dir=...)`
+  plus per-platform packaging icons. See Phase 9.
+* [ ] **No custom typography.** The mockup's font came from the gallery example and was
+  never Chronicler's; if a display font is wanted, it needs choosing deliberately and
+  registering via `page.fonts`.
+* [x] **`page.bgcolor` is never set.** Fixed 2026-08-17: `DesktopApp._apply_theme` is now
+  the one place that paints everything the app owns directly (page background, content
+  area, and the sidebar/content divider — which was coloured once at construction and
+  never updated on a theme change).
+* [ ] **Light mode diverged from the mockup on purpose, and should be reviewed as a
+  whole.** The mockup's light theme was warm (`AMBER_50` page, `BROWN_50` sidebar,
+  `AMBER_100` borders/selection). Sprint 4 replaced it with white surfaces and
+  `BROWN_200` borders after `AMBER_100` proved nearly invisible as a border and the
+  amber sidebar read as an odd tint (see the comments in `desktop/theme.py`). Each
+  individual change was justified; nobody has since looked at the result as a designed
+  palette.
+* [~] **Task rows don't say which chronicle they belong to.** Fixed 2026-08-17 for the
+  chronicle half: `TasksView` resolves titles once per load and each row reads
+  `<chronicle title> · Status: X`, falling back to the status alone for a task whose
+  chronicle has been deleted. The mockup's "provider" half stays open — `Task` has no
+  `provider` field, and it only becomes meaningful once provider registration exists
+  (Phase 3).
 
 ---
 
@@ -125,10 +215,13 @@ every `ASGITransport`-based test in the sprint had missed:
     * [x] Optimized multi-job workflow with caching
     * [x] Make quality checks blocking (`continue-on-error` removed 2026-08-13)
     * [x] Drop flake8 (redundant with ruff — removed 2026-08-13)
-    * [x] Enforce a coverage threshold (`--cov-fail-under=80`, raised 2026-08-13 from 78
-      after the Sprint 4 UI-fixes pass measured 83% - kept a few points of headroom
-      since audio import/transcription work still to come will add untested surface
-      before its own tests land)
+    * [x] Enforce a coverage threshold (`--cov-fail-under=80`). Measured 90% as of
+      2026-08-17 (up from 86% before the Sprint 5 restructure — lifting import logic out
+      of the views made it reachable without a Flet page). The gate is deliberately left
+      at 80 rather than tracked up to the measurement: the untested surface still to come
+      (export formats, recording, diarization) lands before its tests do, and a gate that
+      trails the real figure by ten points fails on genuine regressions without failing on
+      every work-in-progress commit.
     * [ ] Fix `.venv` cache reuse before re-enabling the macOS matrix entry
 
 ---
@@ -146,6 +239,11 @@ every `ASGITransport`-based test in the sprint had missed:
     * `Settings.mode` added 2026-08-13, set by `ConfigWizard` at every point it already
       knows which of the four concrete setups was chosen — "the active mode is
       determined by the configuration" is now true.
+* [x] Point Chronicler at a specific config file (2026-08-17). `chronicler --config PATH`
+  or `CHRONICLER_CONFIG_FILE`; `Settings.save()` writes back to the same place. A file that
+  was explicitly requested but doesn't exist resolves to *no* config rather than falling
+  through to the defaults - silently loading the developer's real config would defeat the
+  point and, in a smoke test, point a throwaway run at their real workspace.
 * [x] Use argparse for command-line arguments and --verbose mode
 * [x] Persist the deployment mode in settings
 * [x] Stop generating an API key when the user leaves it blank in thin-client setup
@@ -258,14 +356,21 @@ The UI and services should not depend directly on SQLite.
       the cycle started, so retries spread across poll cycles rather than all firing
       instantly in one burst.
 * [ ] Implement annotation-based provider registration — handlers are still registered
-  imperatively in `desktop/app.py`
+  imperatively, now in one place (`core/worker_wiring.py::build_worker_runtime`) rather
+  than duplicated per entry point. A `Task` also has no `provider` field yet, so
+  "which provider ran this" isn't recorded anywhere; the docs and the Tasks view both
+  imply it exists.
 * [ ] Implement Scribe workers with concurrency configuration — the loop is strictly
-  sequential in a single coroutine
+  sequential in a single coroutine, so the "concurrency configured per provider" model
+  in ARCHITECTURE.md is design intent, not current behaviour
 * [x] Run a worker manager in server mode
-    * Fixed 2026-08-13: `server/main.py` builds a `WorkerManager` the same way
-      `desktop/app.py` does (own dedicated session, IMPORT/CLEAN handlers) and runs it
-      alongside `uvicorn.Server(...).serve()` via `asyncio.gather()`. Verified live: a
-      queued task went PENDING -> DONE on a real server with no client polling it.
+    * Fixed 2026-08-13: `server/main.py` builds a `WorkerManager` and runs it alongside
+      `uvicorn.Server(...).serve()` via `asyncio.gather()`. Verified live: a queued task
+      went PENDING -> DONE on a real server with no client polling it.
+    * Consolidated 2026-08-17: both entry points now call
+      `core/worker_wiring.py::build_worker_runtime`, so a newly added handler can't be
+      registered in one mode and silently missing in the other (which is exactly how
+      TRANSCRIBE nearly shipped desktop-only).
 * [ ] **Per-task CPU timeout.** The regex ReDoS guard (`chronicler/core/processing/
   regex_guard.py`) is a static shape check, not a CPU-time bound — Python threads can't
   be force-killed and CPython's regex matcher doesn't release the GIL during
@@ -275,8 +380,13 @@ The UI and services should not depend directly on SQLite.
 
 Initial tasks:
 
-* [~] IMPORT — text only; audio files are queued as IMPORT and crash on UTF-8 decode
-* [ ] TRANSCRIBE
+* [x] IMPORT — formatted text. Audio no longer takes this path at all: an audio import
+  is stored as a source and transcribed via TRANSCRIBE, which is what it was previously
+  guaranteed to fail at (UTF-8 decode on a binary file).
+* [x] TRANSCRIBE — faster-whisper, one audio source at a time, with the speaker assigned
+  by the user. No diarization: one source is treated as one speaker's track. The model is
+  downloaded lazily on first real use, and the optional `transcription` extra being absent
+  produces an explanatory error rather than a crash.
 * [x] CLEAN
 * [ ] EXPORT
 
@@ -346,10 +456,21 @@ Future:
 
 * [x] Browse Chronicles
 * [~] Implement search in repositories and services
-    * [x] Workspace search (chronicle title only, `ILIKE`)
+    * [x] Workspace search — chronicle title, description and tag names (`ILIKE`)
     * [ ] Chronicle search (Full-text search using SQLite FTS)
-    * [ ] `SearchService` — all five methods are `pass` stubs that return `None`, yet are
-      registered as RPC endpoints
+    * [~] `SearchService` — `search_chronicle_meta`, `search_tags` and `search_tasks`
+      implemented 2026-08-17 against the repository queries that already existed.
+      `search_chronicle_content` and `search_speakers` still raise `NotImplementedError`:
+      transcript lines and speakers live in per-chronicle project databases, so neither
+      can be an archive query — they need an FTS index or per-project fan-out first.
+      Raising rather than returning `[]` is deliberate; an empty list would read as "no
+      matches" and hide that nothing was searched.
+    * [x] Search chronicle metadata *and* tags together, merged (2026-08-17).
+      `SQLiteChronicleRepository.search` covers title, description and tag names; tags
+      match through a subquery so a chronicle carrying two matching tags is returned
+      once. LIKE wildcards in the user's own text are now escaped in all three
+      repositories (`core/sqlite/patterns.py`) - a bare `%` used to match every row,
+      which reads as the search box being broken rather than as a feature.
 * [x] Search UI in Archive view
 * [ ] Filter by tags
 * [x] Open Chronicle
@@ -430,7 +551,18 @@ Future:
   between start and finish - `TaskEventBus` only publishes on terminal states
   (DONE/FAILED), not on every `update_progress()` call. Manual refresh still shows
   the latest percentage; it just doesn't self-update while watching.
-* [ ] Retry failures
+* [x] Retry failures
+    * Added 2026-08-17. The mechanism already existed and was tested - `update_status(id,
+      PENDING)` clears the error and resets progress - it was simply never exposed.
+      `TaskService.retry_task` plus a retry button on finished rows. One click buys one
+      attempt: `attempts` is deliberately *not* reset, because the automatic budget is
+      already spent by the time a task reaches FAILED and refilling it would make a
+      deterministic failure (bad regex, missing file) fail three more times per click.
+      `update_status` now also clears `claimed_by`/`claimed_at` on the return to PENDING,
+      which it should always have done - the row kept showing the previous run's start
+      time until something claimed it again.
+    * [ ] Retry every failed task at once - currently one button per row.
+* [x] Show which Chronicle each task belongs to (2026-08-17)
 * [x] Hide completed tasks by default
     * Fixed 2026-08-13: the "Hide completed tasks" checkbox existed but defaulted to
       unchecked, so a growing pile of DONE tasks was the first thing shown. Now
@@ -974,7 +1106,7 @@ Possible tools:
 
 # Testing
 
-* [x] Repository tests (chronicle, task)
+* [x] Repository tests (chronicle, task, tag)
 * [x] Container tests
 * [x] RPC round-trip tests (server + remote proxy)
 * [x] Importer and cleaner tests
@@ -1005,6 +1137,21 @@ Possible tools:
   bugs under "Known blockers" that every `ASGITransport`-based test had missed. Worth
   remembering as a general lesson: in-process ASGI transport tests don't exercise real
   JSON (de)serialization the same way a genuine HTTP round-trip does.
+* [x] Mirror the test tree to the package tree (2026-08-17). `tests/chronicler/` now
+  matches `chronicler/` module for module, as real packages — the mirrored layout repeats
+  module names (`views/archive/test_view.py` and `views/transcript/test_view.py`), which
+  pytest's default import mode can only disambiguate for packages.
+* [x] De-duplicate test fixtures (2026-08-17). The `async_session` fixture was copy-pasted
+  identically into four modules; it lives in `tests/conftest.py` now. `attach_page`
+  (`tests/chronicler/desktop/conftest.py`) replaces the try/finally `patch.object(...,
+  "page")` block every desktop test hand-rolled, and fixture-file paths come from
+  `tests/paths.py` instead of `Path(__file__).parents[n]` — which silently pointed at the
+  wrong directory the moment a test module moved.
+* [ ] No tests exercise the desktop app against a real Flet page. Views are unit-tested by
+  building them and inspecting the control tree, which is why four rounds of Sprint 4 UI
+  fixes were needed for things only visible when actually running the app (a
+  client-crashing `FilePicker` registration, a dialog that resolved but never visually
+  closed). Worth investigating whether Flet's own test helpers can close that gap.
 
 ---
 

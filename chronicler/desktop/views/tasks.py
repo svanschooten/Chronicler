@@ -1,21 +1,41 @@
 import logging
+from uuid import UUID
 
 import flet as ft
 
+from chronicler.core.models import Task, TaskStatus
+from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
 from chronicler.desktop.theme import theme_colors
 
 logger = logging.getLogger(__name__)
 
+TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
+
+#: Statuses a task can be put back on the queue from. WORKING is excluded on purpose -
+#: it's already running, and re-queueing it would let a second worker claim it while the
+#: first is still going.
+RETRYABLE = (TaskStatus.FAILED, TaskStatus.DONE)
+
 
 class TasksView(ft.Column):
-    def __init__(self, task_service: TaskService, dark_mode: bool = True):
+    def __init__(
+        self,
+        task_service: TaskService,
+        chronicle_service: ChronicleService,
+        dark_mode: bool = True,
+    ):
         logger.debug("TasksView constructed")
         self.task_service = task_service
+        self.chronicle_service = chronicle_service
         self.colors = theme_colors(dark_mode)
         self.task_list = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True, spacing=16)
         self.query = ""
         self.hide_completed = True
+        # Resolved on each load so a row can name the chronicle its task belongs to -
+        # a Task only carries chronicle_id, and a queue of several tasks is unreadable
+        # without it.
+        self.chronicle_titles: dict[UUID, str] = {}
 
         super().__init__(
             expand=True,
@@ -61,6 +81,9 @@ class TasksView(ft.Column):
     def will_unmount(self):
         logger.debug("TasksView unloaded")
 
+    def show_snackbar(self, message: str):
+        self.page.show_dialog(ft.SnackBar(ft.Text(message)))
+
     async def refresh_clicked(self, e):
         await self.load_tasks()
 
@@ -72,6 +95,11 @@ class TasksView(ft.Column):
         self.hide_completed = e.control.value
         await self.load_tasks()
 
+    async def retry_clicked(self, e):
+        await self.task_service.retry_task(e.control.data)
+        self.show_snackbar("Task re-queued")
+        await self.load_tasks()
+
     async def load_tasks(self):
         try:
             if self.query:
@@ -80,35 +108,79 @@ class TasksView(ft.Column):
                 tasks = await self.task_service.list_tasks()
 
             if self.hide_completed:
-                tasks = [t for t in tasks if t.status != "DONE"]
+                tasks = [t for t in tasks if t.status != TaskStatus.DONE]
 
-            self.task_list.controls = [self.create_task_row(t) for t in tasks]
+            await self._load_chronicle_titles()
 
-            if not tasks:
-                self.task_list.controls = [ft.Text("No tasks found.")]
+            self.task_list.controls = [self.create_task_row(t) for t in tasks] or [
+                ft.Text("No tasks found.")
+            ]
             self.update()
         except Exception as e:
             logger.exception(f"Error loading tasks: {e}")
             self.task_list.controls = [ft.Text(f"Error loading tasks: {e}")]
             self.update()
 
-    def create_task_row(self, task) -> ft.Container:
-        from chronicler.core.models import TaskStatus
+    async def _load_chronicle_titles(self) -> None:
+        """One listing per load rather than a lookup per row - the archive is small, and a
+        per-row fetch would be a query per task. A failure here is not worth failing the
+        whole view over: rows fall back to showing no chronicle name."""
+        try:
+            chronicles = await self.chronicle_service.list_chronicles()
+        except Exception as e:
+            logger.warning(f"Could not resolve chronicle titles for the task list: {e}")
+            return
+        self.chronicle_titles = {c.id: c.title for c in chronicles}
 
+    def _subtitle(self, task: Task) -> str:
+        """`<chronicle> · <status>`, dropping the chronicle when there isn't one to name -
+        a task whose chronicle has since been deleted, or one that isn't chronicle-scoped.
+        """
+        title = self.chronicle_titles.get(task.chronicle_id) if task.chronicle_id else None
+        status = f"Status: {task.status.value}"
+        return f"{title} · {status}" if title else status
+
+    @staticmethod
+    def _timestamps(task: Task) -> str:
+        # claimed_at/updated_at already exist for claim_next()/update_status() - "started"
+        # and "completed" don't need their own columns. updated_at is bumped on every write
+        # to the row, so once the task has reached a terminal state it's exactly the
+        # completion time.
+        parts = [f"Created {task.created_at.strftime(TIMESTAMP_FORMAT)}"]
+        if task.claimed_at:
+            parts.append(f"Started {task.claimed_at.strftime(TIMESTAMP_FORMAT)}")
+        if task.status in (TaskStatus.DONE, TaskStatus.FAILED):
+            parts.append(f"Completed {task.updated_at.strftime(TIMESTAMP_FORMAT)}")
+        return " · ".join(parts)
+
+    def create_task_row(self, task: Task) -> ft.Container:
         state_color = (
             self.colors.accent if task.status == TaskStatus.WORKING else self.colors.muted
         )
 
-        # claimed_at/updated_at already exist for claim_next()/update_status() -
-        # "started" and "completed" don't need their own columns. updated_at is
-        # bumped on every write to the row, so once the task has reached a terminal
-        # state it's exactly the completion time.
-        timestamp_format = "%Y-%m-%d %H:%M"
-        timestamps = [f"Created {task.created_at.strftime(timestamp_format)}"]
-        if task.claimed_at:
-            timestamps.append(f"Started {task.claimed_at.strftime(timestamp_format)}")
-        if task.status in (TaskStatus.DONE, TaskStatus.FAILED):
-            timestamps.append(f"Completed {task.updated_at.strftime(timestamp_format)}")
+        details: list[ft.Control] = [
+            ft.Text(task.type.value, weight=ft.FontWeight.BOLD, color=self.colors.text),
+            ft.Text(self._subtitle(task), color=self.colors.muted),
+            ft.Text(self._timestamps(task), size=12, color=self.colors.muted),
+        ]
+        if task.status == TaskStatus.WORKING:
+            details.append(ft.ProgressBar(value=task.progress / 100.0))
+        if task.error:
+            details.append(ft.Text(task.error, size=12, color=ft.Colors.RED_400, max_lines=3))
+
+        trailing: list[ft.Control] = [
+            ft.Text(f"{task.progress}%", weight=ft.FontWeight.BOLD, color=self.colors.text)
+        ]
+        if task.status in RETRYABLE:
+            trailing.append(
+                ft.IconButton(
+                    icon=ft.Icons.REFRESH,
+                    icon_color=self.colors.muted,
+                    data=task.id,
+                    on_click=self.retry_clicked,
+                    tooltip="Run this task again",
+                )
+            )
 
         return ft.Container(
             bgcolor=self.colors.card,
@@ -118,27 +190,19 @@ class TasksView(ft.Column):
             content=ft.Row(
                 controls=[
                     ft.IconButton(
-                        icon=ft.Icons.PENDING_ACTIONS
-                        if task.status != TaskStatus.DONE
-                        else ft.Icons.CHECK_CIRCLE,
+                        icon=self._status_icon(task.status),
                         icon_color=state_color,
                     ),
-                    ft.Column(
-                        expand=True,
-                        controls=[
-                            ft.Text(
-                                task.type.value, weight=ft.FontWeight.BOLD, color=self.colors.text
-                            ),
-                            ft.Text(f"Status: {task.status}", color=self.colors.muted),
-                            ft.Text(" · ".join(timestamps), size=12, color=self.colors.muted),
-                            ft.ProgressBar(value=task.progress / 100.0)
-                            if task.status == TaskStatus.WORKING
-                            else ft.Container(),
-                        ],
-                    ),
-                    ft.Text(
-                        f"{task.progress}%", weight=ft.FontWeight.BOLD, color=self.colors.text
-                    ),
+                    ft.Column(expand=True, controls=details),
+                    *trailing,
                 ],
             ),
         )
+
+    @staticmethod
+    def _status_icon(status: TaskStatus) -> ft.IconData:
+        if status == TaskStatus.DONE:
+            return ft.Icons.CHECK_CIRCLE
+        if status == TaskStatus.FAILED:
+            return ft.Icons.ERROR_OUTLINE
+        return ft.Icons.PENDING_ACTIONS

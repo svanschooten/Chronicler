@@ -9,6 +9,12 @@ class ProjectBase(DeclarativeBase):
 
 
 class DBProjectMetadata(ProjectBase):
+    """Reserved key/value table for per-chronicle provenance (source tool, import
+    settings, schema notes). Nothing reads or writes it yet - it's kept in sync with
+    the baseline migration that already creates the table rather than dropped, so the
+    ORM metadata and the on-disk schema don't disagree. See TODO.md Phase 2.
+    """
+
     __tablename__ = "metadata"
 
     key: Mapped[str] = mapped_column(String(255), primary_key=True)

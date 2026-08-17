@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chronicler.core.database import DBTag
 from chronicler.core.models import Tag
 from chronicler.core.repositories import TagRepository
+from chronicler.core.sqlite.patterns import LIKE_ESCAPE, contains_pattern
 
 
 class SQLiteTagRepository(TagRepository):
@@ -34,6 +35,10 @@ class SQLiteTagRepository(TagRepository):
         await self.session.commit()
 
     async def search(self, query: str) -> list[Tag]:
-        result = await self.session.execute(select(DBTag).where(DBTag.name.ilike(f"%{query}%")))
+        result = await self.session.execute(
+            select(DBTag)
+            .where(DBTag.name.ilike(contains_pattern(query), escape=LIKE_ESCAPE))
+            .order_by(DBTag.name)
+        )
         db_tags = result.scalars().all()
         return [Tag.model_validate(t) for t in db_tags]

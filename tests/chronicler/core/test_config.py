@@ -1,4 +1,33 @@
-from chronicler.core.config import Settings, get_settings
+import pytest
+import yaml
+
+from chronicler.core.config import (
+    CONFIG_FILE_ENV_VAR,
+    Settings,
+    get_settings,
+    is_config_initialized,
+    resolve_config_file,
+    set_config_file_override,
+)
+
+
+@pytest.fixture(autouse=True)
+def isolated_config(monkeypatch, tmp_path):
+    """Keeps config resolution away from the developer's real configuration.
+
+    Redirecting HOME covers both default locations at once - `Path.home() /
+    ".chronicler_config.yaml"` and, on Linux, `user_config_dir()` underneath it. Without
+    this, every test here that asserted a default (`workspace_path is None`) passed or
+    failed depending on whether the machine running it happened to have a real
+    `~/.chronicler_config.yaml`; only `user_config_dir` was ever isolated.
+    """
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv(CONFIG_FILE_ENV_VAR, raising=False)
+    get_settings.cache_clear()
+    yield home
+    get_settings.cache_clear()
 
 
 def test_default_settings(monkeypatch, tmp_path):
@@ -62,11 +91,101 @@ def test_save_settings(tmp_path, monkeypatch):
     assert config_file.exists()
 
     # Verify content
-    import yaml
-
     with open(config_file) as f:
         data = yaml.safe_load(f)
         assert data["workspace_path"] == str(workspace)
+
+
+# -- explicit config file location ---------------------------------------------
+
+
+def test_an_explicit_config_file_is_read_instead_of_the_defaults(monkeypatch, tmp_path):
+    default = tmp_path / "home" / ".chronicler_config.yaml"
+    default.write_text("app_name: FromDefaultLocation\n")
+    explicit = tmp_path / "elsewhere" / "custom.yaml"
+    explicit.parent.mkdir()
+    explicit.write_text("app_name: FromExplicitFile\n")
+
+    monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(explicit))
+
+    assert resolve_config_file() == explicit
+    assert Settings().app_name == "FromExplicitFile"
+
+
+def test_a_missing_explicit_config_file_does_not_fall_back_to_the_defaults(
+    monkeypatch, tmp_path, caplog
+):
+    """The whole point of --config is isolating an instance. Quietly loading the
+    developer's real config instead would defeat it - and in a smoke test would point a
+    throwaway run at their real workspace."""
+    default = tmp_path / "home" / ".chronicler_config.yaml"
+    default.write_text("app_name: FromDefaultLocation\n")
+
+    monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(tmp_path / "does-not-exist.yaml"))
+
+    with caplog.at_level("WARNING", logger="chronicler.core.config"):
+        settings = Settings()
+
+    assert resolve_config_file() is None
+    assert settings.app_name == "Chronicler"
+    assert any("does not exist" in record.message for record in caplog.records)
+
+
+def test_an_explicit_config_file_is_expanded(monkeypatch, tmp_path):
+    explicit = tmp_path / "home" / "custom.yaml"
+    explicit.write_text("app_name: Expanded\n")
+
+    monkeypatch.setenv(CONFIG_FILE_ENV_VAR, "~/custom.yaml")
+
+    assert resolve_config_file() == explicit
+
+
+def test_save_writes_to_the_explicit_config_file(monkeypatch, tmp_path):
+    """A --config run that changes a setting must persist it where the caller asked, not
+    into the default location."""
+    explicit = tmp_path / "elsewhere" / "custom.yaml"
+    monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(explicit))
+    settings = Settings(app_name="Chronicler", dark_mode=False)
+
+    written = settings.save()
+
+    # Written even though it did not exist beforehand, parent directory and all.
+    assert written == explicit
+    assert yaml.safe_load(explicit.read_text())["dark_mode"] is False
+    assert not (tmp_path / "home" / ".chronicler_config.yaml").exists()
+
+
+def test_save_updates_the_home_config_when_that_is_what_is_in_use(tmp_path):
+    home_config = tmp_path / "home" / ".chronicler_config.yaml"
+    home_config.write_text("app_name: Chronicler\n")
+
+    assert Settings().save_path() == home_config
+
+
+def test_is_config_initialized_follows_the_explicit_override(monkeypatch, tmp_path):
+    (tmp_path / "home" / ".chronicler_config.yaml").write_text("app_name: Chronicler\n")
+    assert is_config_initialized() is True
+
+    monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(tmp_path / "absent.yaml"))
+    assert is_config_initialized() is False
+
+
+def test_set_config_file_override_invalidates_the_cached_settings(tmp_path):
+    """get_settings() is lru_cached, so an override applied after the first call would
+    otherwise have no effect at all."""
+    explicit = tmp_path / "custom.yaml"
+    explicit.write_text("app_name: FromOverride\n")
+
+    assert get_settings().app_name == "Chronicler"
+
+    set_config_file_override(explicit)
+    try:
+        assert get_settings().app_name == "FromOverride"
+
+        set_config_file_override(None)
+        assert get_settings().app_name == "Chronicler"
+    finally:
+        set_config_file_override(None)
 
 
 def test_load_settings(tmp_path, monkeypatch):
@@ -144,18 +263,25 @@ def test_webclient_mode_requires_server_url_and_api_key(tmp_path):
 
 
 def test_desktop_mode_requires_either(tmp_path):
-    settings = Settings(workspace_path=None, server_url=None)
+    settings = Settings(workspace_path=None, server_url=None, api_key=None)
     assert settings.validate_for_mode("client:desktop") is False
 
     # Reject empty string
     settings.server_url = ""
     assert settings.validate_for_mode("client:desktop") is False
 
+    # A local workspace is enough on its own - full stack needs no key.
     settings.workspace_path = tmp_path
     assert settings.validate_for_mode("client:desktop") is True
 
+    # Without a workspace it's a thin client, which does need a key. This assertion used
+    # to expect True and passed only because `Settings()` picked up an `api_key` from the
+    # developer's real config file - the test never set one.
     settings.workspace_path = None
     settings.server_url = "http://localhost:8000"
+    assert settings.validate_for_mode("client:desktop") is False
+
+    settings.api_key = "some-key"
     assert settings.validate_for_mode("client:desktop") is True
 
 

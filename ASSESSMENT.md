@@ -2,6 +2,19 @@
 
 Date: 2026-08-13 · Scope: full source tree (`chronicler/`, `tests/`, docs, CI)
 
+> **Historical document — do not read as current state.**
+>
+> This is the point-in-time audit that triggered the re-baselining of `TODO.md`, kept
+> because it records *why* several decisions were made and is referenced from the sprint
+> history. Its findings were addressed across Sprints 1–5 (2026-08-13 to 2026-08-17):
+> every blocker in §1 is fixed and covered by tests, and the session-sharing problems in
+> §2 are resolved.
+>
+> Line and file references have since moved — `chronicler/desktop/views/archive.py` and
+> `chronicler/core/processing/handlers.py` in particular are now packages rather than
+> single modules. For the current state see [TODO.md](TODO.md); for the current design see
+> [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Verdict
 
 The architecture is sound and the docs are unusually good for a pre-alpha. The problem is

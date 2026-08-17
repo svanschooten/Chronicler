@@ -1,12 +1,13 @@
 from uuid import UUID
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.database import DBChronicle, DBTag, DBTask, chronicle_tags
 from chronicler.core.models import Chronicle
 from chronicler.core.repositories import ChronicleRepository
+from chronicler.core.sqlite.patterns import LIKE_ESCAPE, contains_pattern
 
 
 class SQLiteChronicleRepository(ChronicleRepository):
@@ -14,7 +15,12 @@ class SQLiteChronicleRepository(ChronicleRepository):
         self.session = session
 
     async def get_all(self) -> list[Chronicle]:
-        result = await self.session.execute(select(DBChronicle))
+        # Newest first, matching the task list. Without an ORDER BY this returned
+        # whatever order SQLite happened to produce, so the archive list could reshuffle
+        # between two refreshes that changed nothing.
+        result = await self.session.execute(
+            select(DBChronicle).order_by(DBChronicle.created_at.desc())
+        )
         db_chronicles = result.scalars().all()
         return [Chronicle.model_validate(db) for db in db_chronicles]
 
@@ -81,8 +87,29 @@ class SQLiteChronicleRepository(ChronicleRepository):
         await self.session.commit()
 
     async def search(self, query: str) -> list[Chronicle]:
+        """Chronicles whose title, description or any tag name contains `query`.
+
+        Tags are matched through a subquery rather than a join, so a chronicle carrying
+        two matching tags is returned once instead of twice - a `DISTINCT` over the whole
+        entity would work too, but only accidentally, and it would have to be revisited
+        the moment another to-many relationship joins the search.
+        """
+        pattern = contains_pattern(query)
+        tagged = (
+            select(chronicle_tags.c.chronicle_id)
+            .join(DBTag, DBTag.id == chronicle_tags.c.tag_id)
+            .where(DBTag.name.ilike(pattern, escape=LIKE_ESCAPE))
+        )
         result = await self.session.execute(
-            select(DBChronicle).where(DBChronicle.title.ilike(f"%{query}%"))
+            select(DBChronicle)
+            .where(
+                or_(
+                    DBChronicle.title.ilike(pattern, escape=LIKE_ESCAPE),
+                    DBChronicle.description.ilike(pattern, escape=LIKE_ESCAPE),
+                    DBChronicle.id.in_(tagged),
+                )
+            )
+            .order_by(DBChronicle.created_at.desc())
         )
         db_chronicles = result.scalars().all()
         return [Chronicle.model_validate(db) for db in db_chronicles]

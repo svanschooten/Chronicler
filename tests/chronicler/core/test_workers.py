@@ -1,28 +1,13 @@
-from unittest.mock import AsyncMock
+import asyncio
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
-import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from chronicler.core.database import Base
 from chronicler.core.models import Task, TaskStatus, TaskType
 from chronicler.core.sqlite import SQLiteTaskRepository
 from chronicler.core.task_events import TaskEventBus
 from chronicler.core.workers import WorkerManager
-
-
-@pytest_asyncio.fixture
-async def async_session():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    async with async_session_factory() as session:
-        yield session
-
-    await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -241,3 +226,68 @@ async def test_no_event_bus_configured_does_not_raise(async_session):
 
     await repo.create(Task(type=TaskType.IMPORT))
     await manager.process_tasks()  # must not raise
+
+
+async def _progress_reporting_handler(task, update_progress):
+    """A stand-in for a real handler: sleeps, reports progress, sleeps, finishes. The
+    sleeps are what tests patch out - they exist so this exercises the same
+    await-in-the-middle shape a real handler has."""
+    await asyncio.sleep(1)
+    await update_progress(50)
+    await asyncio.sleep(1)
+    await update_progress(100)
+
+
+@pytest.mark.asyncio
+async def test_test_worker_execution(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    manager = WorkerManager(repo)
+    manager.register_handler(TaskType.TEST, _progress_reporting_handler)
+
+    task = await repo.create(Task(type=TaskType.TEST))
+
+    # Mock asyncio.sleep to speed up test
+    with patch("asyncio.sleep", return_value=None):
+        await manager.process_tasks()
+
+    fetched = await repo.get_by_id(task.id)
+    assert fetched.status == TaskStatus.DONE
+    assert fetched.progress == 100
+
+
+@pytest.mark.asyncio
+async def test_task_failure_recording(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    manager = WorkerManager(repo)
+
+    async def failing_handler(task, update_progress):
+        raise ValueError("Specific error")
+
+    manager.register_handler(TaskType.TEST, failing_handler)
+    # max_attempts=1: this test is about failure recording, not retry - the
+    # retry-specific tests are above.
+    task = await repo.create(Task(type=TaskType.TEST, max_attempts=1))
+
+    await manager.process_tasks()
+
+    fetched = await repo.get_by_id(task.id)
+    assert fetched.status == TaskStatus.FAILED
+    assert "Specific error" in fetched.error
+
+
+@pytest.mark.asyncio
+async def test_task_retry_logic(async_session):
+    repo = SQLiteTaskRepository(async_session)
+
+    # Create a failed task with error and progress
+    task = await repo.create(
+        Task(type=TaskType.TEST, status=TaskStatus.FAILED, error="Previous error", progress=50)
+    )
+
+    # Retry the task
+    await repo.update_status(task.id, TaskStatus.PENDING)
+
+    fetched = await repo.get_by_id(task.id)
+    assert fetched.status == TaskStatus.PENDING
+    assert fetched.error is None
+    assert fetched.progress == 0

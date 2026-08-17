@@ -171,15 +171,14 @@ A workspace contains application data together with one or more Chronicles.
 ```text
 Workspace/
 │
-├── chronicler.db
+├── chronicler.db          Workspace database
+│
+├── imports/               Staging area for picked or uploaded files
 │
 └── chronicles/
     ├── <chronicle-id>/
-    │   ├── project.db
-    │   ├── audio/
-    │   ├── exports/
-    │   ├── logs/
-    │   └── ...
+    │   ├── project.db     This Chronicle's own database
+    │   └── sources/       Imported audio tracks
     └── ...
 ```
 
@@ -187,15 +186,18 @@ The workspace database stores application-level information, including:
 
 * Chronicle index
 * Task queue
-* Workspace state
+* Tags
 
-Each Chronicle contains its own database and files, including:
+Each Chronicle contains its own database and files, holding the content that makes it
+large and worth keeping portable:
 
 * Transcript
 * Speakers
-* Tags
-* Metadata
+* Imported audio sources
 * Generated content
+
+Tags are shared across the workspace rather than owned by a single Chronicle, so they
+live in the workspace database.
 
 ### Designed for existing storage solutions
 
@@ -225,35 +227,29 @@ Because every Chronicle is self-contained, projects can be shared independently 
 
 Long-running operations are represented as persistent tasks.
 
-Tasks survive application restarts and are executed by background workers called **Scribes**.
+Tasks belong to a Chronicle, survive application restarts, and are executed by a
+background worker loop. They carry a task type and a JSON payload holding
+task-specific configuration.
 
-Examples include:
+Implemented today:
 
-* Importing files
-* Recording audio
-* Audio pre-processing
-* Transcription
-* Transcript cleanup
-* Speaker identification
-* Exporting
-* AI processing
+| Task type    | What it does                                                        |
+| ------------ | ------------------------------------------------------------------- |
+| `IMPORT`     | Parses a formatted text transcript into a Chronicle                 |
+| `TRANSCRIBE` | Transcribes one imported audio track with faster-whisper            |
+| `CLEAN`      | Re-runs the transcript cleaner over a Chronicle's existing lines     |
 
-Tasks belong to a Chronicle and contain:
-
-* Task type
-* Provider
-* JSON payload containing task-specific configuration
-
-Typical task categories include:
+Planned:
 
 | Task type       | Example providers                          |
 | --------------- | ------------------------------------------ |
-| Import          | Audio files, formatted text                |
 | Recording       | Local recorder                             |
 | Pre-processing  | Audio normalization                        |
-| Transcription   | Faster Whisper                             |
-| Post-processing | Cleanup, speaker identification, summaries |
+| Post-processing | Speaker identification, summaries          |
 | Export          | Markdown, HTML, PDF                        |
+| AI processing   | Summaries, analysis                        |
+
+See [TODO.md](TODO.md) for the current state of each.
 
 ## Processing pipeline
 
@@ -316,16 +312,25 @@ More detailed documentation is available in:
 
 ## Technology stack
 
-| Component | Technology           |
-| --------- | -------------------- |
-| Language  | Python               |
-| UI        | Flet                 |
-| Database  | SQLite               |
-| ORM       | SQLAlchemy           |
-| API       | FastAPI              |
-| ASGI      | Uvicorn              |
-| Packaging | PyInstaller / Nuitka |
-| CI/CD     | GitHub Actions       |
+| Component  | Technology                    |
+| ---------- | ----------------------------- |
+| Language   | Python 3.10+                  |
+| UI         | Flet                          |
+| Database   | SQLite (via aiosqlite)        |
+| ORM        | SQLAlchemy 2 (async)          |
+| Migrations | Alembic                       |
+| Models     | Pydantic 2                    |
+| API        | FastAPI                       |
+| ASGI       | Uvicorn                       |
+| HTTP client| httpx                         |
+| Transcription | faster-whisper (optional extra) |
+| Build      | Hatchling                     |
+| Lint/types | Ruff, mypy                    |
+| Tests      | pytest, pytest-asyncio, pytest-cov |
+| CI/CD      | GitHub Actions                |
+
+Standalone desktop packaging (PyInstaller or Nuitka) is planned but not set up yet — see
+Phase 9 in [TODO.md](TODO.md).
 
 ## Development
 
@@ -333,13 +338,25 @@ More detailed documentation is available in:
 
 ```bash
 git clone git@github.com:svanschooten/Chronicler.git
+```
 
-cd Chronicler
+```bash
+python -m venv .venv && source .venv/bin/activate
+```
 
-python -m venv .venv
-
+```bash
 pip install -e ".[dev]"
 ```
+
+Optional extras: `server` (FastAPI/Uvicorn, needed to run as a server or web client) and
+`transcription` (faster-whisper, needed for `TRANSCRIBE` tasks). Install both with:
+
+```bash
+pip install -e ".[dev,server,transcription]"
+```
+
+The faster-whisper model is downloaded lazily on the first real transcription, not at
+startup.
 
 ### Run
 
@@ -366,7 +383,8 @@ python -m chronicler
 python -m chronicler server
 ```
 
-The server exposes the generated HTTP API and executes background Scribes.
+The server exposes the generated HTTP API and runs the background worker loop on the
+same event loop, so tasks queued by any client are actually executed.
 
 #### Web Client (Server)
 
@@ -387,12 +405,58 @@ The web client server hosts the web-based user interface. It requires a configur
 Chronicler supports several command-line options:
 
 ```bash
-python -m chronicler [mode] [-v|--verbose] [--help]
+python -m chronicler [mode] [-v|--verbose] [--config PATH] [--help]
 ```
 
 - `mode`: The run mode. One of `desktop`, `server`, `web`.
 - `-v`, `--verbose`: Enable debug logging (sets log level to DEBUG).
+- `--config PATH`: Read *and write* configuration at `PATH` instead of the default
+  location. Use it to run an isolated instance, or to keep several workspaces on one
+  machine. Equivalent to exporting `CHRONICLER_CONFIG_FILE`.
 - `--help`: Show the help message.
+
+### Quality checks
+
+The same three checks CI runs, in the order it runs them:
+
+```bash
+ruff check chronicler tests
+```
+
+```bash
+mypy chronicler tests
+```
+
+```bash
+pytest --cov=chronicler --cov-report=term --cov-fail-under=80
+```
+
+Both `ruff` and `mypy` are blocking gates with no per-module exemptions — if you need to
+suppress something, prefer a narrow `# type: ignore[code]` with a comment explaining why
+over widening the configuration.
+
+### Test layout
+
+`tests/chronicler/` mirrors the package tree module for module, so the tests for
+`chronicler/core/processing/handlers/importing.py` live in
+`tests/chronicler/core/processing/handlers/test_importing.py`. The directories are real
+packages (`__init__.py`) because the mirrored layout repeats module names.
+
+Shared fixtures:
+
+| Fixture | Defined in | Purpose |
+| ------- | ---------- | ------- |
+| `async_session` | `tests/conftest.py` | An in-memory workspace database session |
+| `mock_flet_app` | `tests/conftest.py` | Autouse; stops anything from opening a real window |
+| `attach_page` | `tests/chronicler/desktop/conftest.py` | Gives a Flet control a stand-in `page`, since `Control.page` is a read-only property that raises when unattached |
+
+`tests/paths.py` holds repo-relative paths for fixture files, and
+`tests/chronicler/desktop/controls.py` has helpers for asserting against a built Flet
+control tree.
+
+Views are tested by building them and inspecting the controls they produced; nothing
+renders. Logic worth testing without a page attached is deliberately kept out of the
+views — `ImportCoordinator` is the clearest example.
 
 ## Future goals
 

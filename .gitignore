@@ -13,3 +13,8 @@ dist/
 
 # IDE project settings are local to a developer.
 .idea/
+
+# Windows "downloaded from the internet" markers, created per-file next to whatever was
+# copied in. A batch of these got committed alongside a mockup imported from a browser
+# download.
+*:Zone.Identifier

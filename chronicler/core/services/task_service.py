@@ -2,7 +2,7 @@ import json
 from typing import Any
 from uuid import UUID
 
-from chronicler.core.models import Task, TaskType
+from chronicler.core.models import Task, TaskStatus, TaskType
 from chronicler.core.processing.regex_guard import assert_safe_pattern
 from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import service
@@ -62,6 +62,16 @@ class TaskService:
             data=json.dumps({"file_path": file_path, "speaker_name": speaker_name}),
         )
         return await self.repository.create(task)
+
+    async def retry_task(self, task_id: UUID) -> None:
+        """Puts a finished task back on the queue for one more attempt.
+
+        Deliberately does *not* reset `attempts`, so one click buys exactly one attempt:
+        the automatic retry budget is already spent by the time a task reaches FAILED, and
+        refilling it would make a deterministically failing task (a bad regex, a missing
+        file) fail three more times per click instead of once.
+        """
+        await self.repository.update_status(task_id, TaskStatus.PENDING)
 
     async def search_tasks(self, query: str) -> list[Task]:
         return await self.repository.search(query)

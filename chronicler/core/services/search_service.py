@@ -5,6 +5,11 @@ from chronicler.core.rpc import service
 
 @service
 class SearchService:
+    """Cross-entity search. Separate from the per-entity services because a search UI
+    wants to query several kinds of thing at once, and because content search will
+    eventually need its own index rather than a repository LIKE query.
+    """
+
     def __init__(
         self,
         task_repository: TaskRepository,
@@ -16,21 +21,27 @@ class SearchService:
         self.tag_repository = tag_repository
 
     async def search_chronicle_meta(self, query: str) -> list[Chronicle]:
-        # TODO search both the chronicle metadata and the tags and merge the results
-        raise NotImplementedError("search_chronicle_meta is not implemented yet")
-
-    async def search_chronicle_content(self, query: str) -> list[Chronicle]:
-        # TODO do full text search on the chronicle line content
-        raise NotImplementedError("search_chronicle_content is not implemented yet")
+        """Chronicles matching `query` in their own metadata (title, description).
+        Tag names are not searched yet - see TODO.md Phase 3."""
+        return await self.chronicle_repository.search(query)
 
     async def search_tags(self, query: str) -> list[Tag]:
-        # TODO search both the tag name and the tag description
-        raise NotImplementedError("search_tags is not implemented yet")
+        return await self.tag_repository.search(query)
 
     async def search_tasks(self, query: str) -> list[Task]:
-        # TODO search both the task name, the task description, and the task payload
-        raise NotImplementedError("search_tasks is not implemented yet")
+        return await self.task_repository.search(query)
+
+    async def search_chronicle_content(self, query: str) -> list[Chronicle]:
+        """Full-text search across transcript line content.
+
+        Not implemented: unlike every other method here, this can't be a repository
+        LIKE query. Transcript lines live in per-chronicle project databases, so
+        answering it means either fanning out across every project db or maintaining a
+        workspace-level FTS index. See TODO.md Phase 3.
+        """
+        raise NotImplementedError("Transcript content search needs an FTS index first")
 
     async def search_speakers(self, query: str) -> list[Speaker]:
-        # TODO search the speaker by name
-        raise NotImplementedError("search_speakers is not implemented yet")
+        """Not implemented for the same reason as search_chronicle_content: speakers
+        are per-project rows, not archive-level ones."""
+        raise NotImplementedError("Speaker search needs per-project fan-out first")

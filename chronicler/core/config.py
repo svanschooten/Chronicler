@@ -12,6 +12,76 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, Settings
 
 logger = logging.getLogger(__name__)
 
+#: Points Chronicler at one specific config file, bypassing the default search below.
+#: Set by `chronicler --config PATH`, or exported directly. Without this, isolating an
+#: instance (a throwaway workspace, a smoke test, a second workspace on one machine) meant
+#: overriding HOME for the whole process.
+CONFIG_FILE_ENV_VAR = "CHRONICLER_CONFIG_FILE"
+
+
+def config_file_override() -> Path | None:
+    """The explicitly requested config file, if there is one."""
+    value = os.environ.get(CONFIG_FILE_ENV_VAR)
+    return Path(value).expanduser() if value else None
+
+
+def set_config_file_override(path: Path | str | None) -> None:
+    """Requests a specific config file for this process.
+
+    Communicated through the environment rather than passed as an argument because
+    `Settings` is constructed by pydantic-settings deep inside `get_settings()`, which
+    every entry point calls without any plumbing for it. Setting it also means a
+    subprocess inherits the same config, which is what you want for a spawned worker.
+
+    Must be called before the first `get_settings()` - that result is cached.
+    """
+    if path is None:
+        os.environ.pop(CONFIG_FILE_ENV_VAR, None)
+    else:
+        os.environ[CONFIG_FILE_ENV_VAR] = str(path)
+    get_settings.cache_clear()
+
+
+def _default_config_candidates() -> list[Path]:
+    """Where to look when no config file was explicitly requested, in priority order.
+    The `.json` entry is legacy and read-only - `save()` always writes YAML."""
+    config_dir = Path(user_config_dir("Chronicler"))
+    return [
+        Path.home() / ".chronicler_config.yaml",
+        config_dir / "settings.yaml",
+        config_dir / "settings.json",
+    ]
+
+
+def _read_config(path: Path) -> dict[str, Any]:
+    try:
+        if path.suffix == ".json":
+            return json.loads(path.read_text()) or {}
+        return yaml.safe_load(path.read_text()) or {}
+    except Exception:
+        # Warn rather than raise: a corrupt config shouldn't make the app unstartable,
+        # and falling back to defaults lets the wizard fix it. Naming the file matters -
+        # this used to be a bare `except: pass`.
+        logger.warning("Failed to parse config file %s", path, exc_info=True)
+        return {}
+
+
+def resolve_config_file() -> Path | None:
+    """The config file Chronicler will actually read, or None if there isn't one yet.
+
+    An explicitly requested file that doesn't exist resolves to None rather than falling
+    through to the defaults: `--config` is how a caller isolates an instance, and quietly
+    loading the developer's real config instead would defeat the point.
+    """
+    explicit = config_file_override()
+    if explicit is not None:
+        if explicit.exists():
+            return explicit
+        logger.warning("Config file %s does not exist; using defaults", explicit)
+        return None
+
+    return next((path for path in _default_config_candidates() if path.exists()), None)
+
 
 class FileConfigSettingsSource(PydanticBaseSettingsSource):
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
@@ -23,36 +93,8 @@ class FileConfigSettingsSource(PydanticBaseSettingsSource):
         return None, field_name, False
 
     def __call__(self) -> dict[str, Any]:
-        # Priority 1: ~/.chronicler_config.yaml
-        home_config = Path.home() / ".chronicler_config.yaml"
-        if home_config.exists():
-            try:
-                return yaml.safe_load(home_config.read_text()) or {}
-            except Exception:
-                logger.warning("Failed to parse config file %s", home_config, exc_info=True)
-
-        # Priority 2: Platform specific settings.yaml
-        config_dir = Path(user_config_dir("Chronicler"))
-        config_file_yaml = config_dir / "settings.yaml"
-        if config_file_yaml.exists():
-            try:
-                return yaml.safe_load(config_file_yaml.read_text()) or {}
-            except Exception:
-                logger.warning(
-                    "Failed to parse config file %s", config_file_yaml, exc_info=True
-                )
-
-        # Priority 3: Platform specific settings.json (legacy)
-        config_file_json = config_dir / "settings.json"
-        if config_file_json.exists():
-            try:
-                return json.loads(config_file_json.read_text()) or {}
-            except Exception:
-                logger.warning(
-                    "Failed to parse config file %s", config_file_json, exc_info=True
-                )
-
-        return {}
+        path = resolve_config_file()
+        return _read_config(path) if path is not None else {}
 
 
 class Settings(BaseSettings):
@@ -98,19 +140,32 @@ class Settings(BaseSettings):
         return True
 
     def save(self) -> Path:
-        home_config = Path.home() / ".chronicler_config.yaml"
-        # If home config exists, we update it. Otherwise use platform dir.
-        if home_config.exists():
-            config_file = home_config
-        else:
-            self.config_dir.mkdir(parents=True, exist_ok=True)
-            config_file = self.config_dir / "settings.yaml"
-
+        config_file = self.save_path()
+        config_file.parent.mkdir(parents=True, exist_ok=True)
         with open(config_file, "w") as f:
-            # Convert to dict and then to yaml
+            # Round-tripped through JSON first so pydantic serializes Path/enum values
+            # into plain YAML scalars rather than Python object tags.
             yaml.dump(json.loads(self.model_dump_json()), f, default_flow_style=False)
 
         return config_file
+
+    def save_path(self) -> Path:
+        """Where `save()` will write.
+
+        An explicitly requested config file wins, even if it doesn't exist yet - a
+        `--config` run that changes a setting must persist it where the caller asked,
+        not into the developer's real config.
+        """
+        explicit = config_file_override()
+        if explicit is not None:
+            return explicit
+
+        # Otherwise update the home config if that's what's in use, and fall back to the
+        # platform config directory.
+        home_config = Path.home() / ".chronicler_config.yaml"
+        if home_config.exists():
+            return home_config
+        return self.config_dir / "settings.yaml"
 
     model_config = SettingsConfigDict(env_prefix="CHRONICLER_", env_file=".env", extra="ignore")
 
@@ -137,18 +192,8 @@ def get_settings() -> Settings:
 
 
 def is_config_initialized() -> bool:
-    home_config = Path.home() / ".chronicler_config.yaml"
-
-    if home_config.exists():
-        logger.info("Chronicler config loaded from %s", home_config)
-        return True
-
-    config_dir = Path(user_config_dir("Chronicler"))
-    if (config_dir / "settings.yaml").exists():
-        logger.info("Chronicler config loaded from %s", (config_dir / "settings.yaml"))
-        return True
-    if (config_dir / "settings.json").exists():
-        logger.info("Chronicler config loaded from %s", (config_dir / "settings.json"))
-        return True
-
-    return False
+    config_file = resolve_config_file()
+    if config_file is None:
+        return False
+    logger.info("Chronicler config loaded from %s", config_file)
+    return True
