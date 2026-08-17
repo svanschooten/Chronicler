@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 from chronicler.core.models import TranscriptLine
 
 if TYPE_CHECKING:
-    from faster_whisper import WhisperModel
+    pass
 
 logger = logging.getLogger(__name__)
 
