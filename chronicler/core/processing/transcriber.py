@@ -1,7 +1,10 @@
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chronicler.core.models import TranscriptLine
+
+if TYPE_CHECKING:
+    from faster_whisper import WhisperModel
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +24,7 @@ def _get_model(model_size: str) -> Any:
     # transcriber.py (e.g. because WorkerHandlers imports it) must not require
     # faster-whisper to be installed, and must never trigger a model download just
     # by being imported - only an actual transcribe_audio() call should do that.
-    from faster_whisper import WhisperModel  # type: ignore[import-untyped]
+    from faster_whisper import WhisperModel
 
     if model_size not in _model_cache:
         logger.info(f"Loading faster-whisper model '{model_size}' (downloads on first use)")

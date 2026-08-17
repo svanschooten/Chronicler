@@ -1,6 +1,6 @@
 import inspect
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 T = TypeVar("T")
 
@@ -54,7 +54,7 @@ class Container:
             return self._explicit_instances[cls]
 
         if cls in self._resolved_cache:
-            return self._resolved_cache[cls]
+            return cast(T, self._resolved_cache[cls])
 
         if cls in self._factories:
             factory = self._factories[cls]
@@ -64,18 +64,18 @@ class Container:
                 instance = self._call_with_dependencies(factory)
 
             self._resolved_cache[cls] = instance
-            return instance
+            return cast(T, instance)
 
         if inspect.isclass(cls):
             instance = self._build_instance(cls)
             self._resolved_cache[cls] = instance
-            return instance
+            return cast(T, instance)
 
         raise ValueError(f"Could not resolve {cls}")
 
     def _build_instance(self, cls: type[T]) -> T:
         if cls.__init__ is object.__init__:
-            return cls()
+            return cast(T, cls.__new__(cls))
 
         signature = inspect.signature(cls.__init__)
         kwargs = {}
@@ -89,7 +89,7 @@ class Container:
                     f"Cannot resolve parameter {name} of {cls.__name__}: missing type hint"
                 )
 
-        return cls(**kwargs)
+        return cast(T, cls(**kwargs))
 
     def _call_with_dependencies(self, func: Callable) -> Any:
         signature = inspect.signature(func)
