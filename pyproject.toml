@@ -88,3 +88,11 @@ line-ending = "auto"
 
 [tool.mypy]
 python_version = "3.12"
+
+# faster-whisper is an optional dependency (the "transcription" extra), imported
+# lazily inside transcriber._get_model() - it is intentionally NOT installed in CI.
+# Upstream also ships no py.typed marker, so even where it IS installed mypy would
+# error with import-untyped. ignore_missing_imports covers both cases.
+[[tool.mypy.overrides]]
+module = "faster_whisper"
+ignore_missing_imports = true
