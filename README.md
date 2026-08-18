@@ -110,18 +110,6 @@ subgraph Full Stack
     S1 --> DB1
 end
 
-subgraph Thin Client
-    UI2[Flet UI]
-    Proxy[Generated Service Proxy]
-    UI2 --> Proxy
-end
-
-subgraph Web Client
-    Browser[Web Browser]
-    WS[Web Client Server]
-    Browser --> WS
-end
-
 subgraph Server
     API[Generated HTTP API]
     S2[Application Services]
@@ -131,8 +119,20 @@ subgraph Server
     S2 --> DB2
 end
 
+subgraph Thin Client
+    UI2[Flet UI]
+    Proxy[Generated Service Proxy]
+    UI2 --> Proxy
+end
+
+subgraph Web Client
+    Browser[Web Browser]
+    WS[Web Client Server + Proxy]
+    Browser --> WS
+end
+
 Proxy --> API
-Browser --> API
+WS --> API
 ```
 
 ## Storage
@@ -169,7 +169,7 @@ Chronicler automatically validates your configuration based on the mode you are 
 A workspace contains application data together with one or more Chronicles.
 
 ```text
-Workspace/
+ChroniclerWorkspace/
 │
 ├── chronicler.db          Workspace database
 │
