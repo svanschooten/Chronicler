@@ -1,6 +1,5 @@
 """Tests for SQLiteTagRepository."""
 
-
 import pytest
 
 from chronicler.core.models import Tag

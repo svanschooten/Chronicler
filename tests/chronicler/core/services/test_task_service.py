@@ -99,9 +99,7 @@ async def test_queue_import_append_true_is_recorded_in_task_data():
     repo.create = AsyncMock(side_effect=lambda x: x)
 
     service = TaskService(repo)
-    task = await service.queue_import(
-        chronicle_id=uuid4(), file_path="/imports/x.txt", append=True
-    )
+    task = await service.queue_import(chronicle_id=uuid4(), file_path="/imports/x.txt", append=True)
 
     assert json.loads(task.data)["append"] is True
 

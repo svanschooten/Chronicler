@@ -88,7 +88,7 @@ def test_edit_form_fills_from_a_chronicle():
 
 
 def test_edit_form_blanks_the_kind_field_when_it_is_the_unknown_default():
-    """"Unknown" is the model default, not a value the user typed - the field should
+    """ "Unknown" is the model default, not a value the user typed - the field should
     start blank rather than round-tripping the placeholder as if it were real data."""
     form = EditChronicleForm(MagicMock(), MagicMock())
 

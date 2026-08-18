@@ -81,7 +81,8 @@ async def test_handlers_share_one_chronicle_repository_session(tmp_path):
         runtime = build_worker_runtime(db_manager)
 
         handler_selves = {
-            handler.__self__ for handler in runtime.manager.handlers.values()  # type: ignore[attr-defined]
+            handler.__self__
+            for handler in runtime.manager.handlers.values()  # type: ignore[attr-defined]
         }
         assert len(handler_selves) == 1
         (handlers,) = handler_selves

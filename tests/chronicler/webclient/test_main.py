@@ -86,9 +86,7 @@ async def test_proxy_injects_api_key_server_side():
 
     with (
         patch("chronicler.webclient.main.get_settings", return_value=settings),
-        patch(
-            "chronicler.webclient.main.httpx.AsyncClient", side_effect=_upstream_client_factory
-        ),
+        patch("chronicler.webclient.main.httpx.AsyncClient", side_effect=_upstream_client_factory),
     ):
         webclient_transport = ASGITransport(app=webclient_app)
         async with AsyncClient(transport=webclient_transport, base_url="http://browser") as browser:

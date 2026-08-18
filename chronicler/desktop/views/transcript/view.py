@@ -178,9 +178,7 @@ class TranscriptView(ft.Column):
 
     async def load_transcript(self):
         try:
-            self.transcript_lines = await self.transcript_service.get_transcript(
-                self.chronicle.id
-            )
+            self.transcript_lines = await self.transcript_service.get_transcript(self.chronicle.id)
         except Exception as e:
             self.transcript_area.value = f"Error loading transcript: {e}"
             self.transcript_area.update()

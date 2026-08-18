@@ -139,20 +139,14 @@ async def test_each_request_gets_a_fresh_session(tmp_path):
         container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
         container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
 
-        server = RpcServer(
-            container, services=[_SessionIdProbeService], api_key="probe-key"
-        )
+        server = RpcServer(container, services=[_SessionIdProbeService], api_key="probe-key")
         app = server.build()
 
         headers = {"X-API-Key": "probe-key"}
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp1 = await client.post(
-                "/_sessionidprobe/session_id", json={}, headers=headers
-            )
-            resp2 = await client.post(
-                "/_sessionidprobe/session_id", json={}, headers=headers
-            )
+            resp1 = await client.post("/_sessionidprobe/session_id", json={}, headers=headers)
+            resp2 = await client.post("/_sessionidprobe/session_id", json={}, headers=headers)
             assert resp1.status_code == 200
             assert resp2.status_code == 200
             assert resp1.json() != resp2.json()
@@ -171,9 +165,7 @@ async def test_request_scoped_session_is_closed_after_request(tmp_path, monkeypa
         container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
         container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
 
-        server = RpcServer(
-            container, services=[_SessionIdProbeService], api_key="probe-key"
-        )
+        server = RpcServer(container, services=[_SessionIdProbeService], api_key="probe-key")
         app = server.build()
 
         close_calls = 0
@@ -189,9 +181,7 @@ async def test_request_scoped_session_is_closed_after_request(tmp_path, monkeypa
         headers = {"X-API-Key": "probe-key"}
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post(
-                "/_sessionidprobe/session_id", json={}, headers=headers
-            )
+            resp = await client.post("/_sessionidprobe/session_id", json={}, headers=headers)
             assert resp.status_code == 200
 
         assert close_calls == 1

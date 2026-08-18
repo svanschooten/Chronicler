@@ -25,15 +25,16 @@ class ImportHandler(HandlerBase):
         with open(resolved_path, encoding="utf-8") as f:
             content = f.read()
 
-        lines = self._importer_for(data).parse(content)
-        logger.info(f"Parsed {len(lines)} lines from {file_path}")
+        # Built before the session opens: an unsafe regex is rejected by the
+        # constructor, and an import that can't run shouldn't bring a project database
+        # into existence on its way to failing.
+        importer = self._importer_for(data)
 
-        await update_progress(50)
-
-        # When appending, existing lines stay - only the new ones need to be ordered
-        # after them. get_lines() orders by start_time, and RegexImporter emits
-        # sequential 0-based start_time per file (see importers.py), so every append
-        # needs its own lines shifted past whatever's already there.
+        # When appending, existing lines stay - the new ones are parsed straight onto
+        # the end of what's already there. get_lines() orders by start_time, and
+        # RegexImporter lays a file's lines out from whatever start_offset it's given
+        # (see importers.py), so the offset has to be read from the database before
+        # parsing rather than shifted onto the lines afterwards.
         append = bool(data.get("append"))
 
         session = await self.project_session(chronicle_id)
@@ -42,14 +43,18 @@ class ImportHandler(HandlerBase):
             try:
                 if append:
                     existing_lines = await repo.get_lines()
-                    offset = max((line.end_time for line in existing_lines), default=0.0)
-                    for line in lines:
-                        line.start_time += offset
-                        line.end_time += offset
+                    start_offset = max((line.end_time for line in existing_lines), default=0.0)
                 else:
+                    existing_lines = []
+                    start_offset = 0.0
                     await repo.delete_all_lines()
 
-                await self.attach_speakers(repo, lines)
+                lines = importer.parse(content, start_offset=start_offset)
+                logger.info(f"Parsed {len(lines)} lines from {file_path}")
+
+                await update_progress(50)
+
+                speaker_map = await self.attach_speakers(repo, lines)
                 await repo.add_lines(lines)
                 # One commit for the whole operation: a crash or exception at any point
                 # before this leaves the previous transcript untouched, not
@@ -57,10 +62,13 @@ class ImportHandler(HandlerBase):
                 await session.commit()
 
                 # Not len(speaker_map): in append mode that only counts speakers in the
-                # *new* file, undercounting a chronicle that already had others.
-                # Counting distinct names across every line now in the transcript is
-                # correct in both modes.
-                final_speaker_count = len({line.speaker_name for line in await repo.get_lines()})
+                # *new* file, undercounting a chronicle that already had others. The
+                # lines that were already there were read above, so union-ing the two
+                # sets of names costs nothing and beats reading the whole transcript
+                # back just to count it.
+                final_speaker_count = len(
+                    {line.speaker_name for line in existing_lines} | set(speaker_map)
+                )
             except Exception:
                 await session.rollback()
                 raise

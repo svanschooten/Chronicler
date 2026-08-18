@@ -106,9 +106,7 @@ async def test_import_transcript_without_a_chronicle_creates_one_and_queues(
     chronicle_service = AsyncMock()
     chronicle_service.create_chronicle.return_value = Chronicle(title="transcript")
     task_service = AsyncMock()
-    coordinator = make_coordinator(
-        chronicle_service=chronicle_service, task_service=task_service
-    )
+    coordinator = make_coordinator(chronicle_service=chronicle_service, task_service=task_service)
 
     await coordinator.import_transcript(
         None,
@@ -125,15 +123,11 @@ async def test_import_transcript_without_a_chronicle_creates_one_and_queues(
 
 
 @pytest.mark.asyncio
-async def test_import_transcript_passes_through_the_parse_options(
-    make_coordinator, picked_file
-):
+async def test_import_transcript_passes_through_the_parse_options(make_coordinator, picked_file):
     task_service = AsyncMock()
     transcript_service = AsyncMock()
     transcript_service.get_transcript.return_value = []
-    coordinator = make_coordinator(
-        task_service=task_service, transcript_service=transcript_service
-    )
+    coordinator = make_coordinator(task_service=task_service, transcript_service=transcript_service)
     options = TranscriptImportOptions(
         regex=r"^\[(\d\d:\d\d:\d\d)\] ([A-Za-z]+):\s*(.*)$",
         speaker_group=2,
@@ -162,9 +156,7 @@ async def test_import_transcript_into_an_empty_chronicle_skips_the_prompt(
     task_service = AsyncMock()
     transcript_service = AsyncMock()
     transcript_service.get_transcript.return_value = []
-    coordinator = make_coordinator(
-        task_service=task_service, transcript_service=transcript_service
-    )
+    coordinator = make_coordinator(task_service=task_service, transcript_service=transcript_service)
 
     await coordinator.import_transcript(
         uuid4(), str(picked_file("t.txt")), TranscriptImportOptions(), _never_asked
@@ -186,9 +178,7 @@ async def test_import_transcript_over_an_existing_transcript_honours_the_choice(
     task_service = AsyncMock()
     transcript_service = AsyncMock()
     transcript_service.get_transcript.return_value = [MagicMock()]
-    coordinator = make_coordinator(
-        task_service=task_service, transcript_service=transcript_service
-    )
+    coordinator = make_coordinator(task_service=task_service, transcript_service=transcript_service)
     ask = AsyncMock(return_value=choice)
 
     message = await coordinator.import_transcript(
@@ -228,9 +218,7 @@ async def test_link_chronicle_does_not_stage_the_external_file(
 
 
 @pytest.mark.asyncio
-async def test_link_chronicle_names_it_after_the_containing_directory(
-    make_coordinator, tmp_path
-):
+async def test_link_chronicle_names_it_after_the_containing_directory(make_coordinator, tmp_path):
     external_db = tmp_path / "Emberfall session 14" / "project.db"
     external_db.parent.mkdir(parents=True)
     external_db.write_text("db")
@@ -247,7 +235,7 @@ async def test_link_chronicle_names_it_after_the_containing_directory(
 async def test_link_chronicle_falls_back_to_the_filename_inside_a_chronicles_dir(
     make_coordinator, tmp_path
 ):
-    """"chronicles" is the generic container directory, not a name worth showing."""
+    """ "chronicles" is the generic container directory, not a name worth showing."""
     external_db = tmp_path / "chronicles" / "session-14.db"
     external_db.parent.mkdir(parents=True)
     external_db.write_text("db")

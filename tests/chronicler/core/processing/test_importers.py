@@ -106,3 +106,34 @@ def test_regex_importer_without_timestamp_group_still_uses_synthetic_index():
 
     assert lines[0].start_time == 0.0
     assert lines[1].start_time == 1.0
+
+
+def test_regex_importer_applies_start_offset_to_synthetic_indices():
+    """Appending to an existing transcript needs the new lines ordered after it. The
+    offset is a parse-time input, not something the caller shifts onto the lines
+    afterwards - the importer already knows where the file starts."""
+    content = "Alice: Hello\nBob: Hi Alice"
+    regex = r"^([A-Za-z]+):\s*(.*)$"
+    importer = RegexImporter(regex, speaker_group=1, text_group=2)
+    lines = importer.parse(content, start_offset=10.0)
+
+    assert [line.start_time for line in lines] == [10.0, 11.0]
+    assert [line.end_time for line in lines] == [11.0, 12.0]
+
+
+def test_regex_importer_applies_start_offset_to_real_timestamps():
+    content = "[00:00:05] Alice: Hello\n[00:00:12] Bob: Hi Alice"
+    regex = r"^\[(\d\d:\d\d:\d\d)\] ([A-Za-z]+):\s*(.*)$"
+    importer = RegexImporter(regex, speaker_group=2, text_group=3, timestamp_group=1)
+    lines = importer.parse(content, start_offset=100.0)
+
+    assert [line.start_time for line in lines] == [105.0, 112.0]
+    # End times are still derived from the following line's start, which is already
+    # offset - the offset is never applied twice.
+    assert [line.end_time for line in lines] == [112.0, 112.0]
+
+
+def test_regex_importer_start_offset_defaults_to_zero():
+    content = "Alice: Hello\nBob: Hi Alice"
+    importer = DefaultImporter()
+    assert [line.start_time for line in importer.parse(content)] == [0.0, 1.0]

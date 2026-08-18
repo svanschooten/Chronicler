@@ -154,9 +154,7 @@ class TasksView(ft.Column):
         return " · ".join(parts)
 
     def create_task_row(self, task: Task) -> ft.Container:
-        state_color = (
-            self.colors.accent if task.status == TaskStatus.WORKING else self.colors.muted
-        )
+        state_color = self.colors.accent if task.status == TaskStatus.WORKING else self.colors.muted
 
         details: list[ft.Control] = [
             ft.Text(task.type.value, weight=ft.FontWeight.BOLD, color=self.colors.text),

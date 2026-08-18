@@ -33,15 +33,18 @@ def _get_model(model_size: str) -> Any:
 
 
 def transcribe_audio(
-    file_path: str, model_size: str = DEFAULT_MODEL_SIZE
+    file_path: str, speaker_name: str, model_size: str = DEFAULT_MODEL_SIZE
 ) -> list[TranscriptLine]:
     """Synchronous and CPU-bound - callers on an event loop (see
     WorkerHandlers.handle_transcribe) must run this via asyncio.to_thread(), not
     await it directly, or a long transcription blocks everything else sharing that
     loop (the desktop UI, in full-stack mode).
 
-    faster-whisper doesn't diarize, so every segment gets the same generic speaker
-    label - real speaker separation is future work (see TODO.md).
+    faster-whisper doesn't diarize, so every segment in one file belongs to the same
+    speaker - `speaker_name` says which, since one audio source is one participant's
+    own track and the caller already knows whose. Splitting a mixed recording into
+    per-speaker segments is future work (see TODO.md); until then this parameter is
+    what makes the output correctly attributed rather than generically labelled.
     """
     model = _get_model(model_size)
     segments, _info = model.transcribe(file_path)
@@ -53,7 +56,7 @@ def transcribe_audio(
             continue
         lines.append(
             TranscriptLine(
-                speaker_name="Speaker",
+                speaker_name=speaker_name,
                 text=text,
                 start_time=segment.start,
                 end_time=segment.end,

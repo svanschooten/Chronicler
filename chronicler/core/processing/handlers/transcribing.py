@@ -31,13 +31,12 @@ class TranscribeHandler(HandlerBase):
         )
 
         logger.info(
-            f"Transcribing audio {file_path} for chronicle {chronicle_id} "
-            f"(speaker: {speaker_name})"
+            f"Transcribing audio {file_path} for chronicle {chronicle_id} (speaker: {speaker_name})"
         )
 
         await update_progress(10)
 
-        lines = await self._transcribe(str(resolved_path))
+        lines = await self._transcribe(str(resolved_path), speaker_name)
         logger.info(f"Transcribed {len(lines)} segments from {resolved_path.name}")
 
         await update_progress(70)
@@ -53,12 +52,16 @@ class TranscribeHandler(HandlerBase):
             try:
                 # One audio source = one speaker's track (see queue_transcribe) - only
                 # that speaker's previous lines are replaced, not the whole transcript,
-                # so other speakers' already-transcribed tracks survive.
+                # so other speakers' already-transcribed tracks survive. Resolved here
+                # rather than from the transcribed lines because the replacement has to
+                # happen even when the track turned out to be silent.
                 speaker = await repo.get_or_create_speaker(speaker_name)
                 await repo.delete_lines_by_speaker(speaker.id)
-                for line in lines:
-                    line.speaker_id = speaker.id
-                    line.speaker_name = speaker_name
+
+                # The lines already carry the right speaker_name - _transcribe was told
+                # whose track this is. All that's left is the speaker row's id, which
+                # only the database can supply.
+                await self.attach_speakers(repo, lines)
                 await repo.add_lines(lines)
                 await session.commit()
 
@@ -67,9 +70,7 @@ class TranscribeHandler(HandlerBase):
                 # the one just transcribed.
                 all_lines = await repo.get_lines()
                 final_speaker_count = len({line.speaker_name for line in all_lines})
-                total_duration_seconds = max(
-                    (line.end_time for line in all_lines), default=0.0
-                )
+                total_duration_seconds = max((line.end_time for line in all_lines), default=0.0)
             except Exception:
                 await session.rollback()
                 raise
@@ -84,7 +85,7 @@ class TranscribeHandler(HandlerBase):
         )
 
     @staticmethod
-    async def _transcribe(path: str):
+    async def _transcribe(path: str, speaker_name: str):
         # Imported lazily so the whole app doesn't require the optional
         # 'transcription' extra just to start, and so the (large) model is only ever
         # downloaded on first real use.
@@ -99,7 +100,7 @@ class TranscribeHandler(HandlerBase):
         # transcribe_audio is synchronous and CPU-bound (potentially minutes for a long
         # recording) - run it off the event loop, which in desktop full-stack mode is
         # shared with the UI itself.
-        return await asyncio.to_thread(transcribe_audio, path)
+        return await asyncio.to_thread(transcribe_audio, path, speaker_name)
 
     async def _backfill_metadata(
         self, chronicle_id: UUID, speakers_count: int, duration_seconds: float

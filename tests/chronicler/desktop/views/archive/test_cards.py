@@ -80,9 +80,7 @@ def test_card_actions_bind_async_handlers_directly_and_carry_their_data():
 
     actions = [
         c
-        for c in find_controls(
-            card, lambda c: isinstance(c, (ft.PopupMenuItem, ft.IconButton))
-        )
+        for c in find_controls(card, lambda c: isinstance(c, (ft.PopupMenuItem, ft.IconButton)))
         if getattr(c, "on_click", None)
     ]
     # Import Audio / Import Transcript menu items, plus Edit, Clean, Identify

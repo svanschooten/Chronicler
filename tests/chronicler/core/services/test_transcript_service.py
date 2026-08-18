@@ -3,7 +3,6 @@
 Plain-text export has its own module (test_transcript_export.py).
 """
 
-
 import pytest
 
 from chronicler.core.database_manager import DatabaseManager
@@ -159,12 +158,8 @@ async def test_delete_lines_by_speaker_leaves_other_speakers_untouched(tmp_path)
             bob = await repo.get_or_create_speaker("Bob")
             await repo.add_lines(
                 [
-                    TranscriptLine(
-                        speaker_id=alice.id, start_time=0.0, end_time=1.0, text="Hi"
-                    ),
-                    TranscriptLine(
-                        speaker_id=bob.id, start_time=0.5, end_time=1.5, text="Hello"
-                    ),
+                    TranscriptLine(speaker_id=alice.id, start_time=0.0, end_time=1.0, text="Hi"),
+                    TranscriptLine(speaker_id=bob.id, start_time=0.5, end_time=1.5, text="Hello"),
                 ]
             )
             await session.commit()

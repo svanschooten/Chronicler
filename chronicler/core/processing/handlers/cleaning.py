@@ -30,8 +30,12 @@ class CleanHandler(HandlerBase):
 
                 await update_progress(70)
 
+                # No attach_speakers here (contrast with the import handler): these
+                # lines came out of this same database, so they already carry the
+                # speaker_id of a row that delete_all_lines() leaves in place.
+                # Resolving each name back to that same id would be a query per
+                # speaker to learn what the lines already say.
                 await repo.delete_all_lines()
-                speaker_map = await self.attach_speakers(repo, cleaned_lines)
                 await repo.add_lines(cleaned_lines)
                 await session.commit()
             except Exception:
@@ -39,12 +43,13 @@ class CleanHandler(HandlerBase):
                 raise
 
         # Cleaning only ever merges or drops lines from one existing transcript, so
-        # the speaker map it just built covers the whole thing - no need to re-read
+        # the names on the cleaned lines cover the whole thing - no need to re-read
         # every line back the way an append-capable import does.
-        await self.backfill_speakers_count(chronicle_id, len(speaker_map))
+        speakers_count = len({line.speaker_name for line in cleaned_lines})
+        await self.backfill_speakers_count(chronicle_id, speakers_count)
 
         await update_progress(100)
         logger.info(
             f"Transcript clean finished for chronicle {chronicle_id}: "
-            f"{len(cleaned_lines)} lines, {len(speaker_map)} speakers"
+            f"{len(cleaned_lines)} lines, {speakers_count} speakers"
         )

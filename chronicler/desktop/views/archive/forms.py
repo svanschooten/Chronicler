@@ -71,9 +71,7 @@ class EditChronicleForm(OverlayForm):
     def __init__(self, on_cancel, on_save):
         self.title_field = ft.TextField(label="Title")
         self.description_field = ft.TextField(label="Description", multiline=True)
-        self.kind_field = ft.TextField(
-            label="Kind", hint_text="e.g. Podcast, D&D session, Meeting"
-        )
+        self.kind_field = ft.TextField(label="Kind", hint_text="e.g. Podcast, D&D session, Meeting")
         self.duration_field = ft.TextField(label="Duration", hint_text="e.g. 1h 24m")
         super().__init__(
             ft.AlertDialog(

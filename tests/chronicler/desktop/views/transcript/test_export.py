@@ -48,9 +48,7 @@ def test_menu_offers_plain_text_now_and_signposts_the_rest():
 
 
 @pytest.mark.asyncio
-async def test_export_writes_the_rendered_transcript_to_the_chosen_file(
-    make_exporter, tmp_path
-):
+async def test_export_writes_the_rendered_transcript_to_the_chosen_file(make_exporter, tmp_path):
     transcript_service = AsyncMock()
     transcript_service.export_plaintext.return_value = "Alice: hi\nBob: hello"
     exporter, picker = make_exporter(transcript_service=transcript_service)
@@ -144,9 +142,7 @@ async def test_export_reports_when_there_is_no_picker_yet(make_exporter):
     ],
 )
 def test_default_file_stem_strips_path_unsafe_characters(title, expected):
-    exporter = TranscriptExporter(
-        Chronicle(title=title), AsyncMock(), MagicMock(), lambda: None
-    )
+    exporter = TranscriptExporter(Chronicle(title=title), AsyncMock(), MagicMock(), lambda: None)
 
     assert exporter.default_file_stem() == expected
 

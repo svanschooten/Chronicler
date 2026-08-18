@@ -60,9 +60,7 @@ class SettingsView(ft.Column):
                 self.setting_card(
                     connection_title,
                     connection_description,
-                    ft.Text(
-                        connection_badge, weight=ft.FontWeight.BOLD, color=self.colors.accent
-                    ),
+                    ft.Text(connection_badge, weight=ft.FontWeight.BOLD, color=self.colors.accent),
                 ),
             ],
         )

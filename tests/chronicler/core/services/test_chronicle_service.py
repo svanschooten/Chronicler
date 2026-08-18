@@ -129,4 +129,3 @@ async def test_add_audio_source_avoids_overwriting_same_name(tmp_path):
     assert result == str(sources_dir / "recording (1).mp3")
     assert (sources_dir / "recording.mp3").read_bytes() == b"existing track"
     assert (sources_dir / "recording (1).mp3").read_bytes() == b"new track"
-

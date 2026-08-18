@@ -108,9 +108,7 @@ def test_cors_does_not_combine_wildcard_with_credentials():
     server = RpcServer(container, services=[], api_key="test-key")
     app = server.build()
 
-    cors_middlewares = [
-        m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"
-    ]
+    cors_middlewares = [m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"]
     assert len(cors_middlewares) == 1
     assert cors_middlewares[0].kwargs["allow_credentials"] is False
 
@@ -220,9 +218,7 @@ async def test_upload_rejects_path_traversal_filename(tmp_path):
             "..\\..\\windows\\system32\\config",
         ):
             files = {"file": (evil_name, io.BytesIO(b"data"), "application/octet-stream")}
-            response = await client.post(
-                "/upload", files=files, headers={"X-API-Key": "test-key"}
-            )
+            response = await client.post("/upload", files=files, headers={"X-API-Key": "test-key"})
             assert response.status_code == 200
             result_path = Path(response.json()["file_path"]).resolve()
             assert result_path.is_relative_to(upload_dir.resolve()), evil_name
@@ -252,9 +248,7 @@ async def test_upload_same_filename_twice_no_collision(tmp_path):
         paths = []
         for _ in range(2):
             files = {"file": ("session.txt", io.BytesIO(b"hello"), "text/plain")}
-            response = await client.post(
-                "/upload", files=files, headers={"X-API-Key": "test-key"}
-            )
+            response = await client.post("/upload", files=files, headers={"X-API-Key": "test-key"})
             assert response.status_code == 200
             paths.append(response.json()["file_path"])
 

@@ -163,9 +163,7 @@ async def test_export_plaintext_with_timestamps_prefixes_and_aligns(tmp_path):
             longhand = await repo.get_or_create_speaker("Longhand")
             await repo.add_lines(
                 [
-                    TranscriptLine(
-                        speaker_id=gm.id, start_time=65.0, end_time=66.0, text="Hi"
-                    ),
+                    TranscriptLine(speaker_id=gm.id, start_time=65.0, end_time=66.0, text="Hi"),
                     TranscriptLine(
                         speaker_id=longhand.id,
                         start_time=70.0,
@@ -213,9 +211,7 @@ async def test_export_plaintext_wraps_long_merged_lines_with_hanging_indent(tmp_
             repo = SQLiteTranscriptRepository(project_session)
             speaker = await repo.get_or_create_speaker("GM")
             await repo.add_line(
-                TranscriptLine(
-                    speaker_id=speaker.id, start_time=0.0, end_time=1.0, text=long_text
-                )
+                TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text=long_text)
             )
             await project_session.commit()
 
@@ -252,9 +248,7 @@ async def test_export_plaintext_drops_blank_lines(tmp_path):
             await repo.add_lines(
                 [
                     TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Hi"),
-                    TranscriptLine(
-                        speaker_id=speaker.id, start_time=1.0, end_time=2.0, text="   "
-                    ),
+                    TranscriptLine(speaker_id=speaker.id, start_time=1.0, end_time=2.0, text="   "),
                 ]
             )
             await project_session.commit()

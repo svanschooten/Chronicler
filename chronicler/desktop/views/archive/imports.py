@@ -67,9 +67,7 @@ class ImportCoordinator:
         staged_path = await self.stage_file(file_path)
 
         if chronicle_id is not None:
-            await self.chronicle_service.add_audio_source(
-                chronicle_id, staged_path, original_name
-            )
+            await self.chronicle_service.add_audio_source(chronicle_id, staged_path, original_name)
             return f"Added audio source '{original_name}'"
 
         title = original_name.rsplit(".", 1)[0]

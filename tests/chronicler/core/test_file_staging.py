@@ -123,9 +123,7 @@ async def test_remote_file_stager_uploads_and_returns_server_path(tmp_path):
             stager = RemoteFileStager("http://upstream", "secret-key", client=client)
             staged_path = await stager.stage(str(source_file))
 
-        assert Path(staged_path).resolve().is_relative_to(
-            db_manager.get_imports_path().resolve()
-        )
+        assert Path(staged_path).resolve().is_relative_to(db_manager.get_imports_path().resolve())
         assert Path(staged_path).name != "transcript.txt"
         assert Path(staged_path).read_text() == "Alice: hi\n"
     finally:

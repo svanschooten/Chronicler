@@ -10,7 +10,6 @@ from chronicler.core.repositories import TranscriptRepository
 
 
 class SQLiteTranscriptRepository(TranscriptRepository):
-
     def __init__(self, session: AsyncSession):
         self.session = session
 

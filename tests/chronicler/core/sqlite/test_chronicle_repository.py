@@ -133,9 +133,7 @@ async def test_delete_chronicle_cascades_tasks_and_tags(async_session):
     await chronicle_repo.add_tag(chronicle.id, "Transcript")
     task = await task_repo.create(Task(type=TaskType.IMPORT, chronicle_id=chronicle.id))
     other_chronicle = await chronicle_repo.create(Chronicle(title="Untouched"))
-    other_task = await task_repo.create(
-        Task(type=TaskType.IMPORT, chronicle_id=other_chronicle.id)
-    )
+    other_task = await task_repo.create(Task(type=TaskType.IMPORT, chronicle_id=other_chronicle.id))
 
     await chronicle_repo.delete(chronicle.id)
 
@@ -169,9 +167,7 @@ async def test_search_chronicles(async_session):
 @pytest.mark.asyncio
 async def test_search_matches_the_description(async_session):
     repo = SQLiteChronicleRepository(async_session)
-    await repo.create(
-        Chronicle(title="Weekly sync", description="Roadmap and release priorities")
-    )
+    await repo.create(Chronicle(title="Weekly sync", description="Roadmap and release priorities"))
     await repo.create(Chronicle(title="Interview", description="Coastal childhood"))
 
     results = await repo.search("roadmap")

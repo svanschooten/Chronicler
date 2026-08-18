@@ -8,8 +8,13 @@ from chronicler.core.processing.regex_guard import assert_safe_pattern
 
 class Importer(ABC):
     @abstractmethod
-    def parse(self, content: str) -> list[TranscriptLine]:
-        pass
+    def parse(self, content: str, start_offset: float = 0.0) -> list[TranscriptLine]:
+        """`start_offset` is where this file begins on the chronicle's timeline -
+        non-zero when appending to a transcript that already has lines. It's a
+        parse-time input rather than something the caller shifts onto the returned
+        lines, so every line is built with its final timing (see
+        ImportHandler.handle_import).
+        """
 
 
 class RegexImporter(Importer):
@@ -29,7 +34,7 @@ class RegexImporter(Importer):
         self.text_group = text_group
         self.timestamp_group = timestamp_group
 
-    def parse(self, content: str) -> list[TranscriptLine]:
+    def parse(self, content: str, start_offset: float = 0.0) -> list[TranscriptLine]:
         # current_text's lines are joined with "\n", not " ": the source's own line
         # breaks within one speaker's turn are meaningful structure (see export -
         # TranscriptService.export_plaintext prints each as its own indented line
@@ -41,7 +46,7 @@ class RegexImporter(Importer):
         transcript_lines: list[TranscriptLine] = []
         current_speaker: str | None = None
         current_text: list[str] = []
-        current_start_time = 0.0
+        current_start_time = start_offset
 
         def flush_current_turn() -> None:
             if current_speaker:
@@ -64,7 +69,7 @@ class RegexImporter(Importer):
                 current_speaker = match.group(self.speaker_group).strip()
                 current_text = [match.group(self.text_group).strip()]
                 if self.timestamp_group is not None:
-                    current_start_time = parse_timestamp(
+                    current_start_time = start_offset + parse_timestamp(
                         match.group(self.timestamp_group).strip()
                     )
             elif line.startswith(" ") or line.startswith("\t"):
@@ -95,8 +100,8 @@ class RegexImporter(Importer):
             # handle_import's "append" mode a meaningful offset to build on (see
             # WorkerHandlers.handle_import).
             for index, transcript_line in enumerate(transcript_lines):
-                transcript_line.start_time = float(index)
-                transcript_line.end_time = float(index + 1)
+                transcript_line.start_time = start_offset + index
+                transcript_line.end_time = start_offset + index + 1
 
         return transcript_lines
 

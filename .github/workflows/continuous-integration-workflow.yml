@@ -45,6 +45,13 @@ jobs:
     name: Quality Control
     needs: setup
     runs-on: ubuntu-latest
+    # pull-requests: write is only for the advisory formatting comment below. Note
+    # that GITHUB_TOKEN is read-only for PRs from forks and from Dependabot, so that
+    # step is expected to be a no-op there - it is allowed to fail rather than being
+    # skipped, so the reason stays visible in the run.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         name: Checkout Repository
@@ -67,6 +74,87 @@ jobs:
       - name: Check Mypy
         run: |
           .venv/bin/mypy chronicler tests
+
+      # Advisory, not a gate: formatting has never been enforced here, so drift
+      # predates any one PR and failing the build on it would block unrelated work.
+      # This reports the drift instead. Drop the continue-on-error once the tree has
+      # stayed clean long enough to be worth defending.
+      - name: Check Ruff Format (advisory)
+        id: ruff-format
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          .venv/bin/ruff format --check chronicler tests | tee ruff-format.txt
+
+      - name: Report Formatting Drift
+        if: always()
+        run: |
+          {
+            echo "## Ruff format (advisory)"
+            echo
+            if [ "${{ steps.ruff-format.outcome }}" = "success" ]; then
+              echo "No drift - \`ruff format --check\` is clean."
+            else
+              echo "\`ruff format\` would reformat the files below. **This does not fail CI.**"
+              echo
+              echo '```'
+              grep '^Would reformat:' ruff-format.txt || cat ruff-format.txt
+              echo '```'
+              echo
+              echo "Run \`ruff format chronicler tests\` to clear it."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Upsert rather than append: one comment per PR, rewritten on every run, so a
+      # branch that gets formatted mid-review ends up with an accurate comment
+      # instead of a pile of stale ones.
+      - name: Upsert Formatting Comment
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          OUTCOME: ${{ steps.ruff-format.outcome }}
+        run: |
+          MARKER='<!-- chronicler-ci: ruff-format -->'
+
+          EXISTING=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+            --jq "map(select(.body | contains(\"$MARKER\"))) | .[0].id // empty" | head -n1)
+
+          if [ "$OUTCOME" = "success" ]; then
+            # A clean PR gets no comment at all - but if an earlier run on this branch
+            # left one, it gets corrected rather than left there contradicting itself.
+            if [ -z "$EXISTING" ]; then
+              echo "Formatting clean and no existing comment - nothing to post."
+              exit 0
+            fi
+            {
+              echo "$MARKER"
+              echo "**Ruff format:** clean - the drift reported earlier on this branch is gone."
+            } > comment.md
+          else
+            {
+              echo "$MARKER"
+              echo "**Ruff format:** \`ruff format\` would reformat the files below."
+              echo "Advisory only - this does not fail CI."
+              echo
+              echo '```'
+              grep '^Would reformat:' ruff-format.txt || true
+              echo '```'
+              echo
+              echo "Run \`ruff format chronicler tests\` to clear it."
+            } > comment.md
+          fi
+
+          jq -Rs '{body: .}' comment.md > payload.json
+
+          if [ -n "$EXISTING" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$EXISTING" \
+              --input payload.json --silent
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              --input payload.json --silent
+          fi
 
   tests:
     name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})

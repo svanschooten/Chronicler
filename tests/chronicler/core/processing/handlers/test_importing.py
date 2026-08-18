@@ -9,6 +9,7 @@ import pytest
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, Task, TaskType
 from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.importers import RegexImporter
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
 
 
@@ -38,6 +39,7 @@ async def test_handle_import_rejects_file_path_outside_imports_dir(tmp_path):
     finally:
         await db_manager.close_all()
 
+
 @pytest.mark.asyncio
 async def test_handle_import_rejects_traversal_relative_to_imports_dir(tmp_path):
     db_manager = DatabaseManager(tmp_path)
@@ -59,6 +61,7 @@ async def test_handle_import_rejects_traversal_relative_to_imports_dir(tmp_path)
             await handlers.handle_import(task, _noop_progress)
     finally:
         await db_manager.close_all()
+
 
 @pytest.mark.asyncio
 async def test_handle_import_accepts_file_path_inside_imports_dir(tmp_path):
@@ -87,6 +90,7 @@ async def test_handle_import_accepts_file_path_inside_imports_dir(tmp_path):
             assert len(lines) == 2
     finally:
         await db_manager.close_all()
+
 
 @pytest.mark.asyncio
 async def test_handle_import_with_timestamp_group_uses_real_seconds(tmp_path):
@@ -124,6 +128,7 @@ async def test_handle_import_with_timestamp_group_uses_real_seconds(tmp_path):
         assert [line.start_time for line in lines] == [5.0, 60.0]
     finally:
         await db_manager.close_all()
+
 
 @pytest.mark.asyncio
 async def test_handle_import_rolls_back_on_failure(tmp_path):
@@ -168,6 +173,7 @@ async def test_handle_import_rolls_back_on_failure(tmp_path):
     finally:
         await db_manager.close_all()
 
+
 @pytest.mark.asyncio
 async def test_handle_import_tags_chronicle_and_backfills_speaker_count(tmp_path):
     db_manager = DatabaseManager(tmp_path)
@@ -196,6 +202,7 @@ async def test_handle_import_tags_chronicle_and_backfills_speaker_count(tmp_path
             assert [t.name for t in updated.tags] == ["Transcript"]
     finally:
         await db_manager.close_all()
+
 
 @pytest.mark.asyncio
 async def test_handle_import_append_mode_keeps_existing_lines_and_orders_after(tmp_path):
@@ -234,6 +241,7 @@ async def test_handle_import_append_mode_keeps_existing_lines_and_orders_after(t
     finally:
         await db_manager.close_all()
 
+
 @pytest.mark.asyncio
 async def test_handle_import_without_append_still_overwrites(tmp_path):
     db_manager = DatabaseManager(tmp_path)
@@ -270,6 +278,7 @@ async def test_handle_import_without_append_still_overwrites(tmp_path):
     finally:
         await db_manager.close_all()
 
+
 @pytest.mark.asyncio
 async def test_handle_import_logs_parse_count_and_finish(tmp_path, caplog):
     """Regression test: previously the only log line was "Importing transcript
@@ -297,5 +306,102 @@ async def test_handle_import_logs_parse_count_and_finish(tmp_path, caplog):
         assert "Parsed 2 lines" in caplog.text
         assert "Transcript import finished" in caplog.text
         assert "2 lines, 2 speakers" in caplog.text
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_handle_import_append_hands_the_offset_to_the_importer(tmp_path):
+    """Where an appended file starts on the chronicle's timeline is known before a
+    single line is parsed - so it's a parse-time input, not a shift applied to every
+    line after the fact.
+    """
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    try:
+        handlers = WorkerHandlers(db_manager)
+        imports_dir = db_manager.get_imports_path()
+        chronicle_id = uuid4()
+
+        first_file = imports_dir / "part1.txt"
+        first_file.write_text("Alice: Hello\nBob: Hi\n")
+        await handlers.handle_import(
+            Task(
+                type=TaskType.IMPORT,
+                chronicle_id=chronicle_id,
+                data=json.dumps({"file_path": str(first_file)}),
+            ),
+            _noop_progress,
+        )
+
+        second_file = imports_dir / "part2.txt"
+        second_file.write_text("Carol: Later on\n")
+        second_task = Task(
+            type=TaskType.IMPORT,
+            chronicle_id=chronicle_id,
+            data=json.dumps({"file_path": str(second_file), "append": True}),
+        )
+
+        seen: dict[str, float] = {}
+        real_parse = RegexImporter.parse
+
+        def _spy(self, content, start_offset=0.0):
+            seen["start_offset"] = start_offset
+            return real_parse(self, content, start_offset=start_offset)
+
+        with patch.object(RegexImporter, "parse", _spy):
+            await handlers.handle_import(second_task, _noop_progress)
+
+        # The first file ends at 2.0 (two lines, synthetic 0->1 and 1->2).
+        assert seen["start_offset"] == 2.0
+
+        session = await db_manager.get_project_session(str(chronicle_id))
+        async with session:
+            repo = SQLiteTranscriptRepository(session)
+            lines = await repo.get_lines()
+
+        assert [line.start_time for line in lines] == [0.0, 1.0, 2.0]
+        assert [line.end_time for line in lines] == [1.0, 2.0, 3.0]
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_handle_import_without_append_parses_from_zero(tmp_path):
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    try:
+        handlers = WorkerHandlers(db_manager)
+        imports_dir = db_manager.get_imports_path()
+        chronicle_id = uuid4()
+
+        first_file = imports_dir / "part1.txt"
+        first_file.write_text("Alice: Hello\nBob: Hi\n")
+        await handlers.handle_import(
+            Task(
+                type=TaskType.IMPORT,
+                chronicle_id=chronicle_id,
+                data=json.dumps({"file_path": str(first_file)}),
+            ),
+            _noop_progress,
+        )
+
+        second_file = imports_dir / "part2.txt"
+        second_file.write_text("Carol: Replacement\n")
+        await handlers.handle_import(
+            Task(
+                type=TaskType.IMPORT,
+                chronicle_id=chronicle_id,
+                data=json.dumps({"file_path": str(second_file)}),
+            ),
+            _noop_progress,
+        )
+
+        session = await db_manager.get_project_session(str(chronicle_id))
+        async with session:
+            repo = SQLiteTranscriptRepository(session)
+            lines = await repo.get_lines()
+
+        assert [(line.start_time, line.end_time) for line in lines] == [(0.0, 1.0)]
     finally:
         await db_manager.close_all()

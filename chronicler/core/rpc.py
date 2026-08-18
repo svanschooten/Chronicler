@@ -77,9 +77,7 @@ class RpcServer:
             original_default = (
                 param.default if param.default is not inspect.Parameter.empty else ...
             )
-            new_param = param.replace(
-                default=Body(original_default, alias=param_name, embed=True)
-            )
+            new_param = param.replace(default=Body(original_default, alias=param_name, embed=True))
             new_params.append(new_param)
 
         new_sig = sig.replace(parameters=new_params)

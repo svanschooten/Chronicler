@@ -44,9 +44,7 @@ async def test_worker_session_is_separate_from_view_session(desktop_app):
 
 
 @pytest.mark.asyncio
-async def test_update_view_closes_previous_session_before_opening_next(
-    desktop_app, monkeypatch
-):
+async def test_update_view_closes_previous_session_before_opening_next(desktop_app, monkeypatch):
     close_calls = 0
     original_close = AsyncSession.close
 
@@ -185,8 +183,9 @@ def test_apply_theme_tolerates_controls_that_do_not_exist_yet():
     from chronicler.core.config import Settings
     from chronicler.desktop.theme import theme_colors
 
-    app = DesktopApp(build_runtime(Settings(server_url="http://x", api_key="k",
-                                            mode="desktop:thin_client")))
+    app = DesktopApp(
+        build_runtime(Settings(server_url="http://x", api_key="k", mode="desktop:thin_client"))
+    )
     app.page = MagicMock()
 
     app._apply_theme(False)
@@ -195,9 +194,7 @@ def test_apply_theme_tolerates_controls_that_do_not_exist_yet():
 
 
 @pytest.mark.asyncio
-async def test_on_dark_mode_change_rebuilds_current_view_with_new_colors(
-    desktop_app, monkeypatch
-):
+async def test_on_dark_mode_change_rebuilds_current_view_with_new_colors(desktop_app, monkeypatch):
     """Regression test: toggling dark mode used to only flip page.theme_mode - the
     content_area background and every view's hardcoded colors stayed exactly as dark
     as before, since views bake their colors in at construction time and nothing
@@ -376,9 +373,7 @@ async def test_thin_client_resolves_a_working_remote_service(tmp_path):
     async with archive_session:
         await SQLiteChronicleRepository(archive_session).create(Chronicle(title="Remote One"))
 
-    upstream_app = RpcServer(
-        upstream_container, services=[ChronicleService], api_key="key"
-    ).build()
+    upstream_app = RpcServer(upstream_container, services=[ChronicleService], api_key="key").build()
 
     try:
         settings = Settings(server_url="http://upstream", api_key="key", mode="desktop:thin_client")

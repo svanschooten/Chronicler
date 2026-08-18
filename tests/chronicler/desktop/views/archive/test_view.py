@@ -43,9 +43,7 @@ def _event(data=None):
 
 
 @pytest.mark.asyncio
-async def test_mount_registers_the_file_picker_as_a_service_not_an_overlay(
-    make_view, attach_page
-):
+async def test_mount_registers_the_file_picker_as_a_service_not_an_overlay(make_view, attach_page):
     """Regression test: FilePicker is a Service (flet.controls.services.service), not a
     visual control - the client fails with "Unknown control: FilePicker" if it's added
     to page.overlay, which expects renderable widgets.
@@ -264,9 +262,7 @@ async def test_save_edit_clicked_persists_the_edited_chronicle(make_view, attach
 
 
 @pytest.mark.asyncio
-async def test_save_edit_clicked_handles_a_chronicle_deleted_meanwhile(
-    make_view, attach_page
-):
+async def test_save_edit_clicked_handles_a_chronicle_deleted_meanwhile(make_view, attach_page):
     chronicle_service = AsyncMock()
     chronicle_service.get_chronicle.return_value = None
     view = make_view(chronicle_service=chronicle_service)
@@ -281,9 +277,7 @@ async def test_save_edit_clicked_handles_a_chronicle_deleted_meanwhile(
 
 
 @pytest.mark.asyncio
-async def test_delete_clicked_deletes_only_after_confirmation(
-    make_view, attach_page, monkeypatch
-):
+async def test_delete_clicked_deletes_only_after_confirmation(make_view, attach_page, monkeypatch):
     chronicle_service = AsyncMock()
     view = make_view(chronicle_service=chronicle_service)
     attach_page(ArchiveView)

@@ -6,6 +6,7 @@ what's being cleaned identical in shape to what the app actually produces.
 """
 
 import json
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -61,6 +62,7 @@ async def test_handle_clean_preserves_speaker_ids_across_runs(tmp_path):
     finally:
         await db_manager.close_all()
 
+
 @pytest.mark.asyncio
 async def test_handle_clean_backfills_speaker_count_without_retagging(tmp_path):
     db_manager = DatabaseManager(tmp_path)
@@ -94,6 +96,7 @@ async def test_handle_clean_backfills_speaker_count_without_retagging(tmp_path):
     finally:
         await db_manager.close_all()
 
+
 @pytest.mark.asyncio
 async def test_handle_clean_logs_line_counts_and_finish(tmp_path, caplog):
     db_manager = DatabaseManager(tmp_path)
@@ -119,5 +122,59 @@ async def test_handle_clean_logs_line_counts_and_finish(tmp_path, caplog):
         assert "Cleaning 3 lines" in caplog.text
         assert "Cleaned down to 2 lines" in caplog.text
         assert "Transcript clean finished" in caplog.text
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_handle_clean_reuses_the_speaker_ids_already_on_the_lines(tmp_path):
+    """Cleaning reads its lines straight out of the project database, so every one of
+    them already carries a resolved speaker_id. Looking the speaker up by name again
+    is a round-trip per speaker for an answer that's already in hand - and the ids it
+    stamps back are the ones that were there to begin with.
+    """
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    try:
+        handlers = WorkerHandlers(db_manager)
+        imports_dir = db_manager.get_imports_path()
+
+        transcript_file = imports_dir / "transcript.txt"
+        transcript_file.write_text("Alice: Hello\nAlice: there\nBob: Hi\n")
+
+        chronicle_id = uuid4()
+        import_task = Task(
+            type=TaskType.IMPORT,
+            chronicle_id=chronicle_id,
+            data=json.dumps({"file_path": str(transcript_file)}),
+        )
+        await handlers.handle_import(import_task, _noop_progress)
+
+        session = await db_manager.get_project_session(str(chronicle_id))
+        async with session:
+            repo = SQLiteTranscriptRepository(session)
+            ids_before = {line.speaker_name: line.speaker_id for line in await repo.get_lines()}
+
+        # Spying rather than stubbing: if the call does happen, the clean still
+        # behaves normally and the assertion below is what reports the problem.
+        looked_up: list[str] = []
+        real_get_or_create = SQLiteTranscriptRepository.get_or_create_speaker
+
+        async def _spy(self, name):
+            looked_up.append(name)
+            return await real_get_or_create(self, name)
+
+        clean_task = Task(type=TaskType.CLEAN, chronicle_id=chronicle_id)
+        with patch.object(SQLiteTranscriptRepository, "get_or_create_speaker", _spy):
+            await handlers.handle_clean(clean_task, _noop_progress)
+
+        assert looked_up == []
+
+        session = await db_manager.get_project_session(str(chronicle_id))
+        async with session:
+            repo = SQLiteTranscriptRepository(session)
+            ids_after = {line.speaker_name: line.speaker_id for line in await repo.get_lines()}
+
+        assert ids_after == ids_before
     finally:
         await db_manager.close_all()
