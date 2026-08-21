@@ -31,7 +31,7 @@ dependencies = [
     "SQLAlchemy>=2,<3",
     "aiosqlite>=0.20,<1",
     "PyYAML>=6,<7",
-    "alembic>=1.13,<2",
+    "alembic>=1.19.1,<2",
 ]
 
 [project.optional-dependencies]
