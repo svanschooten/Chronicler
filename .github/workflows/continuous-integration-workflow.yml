@@ -62,10 +62,23 @@ jobs:
           python-version: "3.12"
 
       - name: Restore virtualenv
+        id: restore-venv
         uses: actions/cache@v6
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+
+      # A cache miss here (eviction, or a cross-run race with the setup job) used to
+      # fail the whole job on "no such file: .venv/bin/ruff" - a green-or-red signal
+      # about infrastructure, not about the code. Same fallback the tests job has.
+      - name: Install Dependencies (Fallback)
+        if: steps.restore-venv.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install -r requirements-dev.txt
+          .venv/bin/pip install -e .
 
       - name: Check Ruff
         run: |

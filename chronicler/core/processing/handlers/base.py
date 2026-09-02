@@ -14,6 +14,7 @@ from typing import Any
 from uuid import UUID
 
 from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.file_staging import confine_to_directory
 from chronicler.core.models import Task, TranscriptLine
 from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.sqlite import SQLiteTranscriptRepository
@@ -58,12 +59,10 @@ class HandlerBase:
         The path arrives from the RPC caller and is not trustworthy on its own, so
         it's checked right at the point of access - which covers every caller
         regardless of how they obtained the string, not just ones that went through
-        the /upload endpoint.
+        the /upload endpoint. One implementation, in file_staging.py, shared with the
+        services that take a path over RPC too.
         """
-        resolved = Path(file_path).resolve()
-        if not resolved.is_relative_to(root.resolve()):
-            raise ValueError(f"file_path must be inside {description}: {file_path}")
-        return resolved
+        return confine_to_directory(file_path, root, description)
 
     async def project_path_for(self, chronicle_id: UUID) -> Path | None:
         """A linked chronicle's project.db lives wherever the user put it, outside the

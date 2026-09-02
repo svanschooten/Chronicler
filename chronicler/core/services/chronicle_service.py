@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import UUID
 
 from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.file_staging import confine_to_directory, safe_display_name
 from chronicler.core.models import Chronicle
 from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.rpc import service
@@ -59,9 +60,25 @@ class ChronicleService:
         transcription - importing a source and transcribing it are separate actions
         now (see TaskService.queue_transcribe), so tracks can be gathered first and
         transcribed - with a speaker assigned - whenever/in whatever order later.
+
+        Both caller-supplied strings are attacker-controlled over RPC (this is an
+        @service method), and both feed a `shutil.move`, so both are checked here
+        rather than trusted:
+
+        * `file_path` is confined to the workspace's imports directory - the same rule
+          ImportHandler.handle_import enforces, and where every legitimate caller's
+          staged file already lives (see file_staging.py). Without it, any path on the
+          server could be *moved* into the chronicle, which both destroys the original
+          and exposes its contents through the transcript.
+        * `original_name` is reduced to one path component. It is deliberately kept
+          readable rather than replaced with a uuid, so it cannot be allowed to contain
+          "../" and relocate the destination outside sources/.
         """
         sources_dir = self.db_manager.get_chronicle_sources_path(str(chronicle_id))
-        name = original_name or Path(file_path).name
+        resolved_source = confine_to_directory(
+            file_path, self.db_manager.get_imports_path(), "the imports directory"
+        )
+        name = safe_display_name(original_name or resolved_source.name, resolved_source.name)
         stem, suffix = Path(name).stem, Path(name).suffix
         dest = sources_dir / name
         counter = 1
@@ -69,6 +86,6 @@ class ChronicleService:
             dest = sources_dir / f"{stem} ({counter}){suffix}"
             counter += 1
 
-        shutil.move(file_path, dest)
+        shutil.move(resolved_source, dest)
         logger.info(f"Added audio source '{dest.name}' for chronicle {chronicle_id}")
         return str(dest)

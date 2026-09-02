@@ -24,6 +24,35 @@ def sanitize_stage_name(original_filename: str | None) -> str:
     return f"{uuid.uuid4().hex}{safe_suffix}"
 
 
+def confine_to_directory(file_path: str | Path, root: Path, description: str) -> Path:
+    """Resolve `file_path` and reject it if it lands outside `root`.
+
+    The one implementation of "this path came from an RPC caller, so it is not
+    trustworthy". Checked at the point of access rather than at submission, so it
+    covers every caller regardless of how they obtained the string - see
+    HandlerBase.confine_to, which delegates here.
+    """
+    resolved = Path(file_path).resolve()
+    if not resolved.is_relative_to(root.resolve()):
+        raise ValueError(f"file_path must be inside {description}: {file_path}")
+    return resolved
+
+
+def safe_display_name(original_filename: str | None, fallback: str) -> str:
+    """The caller-supplied name reduced to a single, harmless path component.
+
+    Unlike sanitize_stage_name this keeps the readable name - a chronicle's sources/
+    listing is meant to show "session-3-gm.wav", not a uuid - so it has to strip
+    everything that could make the name act as a path instead: directory separators
+    (POSIX and Windows), NT drive letters and ADS colons, and the "." / ".." entries.
+    """
+    name = Path((original_filename or "").replace("\\", "/")).name
+    name = name.replace(":", "_").strip()
+    if not name or name in (".", ".."):
+        return fallback
+    return name
+
+
 def stage_local_file(source_path: Path, imports_dir: Path) -> Path:
     """Copy a local file (e.g. one returned by a native file picker) into imports_dir
     under a fresh, safe name, and return the staged path. The source path itself is
