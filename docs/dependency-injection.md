@@ -63,3 +63,17 @@ own — `Container` builds it from what is already registered.
 accommodate the interface-to-implementation registration pattern it is designed for:
 mypy treats passing an ABC as the `type[T]` key as if `T` itself were being
 instantiated. This is tension in `Container`'s typing, not a bug in the registration.
+
+## Nothing session-shaped belongs on the root container
+
+`resolve` caches, and `create_scope()` copies the *recipes* rather than the results. So
+anything resolved on the root container lives as long as the process - which is right for
+a `DatabaseManager` and wrong for an `AsyncSession`.
+
+Resolving a service off the root is therefore enough to leak a session, because building
+it resolves its repository, which resolves a session. That is exactly what startup model
+discovery did; see [troubleshooting.md](troubleshooting.md).
+
+`cached(cls)` is the shutdown-side counterpart: it returns what a scope already built
+without building anything. `resolve` cannot be used for this, because asking it whether a
+session exists creates one.

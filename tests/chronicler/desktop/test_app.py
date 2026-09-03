@@ -24,7 +24,7 @@ async def desktop_app(tmp_path):
 
     yield app
 
-    await runtime.db_manager.close_all()
+    await app.cleanup(None)
 
 
 @pytest.mark.asyncio
@@ -407,8 +407,7 @@ async def test_refresh_models_caches_the_provider_listing(tmp_path):
 
     system = AsyncMock()
     system.list_models.return_value = ["qwen3", "llama3"]
-    original = runtime.resolver.resolve
-    runtime.resolver.resolve = lambda cls: system if cls is SystemService else original(cls)
+    runtime.resolver.register_instance(SystemService, system)
 
     await app.refresh_models()
 
@@ -426,8 +425,7 @@ async def test_refresh_models_survives_an_unreachable_provider(tmp_path):
 
     system = AsyncMock()
     system.list_models.side_effect = RuntimeError("connection refused")
-    original = runtime.resolver.resolve
-    runtime.resolver.resolve = lambda cls: system if cls is SystemService else original(cls)
+    runtime.resolver.register_instance(SystemService, system)
 
     await app.refresh_models()
 
@@ -453,8 +451,7 @@ async def test_refresh_models_also_learns_what_the_server_can_do(tmp_path):
     system.get_server_info.return_value = ServerInfo(
         version="9.9.9", capabilities=["import", "summarize"]
     )
-    original = runtime.resolver.resolve
-    runtime.resolver.resolve = lambda cls: system if cls is SystemService else original(cls)
+    runtime.resolver.register_instance(SystemService, system)
 
     await app.refresh_models()
 
@@ -474,9 +471,82 @@ async def test_unreachable_capabilities_leave_every_action_offered(tmp_path):
     system = AsyncMock()
     system.list_models.return_value = []
     system.get_server_info.side_effect = RuntimeError("connection refused")
-    original = runtime.resolver.resolve
-    runtime.resolver.resolve = lambda cls: system if cls is SystemService else original(cls)
+    runtime.resolver.register_instance(SystemService, system)
 
     await app.refresh_models()
 
     assert app.capabilities is None
+
+
+@pytest.mark.asyncio
+async def test_startup_discovery_does_not_leave_a_session_open(tmp_path):
+    """
+    Regression test: `refresh_models` resolved SystemService off the *root* container, so
+    the AsyncSession its repository needed was cached there for the life of the process -
+    with an open read transaction, and nothing to close it. At exit the garbage collector
+    terminated the connection mid-finalisation:
+
+        RuntimeError: greenlet is being finalized
+
+    Every other consumer resolves through a per-operation scope; this one has to as well.
+    """
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    await runtime.db_manager.init_archive()
+    app = DesktopApp(runtime)
+    try:
+        await app.refresh_models()
+
+        assert AsyncSession not in runtime.resolver._resolved_cache
+    finally:
+        await runtime.db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_startup_discovery_still_reports_what_it_found(tmp_path):
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    await runtime.db_manager.init_archive()
+    app = DesktopApp(runtime)
+    try:
+        await app.refresh_models()
+
+        assert app.capabilities is not None
+        assert "import" in app.capabilities
+    finally:
+        await runtime.db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_leaves_no_session_active_anywhere(tmp_path):
+    """What the shutdown error actually measures: an unreturned pooled connection."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    await runtime.db_manager.init_archive()
+    app = DesktopApp(runtime)
+    app._maybe_start_worker_manager()
+    await app.refresh_models()
+    await app.update_view()
+
+    await app.cleanup(None)
+
+    leaked = [
+        container._resolved_cache.get(AsyncSession)
+        for container in (runtime.resolver, app._view_scope)
+        if container is not None
+    ]
+    assert not [session for session in leaked if session is not None and session.is_active]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_stops_the_worker_task_rather_than_only_flagging_it(tmp_path):
+    """`stop()` sets a flag; the task itself has to be let go of, or it outlives cleanup."""
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    await runtime.db_manager.init_archive()
+    app = DesktopApp(runtime)
+    app._maybe_start_worker_manager()
+
+    await app.cleanup(None)
+
+    assert app._worker_task is None or app._worker_task.done()

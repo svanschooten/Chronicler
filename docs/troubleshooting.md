@@ -97,3 +97,35 @@ is reported as itself instead of as an empty dropdown.
 The install prompt only appears when `extras.can_install()` is true: inside a virtualenv,
 or when `site-packages` is writable. A read-only system Python gets the pip command to
 run by hand instead of a button that would fail. See [optional-extras.md](optional-extras.md).
+
+## "greenlet is being finalized" when closing the app
+
+```text
+ERROR sqlalchemy.pool - Exception terminating connection
+  RuntimeError: greenlet is being finalized
+SAWarning: The garbage collector is trying to clean up non-checked-in connection
+```
+
+This means a database session was still open when the process exited, so the garbage
+collector terminated its pooled connection during interpreter finalisation - by which
+point the greenlet machinery aiosqlite runs on is already gone. The error is a symptom of
+the leak, not of anything going wrong with the data: every write commits explicitly, and
+the leaked session was doing a read.
+
+The cause was `DesktopApp.refresh_models` resolving `SystemService` off the **root**
+container instead of a scope. `Container.resolve` caches, so the `AsyncSession` its
+repository needed was cached there for the life of the process - with a read transaction
+open, and nothing in `cleanup` to close it.
+
+Two rules came out of it, both now enforced by tests in
+`tests/chronicler/desktop/test_app.py`:
+
+* **Resolve through a scope, always.** The root container holds things meant to live for
+  the app's lifetime; a session is not one of them. See
+  [dependency-injection.md](dependency-injection.md).
+* **Check what a scope built, do not resolve it.** `Container.cached()` exists because
+  asking `resolve` whether a session exists would *create* one to answer, and that one
+  would then leak instead.
+
+`WorkerManager.stop()` only asks the loop to finish its current sleep, so `cleanup` now
+also holds the task handle and cancels it rather than leaving it to outlive the shutdown.

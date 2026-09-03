@@ -80,8 +80,23 @@ Driven by the static-analysis pass; findings and rationale in the audit artifact
 * [x] **Per-line delete confirms, quoting the line.** Transcript text is the one thing in
   a chronicle that cannot be regenerated — a re-transcription produces different words.
 
-1108 tests, 91% coverage; 1078 + 2 skipped with the extras hidden; ruff and mypy clean;
-thin-client check passes.
+#### Shutdown
+
+* [x] **A session leaked for the life of the process.** `refresh_models` resolved
+  `SystemService` off the root container, whose cache is never emptied, so its
+  repository's `AsyncSession` was held open - with a read transaction - until the garbage
+  collector terminated the connection at interpreter exit
+  (`RuntimeError: greenlet is being finalized`). Reproduced exactly, fixed by resolving
+  through a scope, and covered by four regression tests.
+* [x] **`Container.cached()`** - checking whether a scope built a session must not build
+  one to find out.
+* [x] **The worker task is cancelled, not just flagged.** `stop()` only asks the loop to
+  finish its current sleep.
+* [x] **The test suite is warning-free**, down from three SAWarnings that were hiding
+  exactly this class of leak.
+
+1112 tests, 91% coverage; 1082 + 2 skipped with the extras hidden; ruff and mypy clean;
+no warnings; thin-client check passes.
 
 ### Sprint 10 — the round of UI feedback (2026-09-03)
 

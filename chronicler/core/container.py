@@ -37,6 +37,17 @@ class Container:
         scope._factories = dict(self._factories)
         return scope
 
+    def cached(self, cls: type[T]) -> T | None:
+        """
+        What this scope already built for `cls`, without building it.
+
+        Shutdown needs this: asking `resolve` whether a session exists would create one
+        to answer the question, and then that one leaks instead.
+        """
+        if cls in self._explicit_instances:
+            return cast(T, self._explicit_instances[cls])
+        return cast(T | None, self._resolved_cache.get(cls))
+
     def resolve(self, cls: type[T]) -> T:
         if cls in self._explicit_instances:
             return self._explicit_instances[cls]

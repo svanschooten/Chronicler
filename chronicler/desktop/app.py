@@ -27,6 +27,15 @@ from chronicler.desktop.views.transcript import TranscriptView
 logger = logging.getLogger(__name__)
 
 
+async def close_scope(scope: "Container | RemoteContainer | None") -> None:
+    """Returns a resolution scope's session to the pool, if it ever built one."""
+    if not isinstance(scope, Container) or not scope.is_registered(AsyncSession):
+        return
+    session = scope.cached(AsyncSession)
+    if session is not None:
+        await session.close()
+
+
 class DesktopApp:
     def __init__(self, runtime: DesktopRuntime):
         self.state = AppState()
@@ -41,6 +50,7 @@ class DesktopApp:
         self.divider: ft.VerticalDivider | None = None
 
         self.worker_manager: WorkerManager | None = None
+        self._worker_task: asyncio.Task | None = None
         self._worker_session: AsyncSession | None = None
         self.event_bus: TaskEventBus | None = None
         self._unsubscribe_task_events: Callable[[], None] | None = None
@@ -111,18 +121,41 @@ class DesktopApp:
         self.worker_manager = worker_runtime.manager
         self._worker_session = worker_runtime.session
 
-        asyncio.create_task(self.worker_manager.run_forever())
+        self._worker_task = asyncio.create_task(self.worker_manager.run_forever())
 
     async def cleanup(self, e):
+        """
+        Every session this app opened has to be closed before the engines are disposed.
+        One left behind is terminated by the garbage collector at interpreter shutdown,
+        which is far too late for the greenlet machinery aiosqlite runs on - see
+        docs/troubleshooting.md.
+        """
         if self.worker_manager is not None:
             self.worker_manager.stop()
+        await self._stop_worker_task()
         if self._unsubscribe_task_events is not None:
             self._unsubscribe_task_events()
+
         await self._close_view_scope()
+        await close_scope(self.resolver)
         if self._worker_session is not None:
             await self._worker_session.close()
+            self._worker_session = None
         if self.db_manager is not None:
             await self.db_manager.close_all()
+
+    async def _stop_worker_task(self) -> None:
+        """`stop()` only asks the loop to finish its current sleep; this waits for it."""
+        task = self._worker_task
+        self._worker_task = None
+        if task is None or task.done():
+            return
+
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            logger.debug("Worker task stopped", exc_info=True)
 
     async def _on_task_completed(self, event: TaskCompletedEvent) -> None:
         """
@@ -170,25 +203,36 @@ class DesktopApp:
         """
         Asks the service layer what it can do, once, at startup.
 
+        Through a scope of its own, like every other consumer: resolving off the root
+        container cached its repository's session there for the life of the process,
+        holding an open read transaction that nothing ever closed.
+
         Both answers are the server's in thin-client mode - its extras and its model
         configuration decide what the buttons here should offer. `capabilities` stays None
         when the call fails, which every consumer reads as "assume it works" rather than
         greying out half the interface over an unrelated network hiccup.
         """
-        system = self.runtime.resolver.resolve(SystemService)
+        scope = (
+            self.resolver.create_scope() if isinstance(self.resolver, Container) else self.resolver
+        )
         try:
-            self.available_models = await system.list_models()
-            self.model_error = await system.model_error()
-        except Exception as error:
-            logger.warning("Could not list language models at startup", exc_info=True)
-            self.available_models = []
-            self.model_error = str(error)
+            system = scope.resolve(SystemService)
+            try:
+                self.available_models = await system.list_models()
+                self.model_error = await system.model_error()
+            except Exception as error:
+                logger.warning("Could not list language models at startup", exc_info=True)
+                self.available_models = []
+                self.model_error = str(error)
 
-        try:
-            self.capabilities = set((await system.get_server_info()).capabilities)
-        except Exception:
-            logger.warning("Could not read the service layer's capabilities", exc_info=True)
-            self.capabilities = None
+            try:
+                self.capabilities = set((await system.get_server_info()).capabilities)
+            except Exception:
+                logger.warning("Could not read the service layer's capabilities", exc_info=True)
+                self.capabilities = None
+        finally:
+            if scope is not self.resolver:
+                await close_scope(scope)
 
     async def on_locale_change(self, _locale: str):
         if self.sidebar is not None:
@@ -196,8 +240,7 @@ class DesktopApp:
         await self.update_view()
 
     async def _close_view_scope(self):
-        if self._view_scope is not None and self._view_scope.is_registered(AsyncSession):
-            await self._view_scope.resolve(AsyncSession).close()
+        await close_scope(self._view_scope)
         self._view_scope = None
 
     def _new_scope(self) -> Container | RemoteContainer:
