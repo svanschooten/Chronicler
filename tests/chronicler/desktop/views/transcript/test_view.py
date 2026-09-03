@@ -268,3 +268,72 @@ class TestChronicleActions:
         view = make_view()
 
         assert view.actions.can_summarize() is True
+
+
+class TestEditMode:
+    def test_it_opens_in_read_mode(self, make_view):
+        view = make_view()
+
+        assert view.editing is False
+        assert view.transcript_body.content is view.transcript_area
+
+    @pytest.mark.asyncio
+    async def test_toggling_swaps_in_the_editor(self, make_view, attach_page):
+        view = make_view()
+        attach_page(TranscriptView)
+        view.editor.load = AsyncMock()
+
+        await view.edit_toggled(MagicMock())
+
+        assert view.editing is True
+        assert view.transcript_body.content is view.editor
+        view.editor.load.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_toggling_back_returns_to_the_read_view(self, make_view, attach_page):
+        view = make_view()
+        attach_page(TranscriptView)
+        view.editor.load = AsyncMock()
+        view.load_transcript = AsyncMock()
+
+        await view.edit_toggled(MagicMock())
+        await view.edit_toggled(MagicMock())
+
+        assert view.editing is False
+        assert view.transcript_body.content is view.transcript_area
+        view.load_transcript.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_the_timestamp_checkbox_is_disabled_while_editing(self, make_view, attach_page):
+        """Edit rows always show their own timestamp, so the read-view toggle means nothing."""
+        view = make_view()
+        attach_page(TranscriptView)
+        view.editor.load = AsyncMock()
+
+        await view.edit_toggled(MagicMock())
+
+        assert view.timestamps_checkbox.disabled is True
+
+    @pytest.mark.asyncio
+    async def test_the_button_says_what_it_will_do_next(self, make_view, attach_page):
+        view = make_view()
+        attach_page(TranscriptView)
+        view.editor.load = AsyncMock()
+
+        assert view.edit_toggle.tooltip == "Edit the transcript"
+        await view.edit_toggled(MagicMock())
+        assert view.edit_toggle.tooltip == "Finish editing"
+
+    @pytest.mark.asyncio
+    async def test_a_reload_while_editing_does_not_rebuild_the_view(self, make_view, attach_page):
+        """Rebuilding would drop the user back into read mode mid-edit."""
+        rebuild = AsyncMock()
+        view = make_view(on_reload=rebuild)
+        attach_page(TranscriptView)
+        view.editor.load = AsyncMock()
+        view.load_transcript = AsyncMock()
+
+        await view.edit_toggled(MagicMock())
+        await view.reload()
+
+        rebuild.assert_not_awaited()

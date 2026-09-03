@@ -22,6 +22,7 @@ def make_panel():
             MagicMock(),
             overrides.get("available_models"),
             overrides.get("can_summarize"),
+            overrides.get("model_error"),
         )
         panel.summary_list.update = MagicMock()
         return panel, transcript_service
@@ -97,3 +98,42 @@ class TestGenerateGating:
         await panel.generate()
 
         task_service.queue_summarize.assert_not_awaited()
+
+
+class TestExplainingAnEmptyModelList:
+    @pytest.mark.asyncio
+    async def test_the_discovery_error_is_shown_when_there_are_no_models(
+        self, make_panel, attach_page
+    ):
+        """An unreachable gateway used to look identical to one with no models."""
+        import asyncio
+
+        panel, _ = make_panel(
+            available_models=lambda: [], model_error=lambda: "Could not reach http://localhost:8080"
+        )
+        page = attach_page(SummariesPanel)
+
+        task = asyncio.ensure_future(panel._ask_options([]))
+        await asyncio.sleep(0)
+
+        (dialog,), _ = page.show_dialog.call_args
+        assert "Could not reach" in dialog.content.controls[1].error_text
+
+        await dialog.actions[0].on_click(MagicMock())
+        await asyncio.wait_for(task, timeout=1)
+
+    @pytest.mark.asyncio
+    async def test_no_error_is_shown_when_models_were_found(self, make_panel, attach_page):
+        import asyncio
+
+        panel, _ = make_panel(model_error=lambda: "stale error")
+        page = attach_page(SummariesPanel)
+
+        task = asyncio.ensure_future(panel._ask_options(["qwen3"]))
+        await asyncio.sleep(0)
+
+        (dialog,), _ = page.show_dialog.call_args
+        assert dialog.content.controls[1].error_text is None
+
+        await dialog.actions[0].on_click(MagicMock())
+        await asyncio.wait_for(task, timeout=1)

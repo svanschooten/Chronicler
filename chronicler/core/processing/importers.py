@@ -30,55 +30,68 @@ class RegexImporter(Importer):
         self.timestamp_group = timestamp_group
 
     def parse(self, content: str, start_offset: float = 0.0) -> list[TranscriptLine]:
-        lines = content.splitlines()
-        transcript_lines: list[TranscriptLine] = []
-        current_speaker: str | None = None
-        current_text: list[str] = []
-        current_start_time = start_offset
+        turns = self._collect_turns(content, start_offset)
+        self._assign_times(turns, start_offset)
+        return turns
 
-        def flush_current_turn() -> None:
-            if current_speaker:
-                transcript_lines.append(
+    def _collect_turns(self, content: str, start_offset: float) -> list[TranscriptLine]:
+        """
+        One TranscriptLine per speaker turn.
+
+        A line that does not match the pattern continues the turn above it, indented or
+        not - wrapped transcripts and hand-edited ones both produce those.
+        """
+        turns: list[TranscriptLine] = []
+        speaker: str | None = None
+        text: list[str] = []
+        start_time = start_offset
+
+        def flush() -> None:
+            if speaker:
+                turns.append(
                     TranscriptLine(
-                        speaker_name=current_speaker,
-                        text="\n".join(current_text).strip(),
-                        start_time=current_start_time,
-                        end_time=current_start_time,
+                        speaker_name=speaker,
+                        text="\n".join(text).strip(),
+                        start_time=start_time,
+                        end_time=start_time,
                     )
                 )
 
-        for line in lines:
+        for line in content.splitlines():
             if not line.strip():
                 continue
 
             match = self.line_regex.match(line)
-            if match:
-                flush_current_turn()
-                current_speaker = match.group(self.speaker_group).strip()
-                current_text = [match.group(self.text_group).strip()]
-                if self.timestamp_group is not None:
-                    current_start_time = start_offset + parse_timestamp(
-                        match.group(self.timestamp_group).strip()
-                    )
-            elif line.startswith(" ") or line.startswith("\t"):
-                if current_speaker:
-                    current_text.append(line.strip())
-            else:
-                if current_speaker:
-                    current_text.append(line.strip())
+            if match is None:
+                if speaker:
+                    text.append(line.strip())
+                continue
 
-        flush_current_turn()
+            flush()
+            speaker = match.group(self.speaker_group).strip()
+            text = [match.group(self.text_group).strip()]
+            if self.timestamp_group is not None:
+                start_time = start_offset + parse_timestamp(
+                    match.group(self.timestamp_group).strip()
+                )
 
+        flush()
+        return turns
+
+    def _assign_times(self, turns: list[TranscriptLine], start_offset: float) -> None:
+        """
+        A turn runs until the next one starts. Without a timestamp group there are no real
+        times at all, so each turn gets one synthetic second - see docs/transcription.md
+        for why SRT export refuses those.
+        """
         if self.timestamp_group is not None:
-            for i, transcript_line in enumerate(transcript_lines):
-                if i + 1 < len(transcript_lines):
-                    transcript_line.end_time = transcript_lines[i + 1].start_time
-        else:
-            for index, transcript_line in enumerate(transcript_lines):
-                transcript_line.start_time = start_offset + index
-                transcript_line.end_time = start_offset + index + 1
+            for turn, following in zip(turns, turns[1:], strict=False):
+                turn.end_time = following.start_time
+            return
 
-        return transcript_lines
+        for index, turn in enumerate(turns):
+            turn.start_time = start_offset + index
+            turn.end_time = start_offset + index + 1
 
 
 class DefaultImporter(RegexImporter):

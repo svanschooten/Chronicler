@@ -180,12 +180,18 @@ DEFAULT_RECAP_PROMPT = (
 
 
 class SummarySettings(BaseModel):
-    """Prompts and limits for the SUMMARIZE task, overridable per task."""
+    """
+    Prompts and limits for the SUMMARIZE task, overridable per task.
+
+    `chunk_token_budget` is not the model's output limit - that is `llm.max_tokens`. This
+    is how much room a chunk's answer is assumed to need when deciding how large a chunk
+    may be. See docs/summarization.md.
+    """
 
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     chunk_prompt: str = DEFAULT_CHUNK_PROMPT
     recap_prompt: str = DEFAULT_RECAP_PROMPT
-    max_tokens: int = Field(default=1024, gt=0)
+    chunk_token_budget: int = Field(default=1024, gt=0)
     language: str | None = None
 
     @field_validator("system_prompt", "chunk_prompt", "recap_prompt")

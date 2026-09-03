@@ -30,10 +30,58 @@ client); the web client is a working reverse proxy over the server API.
 | 9 | Normalisation, LLM summarisation, recording, setup wizard, character designer extraction | 2026-09-03 |
 | 9.1 | Migration serialisation, the normalization extra, actionable desktop-integration errors | 2026-09-03 |
 | 10 | Install-on-demand extras, chronicle actions in the chronicle view, one transcribe dialog, capability gating, linking hydration | 2026-09-03 |
+| 11 | Audit cleanup — explicit RPC exposure, full i18n with a guard, shared chronicle operations — then an editable transcript | 2026-09-03 |
 
 Sprint 4's detailed history is in the git log; [ASSESSMENT.md](ASSESSMENT.md) is the
 Sprint-1-era audit that started the re-baselining and is kept as a historical record.
 
+
+
+### Sprint 11 — the audit's cleanup, then editing (2026-09-03)
+
+Driven by the static-analysis pass; findings and rationale in the audit artifact and
+`docs/deployment-and-rpc.md`, `docs/transcript-editing.md`.
+
+* [x] **RPC exposure is explicit.** `@service(expose=[...])`, validated at import time.
+  Publishing every public coroutine made the API a side effect of whether a method
+  happened to be async — two internal helpers became endpoints that way and served the
+  server's absolute paths. Surface went from 45 methods to 31, with a test asserting each
+  service's exact count.
+* [x] **The interface is fully translated, and stays that way.** Four views plus the forms
+  were hardcoded English while the catalogue already held their keys. A new AST guard
+  fails on a bare literal in any user-facing position — it found three more cases the
+  hand audit had missed. Orphaned keys: 32 → 0.
+* [x] **Chronicle operations are shared.** `desktop/operations.py` holds clean, identify
+  speakers, import audio, import transcript, link, edit and delete; the archive card and
+  the chronicle action row are both layout over it. They had already drifted.
+* [x] **SearchService deleted.** Five endpoints, two raising `NotImplementedError`, and no
+  view resolved it — both search boxes already called the owning services directly.
+* [x] **Dead code removed** — `update_line` stub, `mark_source_transcribed`,
+  `list_audio_source_paths`, `get_summary`, `ModelInfo.display_name`, `DBProjectMetadata`
+  (plus a migration dropping its table), and `TaskType.PROCESS` / `EXPORT` / `TEST`.
+* [x] **`model_error` wired rather than deleted.** An empty model list now says why; an
+  unreachable gateway used to look identical to a provider with no models.
+* [x] **`summary.max_tokens` → `chunk_token_budget`.** It never reached the model; the
+  output cap is `llm.max_tokens`. Two settings with one name did different things.
+* [x] **Tests for `queue_summarize` and `queue_normalize`**, which shaped task payloads
+  with nothing checking them. `importers.parse` split (McCabe 14 → 8).
+
+#### Editable transcript
+
+* [x] **Per-line editing** behind a read/edit toggle. Whole-blob editing would have to
+  guess where turns and timings belong; one control per line touches only what was typed
+  into.
+* [x] **Timings are never touched by a text edit** — a corrected word must not shift the
+  line off its audio.
+* [x] **Saves on blur, only when changed**, reverting and reporting on failure. Editing a
+  line does not reload the list, which would drop the caret and scroll position.
+* [x] **Speakers come from the workspace-wide registry**, and a name typed while editing
+  joins it.
+* [x] **Per-line delete confirms, quoting the line.** Transcript text is the one thing in
+  a chronicle that cannot be regenerated — a re-transcription produces different words.
+
+1108 tests, 91% coverage; 1078 + 2 skipped with the extras hidden; ruff and mypy clean;
+thin-client check passes.
 
 ### Sprint 10 — the round of UI feedback (2026-09-03)
 
@@ -1010,8 +1058,9 @@ Future:
       chronicle without real timestamps will show small ascending values
       (`00:00:00`, `00:00:01`, ...), not a claim of precision that isn't there, but
       also not hidden behind a "is this real" flag that doesn't exist in the schema.
-* [ ] **Edit text** — reopened. The text field is `read_only=True` and
-  `TranscriptService.update_line` returns its input without persisting.
+* [x] **Edit text** — done in Sprint 11, per line rather than as one blob. The read view
+  stays read-only on purpose; the edit toggle swaps in one row per line. See
+  [docs/transcript-editing.md](docs/transcript-editing.md).
 * [ ] Search within Chronicle
 
 Future:

@@ -8,6 +8,7 @@ import flet as ft
 
 from chronicler.core.models import Chronicle
 from chronicler.desktop.theme import ThemeColors
+from chronicler.i18n import t
 
 Handler = Callable[[Any], Any]
 
@@ -30,7 +31,7 @@ def chronicle_card(
     colors: ThemeColors,
     handlers: ChronicleCardHandlers,
 ) -> ft.Container:
-    tags = " · ".join([t.name for t in item.tags]) if item.tags else "No tags"
+    tags = " · ".join([tag.name for tag in item.tags]) if item.tags else t("archive.no_tags")
     return ft.Container(
         bgcolor=colors.card,
         padding=ft.Padding.all(18),
@@ -43,7 +44,7 @@ def chronicle_card(
                 ft.Row(
                     controls=[
                         ft.Text(
-                            (item.kind or "Unknown").upper(),
+                            (item.kind or t("common.unknown")).upper(),
                             size=12,
                             weight=ft.FontWeight.BOLD,
                             color=colors.muted,
@@ -53,12 +54,18 @@ def chronicle_card(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 ft.Text(item.title, size=18, weight=ft.FontWeight.BOLD, color=colors.text),
-                ft.Text(item.description or "No description", max_lines=2, color=colors.muted),
+                ft.Text(
+                    item.description or t("archive.no_description"),
+                    max_lines=2,
+                    color=colors.muted,
+                ),
                 ft.Row(
                     controls=[
                         ft.Text(item.created_at.strftime("%Y-%m-%d"), color=colors.muted),
-                        ft.Text(item.duration or "Unknown duration", color=colors.muted),
-                        ft.Text(f"{item.speakers_count} speakers", color=colors.muted),
+                        ft.Text(item.duration or t("archive.unknown_duration"), color=colors.muted),
+                        ft.Text(
+                            t("archive.speakers", count=item.speakers_count), color=colors.muted
+                        ),
                     ],
                     wrap=True,
                     spacing=10,
@@ -82,37 +89,33 @@ def _action_row(
                 icon_color=colors.muted,
                 items=[
                     ft.PopupMenuItem(
-                        content=ft.Text("Import Audio"),
+                        content=ft.Text(t("actions.import_audio")),
                         icon=ft.Icons.AUDIO_FILE,
-                        data=item.id,
+                        data=item,
                         on_click=handlers.on_import_audio,
                     ),
                     ft.PopupMenuItem(
-                        content=ft.Text("Import Transcript"),
+                        content=ft.Text(t("actions.import_transcript")),
                         icon=ft.Icons.DESCRIPTION,
-                        data=item.id,
+                        data=item,
                         on_click=handlers.on_import_transcript,
                     ),
                 ],
-                tooltip="Import to this chronicle",
+                tooltip=t("archive.import_into"),
             ),
-            _icon_action(ft.Icons.EDIT, colors, item, handlers.on_edit, "Edit chronicle"),
+            _icon_action(ft.Icons.EDIT, colors, item, handlers.on_edit, t("actions.edit")),
             _icon_action(
-                ft.Icons.CLEANING_SERVICES,
-                colors,
-                item.id,
-                handlers.on_clean,
-                "Clean transcript",
+                ft.Icons.CLEANING_SERVICES, colors, item, handlers.on_clean, t("actions.clean")
             ),
             _icon_action(
                 ft.Icons.RECORD_VOICE_OVER,
                 colors,
-                item.id,
+                item,
                 handlers.on_identify_speakers,
-                "Identify speakers",
+                t("actions.identify_speakers"),
             ),
             _icon_action(
-                ft.Icons.DELETE_OUTLINE, colors, item, handlers.on_delete, "Delete chronicle"
+                ft.Icons.DELETE_OUTLINE, colors, item, handlers.on_delete, t("actions.delete")
             ),
         ],
         alignment=ft.MainAxisAlignment.END,
@@ -126,10 +129,7 @@ def _icon_action(
     on_click: Handler,
     tooltip: str,
 ) -> ft.IconButton:
-    """
-    `data` is what the handler reads back off `e.control.data` - a whole Chronicle where the
-    handler needs its fields (edit, delete), just the id where it doesn't.
-    """
+    """`data` is the whole Chronicle, which is what every operation takes."""
     return ft.IconButton(
         icon=icon,
         icon_color=colors.muted,

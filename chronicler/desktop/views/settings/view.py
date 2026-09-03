@@ -197,7 +197,9 @@ class SettingsView(ft.Column):
             self._heading("settings.llm.title"),
             self.setting_card(
                 t("settings.llm.provider"),
-                t("settings.llm.provider_description"),
+                t("settings.llm.provider_description")
+                if self.settings.llm.is_configured
+                else t("settings.llm.not_configured"),
                 self._dropdown(
                     "llm.provider",
                     ["none", "openai_compatible", "llama_cpp"],

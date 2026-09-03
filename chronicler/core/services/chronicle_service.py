@@ -14,7 +14,18 @@ from chronicler.core.services.transcript_service import TranscriptService
 logger = logging.getLogger(__name__)
 
 
-@service
+@service(
+    expose=[
+        "add_audio_source",
+        "create_chronicle",
+        "delete_chronicle",
+        "get_chronicle",
+        "link_external_chronicle",
+        "list_chronicles",
+        "search_chronicles",
+        "update_chronicle",
+    ]
+)
 class ChronicleService:
     def __init__(
         self,

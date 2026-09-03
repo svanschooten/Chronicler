@@ -87,27 +87,6 @@ async def test_get_transcript_uses_custom_project_path_for_linked_chronicles(tmp
 
 
 @pytest.mark.asyncio
-async def test_update_line_does_not_persist_yet(tmp_path):
-    """Not implemented yet (Sprint 4) - documents the current, deliberate no-op."""
-    db_manager = DatabaseManager(tmp_path)
-    try:
-        await db_manager.init_archive()
-
-        archive_session = db_manager.get_archive_session()
-        async with archive_session:
-            chronicle_repo = SQLiteChronicleRepository(archive_session)
-            chronicle = await chronicle_repo.create(Chronicle(title="Untouched"))
-            service = TranscriptService(db_manager, chronicle_repo)
-
-            line = TranscriptLine(start_time=0.0, end_time=1.0, text="edited")
-            result = await service.update_line(chronicle.id, line)
-
-        assert result is line
-    finally:
-        await db_manager.close_all()
-
-
-@pytest.mark.asyncio
 async def test_refresh_speaker_count_backfills_from_project_db(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     try:
@@ -167,34 +146,6 @@ async def test_delete_lines_by_speaker_leaves_other_speakers_untouched(tmp_path)
             remaining = await repo.get_lines()
             assert [line.text for line in remaining] == ["Hello"]
             assert remaining[0].speaker_name == "Bob"
-    finally:
-        await db_manager.close_all()
-
-
-@pytest.mark.asyncio
-async def test_list_audio_sources_lists_files_in_chronicle_sources_dir(tmp_path):
-    db_manager = DatabaseManager(tmp_path)
-    try:
-        await db_manager.init_archive()
-
-        archive_session = db_manager.get_archive_session()
-        async with archive_session:
-            chronicle_repo = SQLiteChronicleRepository(archive_session)
-            chronicle = await chronicle_repo.create(Chronicle(title="Podcast"))
-
-        sources_dir = db_manager.get_chronicle_sources_path(str(chronicle.id))
-        (sources_dir / "bob.mp3").write_bytes(b"x")
-        (sources_dir / "alice.mp3").write_bytes(b"x")
-
-        archive_session = db_manager.get_archive_session()
-        async with archive_session:
-            chronicle_repo = SQLiteChronicleRepository(archive_session)
-            service = TranscriptService(db_manager, chronicle_repo)
-            sources = await service.list_audio_sources(chronicle.id)
-            paths = await service.list_audio_source_paths(chronicle.id)
-
-        assert [source.filename for source in sources] == ["alice.mp3", "bob.mp3"]
-        assert paths == [str(sources_dir / "alice.mp3"), str(sources_dir / "bob.mp3")]
     finally:
         await db_manager.close_all()
 

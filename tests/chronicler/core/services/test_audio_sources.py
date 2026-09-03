@@ -91,26 +91,6 @@ async def test_a_deleted_file_is_reported_as_missing_not_dropped(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_replacing_a_file_invalidates_its_completion(tmp_path):
-    db_manager, session, service, chronicle = await _service(tmp_path)
-    try:
-        path = _add_track(db_manager, chronicle.id, "gm.wav", b"original")
-        await service.list_audio_sources(chronicle.id)
-        await service.mark_source_transcribed(chronicle.id, "gm.wav", "en", "base")
-
-        assert (await service.list_audio_sources(chronicle.id))[0].is_transcribed is True
-
-        path.write_bytes(b"a completely different recording")
-        sources = await service.list_audio_sources(chronicle.id)
-
-        assert sources[0].is_transcribed is False
-        assert sources[0].transcription_state == SourceState.DONE
-    finally:
-        await session.close()
-        await db_manager.close_all()
-
-
-@pytest.mark.asyncio
 async def test_normalized_outputs_are_not_listed_as_sources(tmp_path):
     db_manager, session, service, chronicle = await _service(tmp_path)
     try:

@@ -8,7 +8,7 @@ from chronicler.core.remote import RemoteContainer
 from chronicler.core.rpc import RpcServer, service
 
 
-@service
+@service(expose=["echo_id"])
 class _UuidEchoService:
     """
     Regression test target: a live smoke test against a real running server found that

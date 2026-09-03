@@ -51,7 +51,7 @@ async def test_config_reports_not_connected_when_unconfigured():
             assert response.json() == {"connected": False}
 
 
-@service
+@service(expose=["echo"])
 class _MockUpstreamService:
     async def echo(self, value: str) -> str:
         return value

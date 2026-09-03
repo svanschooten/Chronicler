@@ -9,18 +9,6 @@ class ProjectBase(DeclarativeBase):
     pass
 
 
-class DBProjectMetadata(ProjectBase):
-    """
-    Reserved key/value table for per-chronicle provenance (source tool, import settings,
-    schema notes).
-    """
-
-    __tablename__ = "metadata"
-
-    key: Mapped[str] = mapped_column(String(255), primary_key=True)
-    value: Mapped[str] = mapped_column(String)
-
-
 class DBSpeaker(ProjectBase):
     __tablename__ = "speakers"
 

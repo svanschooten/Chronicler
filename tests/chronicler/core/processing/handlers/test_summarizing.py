@@ -252,8 +252,7 @@ class TestHandleSummarize:
             summaries = await service.list_summaries(chronicle.id)
             assert summaries[0].content == "readable recap"
 
-            fetched = await service.get_summary(chronicle.id, summaries[0].id)
-            assert fetched.number == 1
+            assert summaries[0].number == 1
 
             text = await service.read_transcript_text(chronicle.id)
             assert "Line 0" in text

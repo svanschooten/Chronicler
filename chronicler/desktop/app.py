@@ -47,6 +47,7 @@ class DesktopApp:
 
         self.available_models: list[str] = []
         self.capabilities: set[str] | None = None
+        self.model_error: str | None = None
         self._view_scope: Container | None = None
         logger.debug("DesktopApp constructed")
 
@@ -177,9 +178,11 @@ class DesktopApp:
         system = self.runtime.resolver.resolve(SystemService)
         try:
             self.available_models = await system.list_models()
-        except Exception:
+            self.model_error = await system.model_error()
+        except Exception as error:
             logger.warning("Could not list language models at startup", exc_info=True)
             self.available_models = []
+            self.model_error = str(error)
 
         try:
             self.capabilities = set((await system.get_server_info()).capabilities)
@@ -277,6 +280,7 @@ class DesktopApp:
             chronicle_service=scope.resolve(ChronicleService),
             file_stager=self.runtime.file_stager,
             available_models=lambda: self.available_models,
+            model_error=lambda: self.model_error,
             capabilities=(
                 None if self.capabilities is None else (lambda: self.capabilities or set())
             ),

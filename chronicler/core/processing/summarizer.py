@@ -66,7 +66,9 @@ def budget_characters(settings: SummarySettings, context_window: int) -> int:
     The prototype raised OverflowError when a prompt exceeded the window; budgeting up
     front and splitting is the same insight without the dead end.
     """
-    reserved = settings.max_tokens + len(settings.chunk_prompt) // CHARACTERS_PER_TOKEN + 256
+    reserved = (
+        settings.chunk_token_budget + len(settings.chunk_prompt) // CHARACTERS_PER_TOKEN + 256
+    )
     usable = max(context_window - reserved, 256)
     return usable * CHARACTERS_PER_TOKEN
 

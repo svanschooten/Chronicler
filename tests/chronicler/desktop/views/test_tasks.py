@@ -287,7 +287,7 @@ async def test_load_tasks_shows_a_placeholder_when_there_are_none(make_view):
 
     await view.load_tasks()
 
-    assert "No tasks found." in view.task_list.controls[0].value
+    assert "No tasks yet." in view.task_list.controls[0].value
 
 
 @pytest.mark.asyncio

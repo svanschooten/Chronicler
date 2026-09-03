@@ -84,13 +84,11 @@ def test_card_actions_bind_async_handlers_directly_and_carry_their_data():
     ]
     assert len(actions) == 6
 
-    needs_full_chronicle = {on_edit, on_delete}
     for action in actions:
         assert inspect.iscoroutinefunction(action.on_click), (
             f"{action} on_click must be the async handler itself, not a lambda wrapping it"
         )
-        expected = chronicle if action.on_click in needs_full_chronicle else chronicle.id
-        assert action.data == expected
+        assert action.data == chronicle, "every operation takes the whole Chronicle"
 
 
 @pytest.mark.parametrize("dark_mode", [True, False])

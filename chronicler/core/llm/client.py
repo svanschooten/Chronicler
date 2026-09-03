@@ -28,10 +28,6 @@ class ModelInfo:
     provider: str
     label: str | None = None
 
-    @property
-    def display_name(self) -> str:
-        return self.label or self.id
-
 
 @dataclass
 class Completion:

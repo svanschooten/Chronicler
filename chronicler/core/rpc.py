@@ -1,17 +1,46 @@
 import inspect
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, TypeVar
 
 _services: list[type] = []
 
 T = TypeVar("T")
 
+EXPOSED_ATTRIBUTE = "__rpc_exposed__"
 
-def service(cls: type[T]) -> type[T]:
-    if cls not in _services:
-        _services.append(cls)
-    return cls
+
+def service(cls: type[T] | None = None, *, expose: Sequence[str] | None = None) -> Any:
+    """
+    Registers a class as an RPC service, publishing only the methods it names.
+
+    Exposure is explicit because it used to be implicit: every public coroutine became an
+    HTTP route, so making an internal helper async silently published it. See
+    docs/deployment-and-rpc.md.
+    """
+
+    def decorate(target: type[T]) -> type[T]:
+        setattr(target, EXPOSED_ATTRIBUTE, _validated(target, expose or ()))
+        if target not in _services:
+            _services.append(target)
+        return target
+
+    return decorate if cls is None else decorate(cls)
+
+
+def _validated(cls: type, names: Sequence[str]) -> tuple[str, ...]:
+    for name in names:
+        method = getattr(cls, name, None)
+        if method is None:
+            raise ValueError(f"{cls.__name__} exposes {name!r}, which it does not define")
+        if not inspect.iscoroutinefunction(method):
+            raise ValueError(f"{cls.__name__}.{name} is exposed but is not a coroutine")
+    return tuple(sorted(names))
+
+
+def exposed_methods(cls: type) -> list[str]:
+    """The method names this class publishes over RPC, in a stable order."""
+    return list(cls.__dict__.get(EXPOSED_ATTRIBUTE, ()))
 
 
 def get_services() -> list[type]:
@@ -44,11 +73,8 @@ class RpcServer:
 
         router = APIRouter(prefix=prefix)
 
-        for name, method in inspect.getmembers(service_cls, inspect.iscoroutinefunction):
-            if name.startswith("_"):
-                continue
-
-            self._add_route(router, service_cls, method, name)
+        for name in exposed_methods(service_cls):
+            self._add_route(router, service_cls, getattr(service_cls, name), name)
 
         app.include_router(router)
 

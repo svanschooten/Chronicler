@@ -14,12 +14,13 @@ below and leave the code clean.
 | [configuration.md](configuration.md) | Settings, config file resolution, `--config`, the setup wizard |
 | [configuration-sections.md](configuration-sections.md) | The nested `transcription` / `cleaning` / `normalization` / `llm` / `summary` / `ui` / `extras` groups |
 | [dependency-injection.md](dependency-injection.md) | `Container`, scopes, why each unit of work gets its own session |
-| [deployment-and-rpc.md](deployment-and-rpc.md) | The four modes, generated HTTP API, remote proxies, the web client |
+| [deployment-and-rpc.md](deployment-and-rpc.md) | The four modes, the explicitly-exposed HTTP API, remote proxies, the web client |
 | [storage.md](storage.md) | Archive and project databases, `DatabaseManager`, Alembic without an `alembic.ini` |
 | [tasks.md](tasks.md) | Task lifecycle, atomic claiming, retries, the worker loop, task events |
 | [processing.md](processing.md) | Import, clean and transcribe handlers; importers, cleaners, the transcriber |
 | [cleaning.md](cleaning.md) | The cleaning rule pipeline, hallucination handling, measured results |
 | [transcription.md](transcription.md) | Language, threshold and model resolution; the transcribe dialog; SRT export |
+| [transcript-editing.md](transcript-editing.md) | Correcting a transcript line by line, and why timings are never touched |
 | [speakers.md](speakers.md) | Per-chronicle speakers and the workspace-wide name registry |
 | [audio-sources.md](audio-sources.md) | Per-track state: transcription, normalisation, speaker memory, fingerprints |
 | [audio-normalization.md](audio-normalization.md) | The loudness pipeline, why the source is never touched, LUFS vs dBFS |

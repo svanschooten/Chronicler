@@ -7,6 +7,7 @@ from chronicler.core.models import Task, TaskStatus
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
 from chronicler.desktop.theme import theme_colors
+from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,10 @@ class TasksView(ft.Column):
             spacing=16,
             controls=[
                 ft.Text(
-                    "Processing tasks", size=30, weight=ft.FontWeight.BOLD, color=self.colors.text
+                    t("tasks.heading"), size=30, weight=ft.FontWeight.BOLD, color=self.colors.text
                 ),
                 ft.Text(
-                    "Scribes keep work moving, even when you close Chronicler.",
+                    t("tasks.subtitle"),
                     color=self.colors.muted,
                 ),
                 ft.Divider(color=self.colors.border),
@@ -48,12 +49,12 @@ class TasksView(ft.Column):
                         ft.Icon(ft.Icons.SEARCH, color=self.colors.muted),
                         ft.TextField(
                             expand=True,
-                            hint_text="Search tasks",
+                            hint_text=t("tasks.search"),
                             color=self.colors.text,
                             on_change=self.search_changed,
                         ),
                         ft.Checkbox(
-                            label="Hide completed tasks",
+                            label=t("tasks.hide_completed"),
                             value=True,
                             on_change=self.hide_completed_changed,
                         ),
@@ -107,7 +108,7 @@ class TasksView(ft.Column):
             await self._load_chronicle_titles()
 
             self.task_list.controls = [self.create_task_row(t) for t in tasks] or [
-                ft.Text("No tasks found.")
+                ft.Text(t("tasks.empty"))
             ]
             self.update()
         except Exception as e:
@@ -169,7 +170,7 @@ class TasksView(ft.Column):
                     icon_color=self.colors.muted,
                     data=task.id,
                     on_click=self.retry_clicked,
-                    tooltip="Run this task again",
+                    tooltip=t("tasks.retry_tooltip"),
                 )
             )
 

@@ -1,8 +1,6 @@
 """Tests for ArchiveView's own plumbing."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
-from uuid import uuid4
 
 import flet as ft
 import pytest
@@ -118,7 +116,7 @@ async def test_load_chronicles_shows_a_placeholder_when_there_are_none(make_view
 
     await view.load_chronicles()
 
-    assert "No chronicles found." in view.chronicle_list.controls[0].value
+    assert "No chronicles yet." in view.chronicle_list.controls[0].value
 
 
 @pytest.mark.asyncio
@@ -149,46 +147,6 @@ async def test_open_chronicle_clicked_forwards_the_chronicle(make_view):
 
 
 @pytest.mark.asyncio
-async def test_clean_clicked_reads_the_chronicle_id_from_the_control_data(make_view):
-    task_service = AsyncMock()
-    view = make_view(task_service=task_service)
-    view.show_snackbar = MagicMock()
-    chronicle_id = uuid4()
-
-    await view.clean_clicked(_event(chronicle_id))
-
-    task_service.queue_clean.assert_awaited_once_with(chronicle_id)
-    view.show_snackbar.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_identify_speakers_clicked_refreshes_the_count_and_the_list(make_view):
-    transcript_service = AsyncMock()
-    transcript_service.refresh_speaker_count.return_value = 3
-    view = make_view(transcript_service=transcript_service)
-    view.show_snackbar = MagicMock()
-    chronicle_id = uuid4()
-
-    await view.identify_speakers_clicked(_event(chronicle_id))
-
-    transcript_service.refresh_speaker_count.assert_awaited_once_with(chronicle_id)
-    view.show_snackbar.assert_called_once_with("Found 3 speakers")
-    view.load_chronicles.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_identify_speakers_message_is_singular_for_one_speaker(make_view):
-    transcript_service = AsyncMock()
-    transcript_service.refresh_speaker_count.return_value = 1
-    view = make_view(transcript_service=transcript_service)
-    view.show_snackbar = MagicMock()
-
-    await view.identify_speakers_clicked(_event(uuid4()))
-
-    view.show_snackbar.assert_called_once_with("Found 1 speaker")
-
-
-@pytest.mark.asyncio
 async def test_create_chronicle_clicked_creates_clears_and_closes(make_view, attach_page):
     chronicle_service = AsyncMock()
     view = make_view(chronicle_service=chronicle_service)
@@ -214,215 +172,77 @@ async def test_create_chronicle_clicked_ignores_an_empty_title(make_view, attach
     chronicle_service.create_chronicle.assert_not_awaited()
 
 
-@pytest.mark.asyncio
-async def test_edit_clicked_prefills_and_opens_the_form(make_view, attach_page):
-    view = make_view()
-    attach_page(ArchiveView)
-    chronicle = Chronicle(title="Original Title", kind="Podcast")
+class TestActionsDelegateToTheSharedOperations:
+    """
+    Behaviour lives in ChronicleOperations and is tested there. What the archive owes is
+    correct wiring: the right operation, for the chronicle whose button was clicked, and
+    a reload when it says something changed.
+    """
 
-    await view.edit_clicked(_event(chronicle))
+    @pytest.fixture
+    def wired(self, make_view):
+        view = make_view()
+        view.operations = AsyncMock()
+        return view
 
-    assert view.editing_chronicle_id == chronicle.id
-    assert view.edit_form.title_field.value == "Original Title"
-    assert view.edit_form.dialog.open is True
-
-
-@pytest.mark.asyncio
-async def test_save_edit_clicked_persists_the_edited_chronicle(make_view, attach_page):
-    existing = Chronicle(title="Old Title", kind="Unknown")
-    chronicle_service = AsyncMock()
-    chronicle_service.get_chronicle.return_value = existing
-    view = make_view(chronicle_service=chronicle_service)
-    attach_page(ArchiveView)
-    view.show_snackbar = MagicMock()
-    view.editing_chronicle_id = existing.id
-    view.edit_form.title_field.value = "New Title"
-    view.edit_form.kind_field.value = "Meeting"
-
-    await view.save_edit_clicked(MagicMock())
-
-    (saved,), _ = chronicle_service.update_chronicle.call_args
-    assert saved.title == "New Title"
-    assert saved.kind == "Meeting"
-    view.load_chronicles.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_save_edit_clicked_handles_a_chronicle_deleted_meanwhile(make_view, attach_page):
-    chronicle_service = AsyncMock()
-    chronicle_service.get_chronicle.return_value = None
-    view = make_view(chronicle_service=chronicle_service)
-    attach_page(ArchiveView)
-    view.show_snackbar = MagicMock()
-    view.editing_chronicle_id = uuid4()
-
-    await view.save_edit_clicked(MagicMock())
-
-    chronicle_service.update_chronicle.assert_not_awaited()
-    view.show_snackbar.assert_called_once_with("Chronicle no longer exists.")
-
-
-@pytest.mark.asyncio
-async def test_delete_clicked_deletes_only_after_confirmation(make_view, attach_page, monkeypatch):
-    chronicle_service = AsyncMock()
-    view = make_view(chronicle_service=chronicle_service)
-    attach_page(ArchiveView)
-    view.show_snackbar = MagicMock()
-    monkeypatch.setattr(
-        "chronicler.desktop.views.archive.view.confirm", AsyncMock(return_value=True)
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("handler", "operation"),
+        [
+            ("clean_clicked", "clean"),
+            ("identify_speakers_clicked", "identify_speakers"),
+            ("import_audio_clicked", "import_audio"),
+            ("edit_clicked", "begin_edit"),
+            ("import_transcript_clicked", "begin_transcript_import"),
+            ("delete_clicked", "delete"),
+        ],
     )
-    chronicle = Chronicle(title="Doomed")
+    async def test_each_action_passes_the_clicked_chronicle(self, wired, handler, operation):
+        chronicle = Chronicle(title="Session One")
 
-    await view.delete_clicked(_event(chronicle))
+        await getattr(wired, handler)(_event(chronicle))
 
-    chronicle_service.delete_chronicle.assert_awaited_once_with(chronicle.id)
-    view.load_chronicles.assert_awaited_once()
+        getattr(wired.operations, operation).assert_awaited_once_with(chronicle)
 
+    @pytest.mark.asyncio
+    async def test_linking_needs_no_chronicle(self, wired):
+        await wired.link_chronicle_clicked(MagicMock())
 
-@pytest.mark.asyncio
-async def test_delete_clicked_does_nothing_when_cancelled(make_view, attach_page, monkeypatch):
-    chronicle_service = AsyncMock()
-    view = make_view(chronicle_service=chronicle_service)
-    attach_page(ArchiveView)
-    monkeypatch.setattr(
-        "chronicler.desktop.views.archive.view.confirm", AsyncMock(return_value=False)
+        wired.operations.link_chronicle.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("handler", "operation"),
+        [
+            ("identify_speakers_clicked", "identify_speakers"),
+            ("import_audio_clicked", "import_audio"),
+            ("delete_clicked", "delete"),
+        ],
     )
+    async def test_a_change_reloads_the_list(self, wired, handler, operation):
+        getattr(wired.operations, operation).return_value = True
 
-    await view.delete_clicked(_event(Chronicle(title="Safe")))
+        await getattr(wired, handler)(_event(Chronicle(title="T")))
 
-    chronicle_service.delete_chronicle.assert_not_awaited()
+        wired.load_chronicles.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_no_change_leaves_the_list_alone(self, wired):
+        wired.operations.delete.return_value = False
 
-@pytest.mark.asyncio
-async def test_import_audio_imports_into_the_chosen_chronicle(make_view):
-    view = make_view()
-    view.picker = AsyncMock()
-    view.picker.pick_file.return_value = "/audio/a.mp3"
-    view.imports = MagicMock(import_audio=AsyncMock(return_value="Added a.mp3"))
-    view.show_snackbar = MagicMock()
-    chronicle_id = uuid4()
+        await wired.delete_clicked(_event(Chronicle(title="T")))
 
-    await view.import_audio_clicked(_event(chronicle_id))
+        wired.load_chronicles.assert_not_awaited()
 
-    view.imports.import_audio.assert_awaited_once_with(chronicle_id, "/audio/a.mp3")
-    view.show_snackbar.assert_called_once_with("Added a.mp3")
-    view.load_chronicles.assert_awaited_once()
+    @pytest.mark.asyncio
+    async def test_the_header_import_menu_creates_a_chronicle_from_the_file(self, wired):
+        """Its menu items carry no chronicle, which is what tells the coordinator to create one."""
+        await wired.import_audio_clicked(_event(None))
 
+        wired.operations.import_audio.assert_awaited_once_with(None)
 
-@pytest.mark.asyncio
-async def test_import_audio_only_offers_audio_extensions(make_view):
-    view = make_view()
-    view.picker = AsyncMock()
-    view.picker.pick_file.return_value = None
+    def test_the_view_attaches_the_operations_forms(self, make_view):
+        view = make_view()
 
-    await view.import_audio_clicked(_event(uuid4()))
-
-    assert "mp3" in view.picker.pick_file.await_args[0][0]
-
-
-@pytest.mark.asyncio
-async def test_cancelling_the_audio_picker_imports_nothing(make_view):
-    view = make_view()
-    view.picker = AsyncMock()
-    view.picker.pick_file.return_value = None
-    view.imports = MagicMock(import_audio=AsyncMock())
-
-    await view.import_audio_clicked(_event(uuid4()))
-
-    view.imports.import_audio.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_import_transcript_clicked_opens_the_options_form_first(make_view, attach_page):
-    view = make_view()
-    attach_page(ArchiveView)
-    chronicle_id = uuid4()
-
-    await view.import_transcript_clicked(_event(chronicle_id))
-
-    assert view.pending_chronicle_id == chronicle_id
-    assert view.transcript_form.dialog.open is True
-
-
-@pytest.mark.asyncio
-async def test_do_transcript_import_closes_the_form_then_picks_and_imports(make_view, attach_page):
-    view = make_view()
-    attach_page(ArchiveView)
-    view.picker = AsyncMock()
-    view.picker.pick_file.return_value = "/t/session.txt"
-    view.imports = MagicMock(import_transcript=AsyncMock(return_value="Queued"))
-    view.pending_chronicle_id = uuid4()
-
-    await view.do_transcript_import(MagicMock())
-
-    assert view.transcript_form.dialog.open is False
-    assert view.imports.import_transcript.await_args[0][1] == "/t/session.txt"
-    view.load_chronicles.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_linking_a_project_database_only_offers_db_files(make_view):
-    view = make_view()
-    view.picker = AsyncMock()
-    view.picker.pick_file.return_value = None
-
-    await view.link_chronicle_clicked(MagicMock())
-
-    assert view.picker.pick_file.await_args[0][0] == ["db"]
-
-
-@pytest.mark.asyncio
-async def test_linking_a_project_database_registers_it(make_view):
-    view = make_view()
-    view.picker = AsyncMock()
-    view.picker.pick_file.return_value = "/elsewhere/campaign/project.db"
-    view.imports = MagicMock(link_chronicle=AsyncMock(return_value="Linked 'campaign'"))
-    view.show_snackbar = MagicMock()
-
-    await view.link_chronicle_clicked(MagicMock())
-
-    view.imports.link_chronicle.assert_awaited_once_with("/elsewhere/campaign/project.db")
-    view.show_snackbar.assert_called_once_with("Linked 'campaign'")
-
-
-@pytest.mark.asyncio
-async def test_a_failing_import_is_reported_and_the_list_still_reloads(make_view):
-    view = make_view()
-    view.picker = AsyncMock()
-    view.picker.pick_file.return_value = "/audio/a.mp3"
-    view.imports = MagicMock(import_audio=AsyncMock(side_effect=RuntimeError("disk full")))
-    view.show_snackbar = MagicMock()
-
-    await view.import_audio_clicked(_event(uuid4()))
-
-    assert "disk full" in view.show_snackbar.call_args.args[0]
-    view.load_chronicles.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_a_cancelled_transcript_import_says_nothing(make_view, attach_page):
-    view = make_view()
-    attach_page(ArchiveView)
-    view.picker = AsyncMock()
-    view.picker.pick_file.return_value = "/t/session.txt"
-    view.imports = MagicMock(import_transcript=AsyncMock(return_value=None))
-    view.show_snackbar = MagicMock()
-
-    await view.do_transcript_import(MagicMock())
-
-    view.show_snackbar.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_ask_overwrite_or_append_offers_all_three_answers(make_view, attach_page):
-    view = make_view()
-    page = attach_page(ArchiveView)
-
-    task = asyncio.ensure_future(view.ask_overwrite_or_append())
-    await asyncio.sleep(0)
-
-    (dialog,), _ = page.show_dialog.call_args
-    assert [action.content for action in dialog.actions] == ["Cancel", "Append", "Overwrite"]
-
-    await dialog.actions[2].on_click(MagicMock())
-    assert await asyncio.wait_for(task, timeout=1) == "overwrite"
+        assert set(view.operations.forms) <= set(view._forms)
+        assert view.create_form in view._forms

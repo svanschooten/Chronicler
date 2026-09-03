@@ -32,7 +32,6 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
 
     from chronicler.core.services import (
         ChronicleService,
-        SearchService,
         SystemService,
         TaskService,
         TranscriptService,
@@ -42,7 +41,6 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
         container,
         services=[
             ChronicleService,
-            SearchService,
             SystemService,
             TaskService,
             TranscriptService,

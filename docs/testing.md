@@ -88,3 +88,21 @@ CI installs no extras, so verifying that locally means hiding them. A directory 
 installed-but-unimportable case. That check is what caught a test asserting
 `is_available()` should agree with `find_spec()`, which contradicts the whole reason
 `is_available()` imports for real.
+
+## The guard against untranslated strings
+
+`tests/chronicler/i18n/test_no_bare_strings.py` walks the AST of every module under
+`chronicler/desktop/` and fails on a bare string literal in a user-facing position:
+`ft.Text(...)`, `ft.SnackBar(...)`, and the `label` / `hint_text` / `tooltip` /
+`helper_text` / `error` / `error_text` keywords.
+
+The catalogue-integrity tests cannot catch this. They check that keys which *are* used
+exist and that the translations agree — not that a string reaches the user through `t()`
+at all. Three whole views were hardcoded English while the catalogue already held their
+keys, and nothing failed. Adding this guard immediately turned up three more cases beyond
+the ones the audit had listed by hand.
+
+It parametrises over modules rather than asserting once, so a failure names the file, and
+carries a `test_there_are_desktop_modules_to_check` guard so a bad glob cannot make every
+case pass vacuously. `ALLOWED` holds the handful of literals that are genuinely not
+language — separators, `"monospace"`.

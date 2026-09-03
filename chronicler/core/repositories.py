@@ -129,6 +129,19 @@ class TranscriptRepository(ABC):
         pass
 
     @abstractmethod
+    async def update_line(
+        self,
+        line_id: UUID,
+        text: str | None = None,
+        speaker_id: UUID | None = None,
+    ) -> TranscriptLine:
+        """Edits one line's text or speaker, leaving its timings alone."""
+
+    @abstractmethod
+    async def delete_line(self, line_id: UUID) -> None:
+        """Removes one line, keeping its speaker row."""
+
+    @abstractmethod
     async def delete_all_lines(self) -> None:
         """Delete every transcript line."""
         pass

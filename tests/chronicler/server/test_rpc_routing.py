@@ -9,11 +9,10 @@ from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.local_container import register_local_repositories
 from chronicler.core.models import Chronicle, TranscriptLine
-from chronicler.core.repositories import TaskRepository
+from chronicler.core.repositories import ChronicleRepository, TagRepository, TaskRepository
 from chronicler.core.rpc import RpcServer, service
 from chronicler.core.services import (
     ChronicleService,
-    SearchService,
     SystemService,
     TaskService,
     TranscriptService,
@@ -25,7 +24,7 @@ from chronicler.core.sqlite import (
 )
 
 
-@service
+@service(expose=["session_id"])
 class _SessionIdProbeService:
     """
     Test-only service exposing which AsyncSession backs its repository, so tests can prove
@@ -50,7 +49,6 @@ def _build_server_app(tmp_path, api_key: str = "test-key"):
         container,
         services=[
             ChronicleService,
-            SearchService,
             SystemService,
             TaskService,
             TranscriptService,
@@ -71,9 +69,9 @@ async def test_server_builds_without_error(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_search_service_resolves(tmp_path):
+async def test_every_repository_is_concrete_enough_to_resolve(tmp_path):
     """
-    Reproduces the historical blocker directly: resolving SearchService used to raise
+    Reproduces the historical blocker directly: resolving a service used to raise
     TypeError because SQLiteTagRepository didn't implement the abstract `search` method.
     """
     db_manager = DatabaseManager(tmp_path)
@@ -83,8 +81,9 @@ async def test_search_service_resolves(tmp_path):
         container = Container()
         register_local_repositories(container, db_manager)
 
-        search_service = container.resolve(SearchService)
-        assert search_service is not None
+        assert container.resolve(TagRepository) is not None
+        assert container.resolve(TaskRepository) is not None
+        assert container.resolve(ChronicleRepository) is not None
     finally:
         await db_manager.close_all()
 
@@ -100,7 +99,7 @@ async def test_server_routes_reject_missing_key(tmp_path):
             resp = await client.post("/chronicle/list_chronicles", json={})
             assert resp.status_code == 401
 
-            resp = await client.post("/search/search_tags", json={"query": ""})
+            resp = await client.post("/transcript/list_summaries", json={"chronicle_id": ""})
             assert resp.status_code == 401
 
             resp = await client.post("/task/list_tasks", json={})
@@ -126,10 +125,15 @@ async def test_server_routes_respond_with_valid_key(tmp_path):
             assert resp.status_code == 200
             assert resp.json() == []
 
-            for route in ("search_tags", "search_tasks", "search_chronicle_meta"):
-                resp = await client.post(f"/search/{route}", json={"query": ""}, headers=headers)
-                assert resp.status_code == 200, route
-                assert resp.json() == []
+            resp = await client.post("/task/search_tasks", json={"query": ""}, headers=headers)
+            assert resp.status_code == 200
+            assert resp.json() == []
+
+            resp = await client.post(
+                "/chronicle/search_chronicles", json={"query": ""}, headers=headers
+            )
+            assert resp.status_code == 200
+            assert resp.json() == []
     finally:
         await db_manager.close_all()
 

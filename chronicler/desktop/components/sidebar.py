@@ -74,7 +74,7 @@ class Sidebar(ft.Container):
         return ft.Column(
             controls=[
                 ft.Text(
-                    "CHRONICLER",
+                    t("app.name").upper(),
                     size=20,
                     weight=ft.FontWeight.BOLD,
                     color=self.colors.text,

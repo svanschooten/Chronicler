@@ -5,6 +5,8 @@ from typing import Any, TypeVar, get_type_hints
 import httpx
 from pydantic import TypeAdapter
 
+from chronicler.core.rpc import exposed_methods
+
 T = TypeVar("T")
 
 
@@ -27,10 +29,8 @@ class RemoteServiceProxy:
         else:
             self._prefix = service_name.lower()
 
-        for name, method in inspect.getmembers(cls, inspect.iscoroutinefunction):
-            if name.startswith("_"):
-                continue
-            setattr(self, name, self._make_remote_method(name, method))
+        for name in exposed_methods(cls):
+            setattr(self, name, self._make_remote_method(name, getattr(cls, name)))
 
     def _make_remote_method(self, name: str, method: Callable):
         sig = inspect.signature(method)

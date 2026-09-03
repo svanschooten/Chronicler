@@ -237,9 +237,9 @@ async def _progress_reporting_handler(task, update_progress):
 async def test_test_worker_execution(async_session):
     repo = SQLiteTaskRepository(async_session)
     manager = WorkerManager(repo)
-    manager.register_handler(TaskType.TEST, _progress_reporting_handler)
+    manager.register_handler(TaskType.CLEAN, _progress_reporting_handler)
 
-    task = await repo.create(Task(type=TaskType.TEST))
+    task = await repo.create(Task(type=TaskType.CLEAN))
 
     with patch("asyncio.sleep", return_value=None):
         await manager.process_tasks()
@@ -257,8 +257,8 @@ async def test_task_failure_recording(async_session):
     async def failing_handler(task, update_progress):
         raise ValueError("Specific error")
 
-    manager.register_handler(TaskType.TEST, failing_handler)
-    task = await repo.create(Task(type=TaskType.TEST, max_attempts=1))
+    manager.register_handler(TaskType.CLEAN, failing_handler)
+    task = await repo.create(Task(type=TaskType.CLEAN, max_attempts=1))
 
     await manager.process_tasks()
 
@@ -272,7 +272,7 @@ async def test_task_retry_logic(async_session):
     repo = SQLiteTaskRepository(async_session)
 
     task = await repo.create(
-        Task(type=TaskType.TEST, status=TaskStatus.FAILED, error="Previous error", progress=50)
+        Task(type=TaskType.CLEAN, status=TaskStatus.FAILED, error="Previous error", progress=50)
     )
 
     await repo.update_status(task.id, TaskStatus.PENDING)

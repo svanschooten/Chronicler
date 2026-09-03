@@ -68,6 +68,41 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         self.session.add_all(db_lines)
         await self.session.flush()
 
+    async def update_line(
+        self,
+        line_id: UUID,
+        text: str | None = None,
+        speaker_id: UUID | None = None,
+    ) -> TranscriptLine:
+        """
+        Edits one line in place. Timings are never touched: a corrected word must not
+        shift the line off the audio it came from. See docs/transcript-editing.md.
+        """
+        db_line = await self.session.get(DBTranscriptLine, str(line_id))
+        if db_line is None:
+            raise KeyError(f"No transcript line {line_id}")
+
+        if text is not None:
+            db_line.text = text
+        if speaker_id is not None:
+            db_line.speaker_id = str(speaker_id)
+
+        await self.session.flush()
+        await self.session.refresh(db_line)
+
+        line = TranscriptLine.model_validate(db_line)
+        if db_line.speaker:
+            line.speaker_name = db_line.speaker.name
+        return line
+
+    async def delete_line(self, line_id: UUID) -> None:
+        """The speaker row is left alone - it still maps an audio source to a name."""
+        db_line = await self.session.get(DBTranscriptLine, str(line_id))
+        if db_line is None:
+            raise KeyError(f"No transcript line {line_id}")
+        await self.session.delete(db_line)
+        await self.session.flush()
+
     async def delete_all_lines(self) -> None:
         await self.session.execute(sa_delete(DBTranscriptLine))
 

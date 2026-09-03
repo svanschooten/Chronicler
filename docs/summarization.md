@@ -92,3 +92,21 @@ message is a better outcome than a button that refuses for the wrong reason.
 
 `SummariesPanel.generate()` re-checks before queueing, so the action row and the panel's
 own button behave identically and neither can queue a task that cannot run.
+
+## Two token limits, and which is which
+
+| Setting | What it does |
+| ------- | ------------ |
+| `llm.max_tokens` | The model's output cap. It reaches the API call. |
+| `summary.chunk_token_budget` | How much room a chunk's answer is assumed to need when deciding how large a chunk may be. It never reaches the model. |
+
+Both were called `max_tokens` and both defaulted to 1024, so raising the summary one
+looked like it would let the model write more and actually only changed the chunking
+arithmetic. The rename is the fix; there is no behaviour change.
+
+## When the model list is empty
+
+`ModelRegistry` records why discovery failed, and `SystemService.model_error` reports it.
+The summary dialog shows it on the model field when the list came back empty — before
+that, an unreachable gateway and a correctly-configured provider with no models looked
+identical.

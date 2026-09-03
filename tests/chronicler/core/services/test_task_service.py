@@ -10,6 +10,13 @@ from chronicler.core.repositories import TaskRepository
 from chronicler.core.services.task_service import TaskService
 
 
+def _repository():
+    """A task repository that hands back whatever it was asked to create."""
+    repo = MagicMock(spec=TaskRepository)
+    repo.create = AsyncMock(side_effect=lambda task: task)
+    return repo
+
+
 @pytest.mark.asyncio
 async def test_search_tasks():
     repo = MagicMock(spec=TaskRepository)
@@ -177,3 +184,82 @@ class TestTranscribeParameters:
         task = await service.queue_transcribe(uuid4(), "/s/a.wav", "GM", normalize_first=True)
 
         assert json.loads(task.data)["normalize_first"] is True
+
+
+class TestQueueNormalize:
+    @pytest.mark.asyncio
+    async def test_it_carries_the_file_path(self):
+        repo = _repository()
+        service = TaskService(repo)
+
+        task = await service.queue_normalize(uuid4(), "/sources/gm.wav")
+
+        assert task.type == TaskType.NORMALIZE
+        assert json.loads(task.data)["file_path"] == "/sources/gm.wav"
+
+    @pytest.mark.asyncio
+    async def test_force_is_absent_unless_asked_for(self):
+        """An absent key lets the handler skip work that is already done."""
+        task = await TaskService(_repository()).queue_normalize(uuid4(), "/sources/gm.wav")
+
+        assert "force" not in json.loads(task.data)
+
+    @pytest.mark.asyncio
+    async def test_force_is_recorded_when_asked_for(self):
+        task = await TaskService(_repository()).queue_normalize(
+            uuid4(), "/sources/gm.wav", force=True
+        )
+
+        assert json.loads(task.data)["force"] is True
+
+
+class TestQueueSummarize:
+    @pytest.mark.asyncio
+    async def test_an_unconfigured_run_carries_no_overrides(self):
+        """No keys at all, so every value falls back to the configured defaults."""
+        task = await TaskService(_repository()).queue_summarize(uuid4())
+
+        assert task.type == TaskType.SUMMARIZE
+        assert json.loads(task.data) == {}
+
+    @pytest.mark.asyncio
+    async def test_model_and_title_sit_at_the_top_level(self):
+        task = await TaskService(_repository()).queue_summarize(
+            uuid4(), model="qwen3", title="First pass"
+        )
+
+        data = json.loads(task.data)
+        assert data["model"] == "qwen3"
+        assert data["title"] == "First pass"
+
+    @pytest.mark.asyncio
+    async def test_prompt_overrides_are_nested_under_summary(self):
+        """The handler merges data["summary"] over SummarySettings, so shape matters."""
+        task = await TaskService(_repository()).queue_summarize(
+            uuid4(), recap_prompt="Be brief.", language="nl"
+        )
+
+        assert json.loads(task.data)["summary"] == {
+            "recap_prompt": "Be brief.",
+            "language": "nl",
+        }
+
+    @pytest.mark.asyncio
+    async def test_only_the_overrides_given_are_recorded(self):
+        task = await TaskService(_repository()).queue_summarize(
+            uuid4(), system_prompt="You are terse."
+        )
+
+        assert json.loads(task.data)["summary"] == {"system_prompt": "You are terse."}
+
+    @pytest.mark.asyncio
+    async def test_no_summary_key_when_no_prompt_was_overridden(self):
+        task = await TaskService(_repository()).queue_summarize(uuid4(), model="qwen3")
+
+        assert "summary" not in json.loads(task.data)
+
+    @pytest.mark.asyncio
+    async def test_an_empty_title_is_not_recorded_as_a_title(self):
+        task = await TaskService(_repository()).queue_summarize(uuid4(), title="")
+
+        assert "title" not in json.loads(task.data)

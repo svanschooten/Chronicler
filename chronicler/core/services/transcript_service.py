@@ -24,7 +24,23 @@ PLAINTEXT_EXPORT_WIDTH = 140
 NORMALIZED_SUFFIX = ".normalized.wav"
 
 
-@service
+@service(
+    expose=[
+        "assign_speaker",
+        "chronicle_directory",
+        "delete_summary",
+        "export_plaintext",
+        "delete_line",
+        "export_srt",
+        "get_transcript",
+        "list_audio_sources",
+        "list_summaries",
+        "read_transcript_text",
+        "refresh_speaker_count",
+        "speaker_suggestions",
+        "update_line",
+    ]
+)
 class TranscriptService:
     """
     Project-scoped, unlike every other service here: which project.db to read depends on
@@ -59,8 +75,46 @@ class TranscriptService:
         async with session:
             return await repo.get_lines()
 
-    async def update_line(self, chronicle_id: UUID, line: TranscriptLine) -> TranscriptLine:
+    async def update_line(
+        self,
+        chronicle_id: UUID,
+        line_id: UUID,
+        text: str | None = None,
+        speaker_name: str | None = None,
+    ) -> TranscriptLine:
+        """
+        Corrects one line's text, its speaker, or both.
+
+        A speaker typed here is created if new and joins the workspace-wide registry, so
+        a name learned while correcting a transcript is offered the next time a track is
+        transcribed. See docs/transcript-editing.md.
+        """
+        session, repo = await self._get_repository(chronicle_id)
+        async with session:
+            try:
+                speaker_id = None
+                if speaker_name:
+                    speaker_id = (await repo.get_or_create_speaker(speaker_name)).id
+                line = await repo.update_line(line_id, text=text, speaker_id=speaker_id)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+        if speaker_name:
+            await self._remember_speaker(speaker_name)
         return line
+
+    async def delete_line(self, chronicle_id: UUID, line_id: UUID) -> None:
+        """Removes one line. The speaker row stays - it still names an audio source."""
+        session, repo = await self._get_repository(chronicle_id)
+        async with session:
+            try:
+                await repo.delete_line(line_id)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     async def export_plaintext(self, chronicle_id: UUID, include_timestamps: bool = False) -> str:
         lines = [line for line in await self.get_transcript(chronicle_id) if line.text.strip()]
@@ -122,11 +176,6 @@ class TranscriptService:
         session = await self._project_session(chronicle_id)
         async with session:
             return await SQLiteSummaryRepository(session).list_summaries()
-
-    async def get_summary(self, chronicle_id: UUID, summary_id: UUID) -> Summary | None:
-        session = await self._project_session(chronicle_id)
-        async with session:
-            return await SQLiteSummaryRepository(session).get(summary_id)
 
     async def delete_summary(self, chronicle_id: UUID, summary_id: UUID) -> None:
         session = await self._project_session(chronicle_id)
@@ -209,21 +258,6 @@ class TranscriptService:
         names = set(await self.list_known_speakers())
         names.update(await self.list_speaker_names(chronicle_id))
         return sorted(names, key=str.casefold)
-
-    async def mark_source_transcribed(
-        self, chronicle_id: UUID, filename: str, language: str | None, model: str | None
-    ) -> None:
-        path = await self.source_path(chronicle_id, filename)
-        content_hash = fingerprint_file(path) if path.exists() else None
-        session = await self._project_session(chronicle_id)
-        async with session:
-            repo = SQLiteAudioSourceRepository(session)
-            await repo.mark_transcribed(filename, content_hash, language, model)
-            await session.commit()
-
-    async def list_audio_source_paths(self, chronicle_id: UUID) -> list[str]:
-        """Full paths, for callers that only need somewhere to read the audio from."""
-        return [str(path) for path in await self._on_disk(chronicle_id)]
 
     async def list_speaker_names(self, chronicle_id: UUID) -> list[str]:
         session, repo = await self._get_repository(chronicle_id)

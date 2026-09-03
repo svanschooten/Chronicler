@@ -8,7 +8,18 @@ from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import service
 
 
-@service
+@service(
+    expose=[
+        "list_tasks",
+        "queue_clean",
+        "queue_import",
+        "queue_normalize",
+        "queue_summarize",
+        "queue_transcribe",
+        "retry_task",
+        "search_tasks",
+    ]
+)
 class TaskService:
     def __init__(self, repository: TaskRepository):
         self.repository = repository

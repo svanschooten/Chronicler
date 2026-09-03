@@ -13,7 +13,7 @@ from chronicler.core.rpc import service
 logger = logging.getLogger(__name__)
 
 
-@service
+@service(expose=["get_server_info", "list_models", "model_error", "ping"])
 class SystemService:
     def __init__(
         self,

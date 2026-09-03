@@ -7,6 +7,7 @@ import flet as ft
 
 from chronicler.core.models import Chronicle
 from chronicler.desktop.imports import TranscriptImportOptions
+from chronicler.i18n import t
 
 
 class OverlayForm:
@@ -34,14 +35,14 @@ class OverlayForm:
 
 class CreateChronicleForm(OverlayForm):
     def __init__(self, on_cancel, on_create):
-        self.title_field = ft.TextField(label="Chronicle Title")
+        self.title_field = ft.TextField(label=t("forms.chronicle_title"))
         super().__init__(
             ft.AlertDialog(
-                title=ft.Text("Create New Chronicle"),
+                title=ft.Text(t("forms.create_title")),
                 content=self.title_field,
                 actions=[
-                    ft.TextButton("Cancel", on_click=on_cancel),
-                    ft.TextButton("Create", on_click=on_create),
+                    ft.TextButton(t("common.cancel"), on_click=on_cancel),
+                    ft.TextButton(t("forms.create"), on_click=on_create),
                 ],
             )
         )
@@ -56,13 +57,15 @@ class CreateChronicleForm(OverlayForm):
 
 class EditChronicleForm(OverlayForm):
     def __init__(self, on_cancel, on_save):
-        self.title_field = ft.TextField(label="Title")
-        self.description_field = ft.TextField(label="Description", multiline=True)
-        self.kind_field = ft.TextField(label="Kind", hint_text="e.g. Podcast, D&D session, Meeting")
-        self.duration_field = ft.TextField(label="Duration", hint_text="e.g. 1h 24m")
+        self.title_field = ft.TextField(label=t("forms.title"))
+        self.description_field = ft.TextField(label=t("forms.description"), multiline=True)
+        self.kind_field = ft.TextField(label=t("forms.kind"), hint_text=t("forms.kind_hint"))
+        self.duration_field = ft.TextField(
+            label=t("forms.duration"), hint_text=t("forms.duration_hint")
+        )
         super().__init__(
             ft.AlertDialog(
-                title=ft.Text("Edit Chronicle"),
+                title=ft.Text(t("forms.edit_title")),
                 content=ft.Column(
                     [
                         self.title_field,
@@ -73,8 +76,8 @@ class EditChronicleForm(OverlayForm):
                     tight=True,
                 ),
                 actions=[
-                    ft.TextButton("Cancel", on_click=on_cancel),
-                    ft.TextButton("Save", on_click=on_save),
+                    ft.TextButton(t("common.cancel"), on_click=on_cancel),
+                    ft.TextButton(t("common.save"), on_click=on_save),
                 ],
             )
         )
@@ -101,20 +104,19 @@ class EditChronicleForm(OverlayForm):
 class TranscriptImportForm(OverlayForm):
     def __init__(self, on_cancel, on_import):
         self.regex_field = ft.TextField(
-            label="Line Regex",
+            label=t("forms.regex"),
             value=r"^([A-Za-z0-9 _]+)\s*:(.*)$",
-            hint_text=r"e.g. ^([A-Z]+):\s+(.*)$",
+            hint_text=t("forms.regex_hint"),
         )
-        self.speaker_group_field = ft.TextField(label="Speaker Group Index", value="1")
-        self.text_group_field = ft.TextField(label="Text Group Index", value="2")
+        self.speaker_group_field = ft.TextField(label=t("forms.speaker_group"), value="1")
+        self.text_group_field = ft.TextField(label=t("forms.text_group"), value="2")
         self.timestamp_group_field = ft.TextField(
-            label="Timestamp Group Index (optional)",
-            hint_text="e.g. 3 for ^([A-Za-z]+):\\s*(.*)\\s+\\[(\\d\\d:\\d\\d:\\d\\d)\\]$ - "
-            "leave blank for no timestamps",
+            label=t("forms.timestamp_group"),
+            hint_text=t("forms.timestamp_group_hint"),
         )
         super().__init__(
             ft.AlertDialog(
-                title=ft.Text("Import Transcript"),
+                title=ft.Text(t("actions.import_transcript")),
                 content=ft.Column(
                     [
                         self.regex_field,
@@ -125,8 +127,8 @@ class TranscriptImportForm(OverlayForm):
                     tight=True,
                 ),
                 actions=[
-                    ft.TextButton("Cancel", on_click=on_cancel),
-                    ft.TextButton("Select File & Import", on_click=on_import),
+                    ft.TextButton(t("common.cancel"), on_click=on_cancel),
+                    ft.TextButton(t("forms.select_and_import"), on_click=on_import),
                 ],
             )
         )

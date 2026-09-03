@@ -1,3 +1,4 @@
+import inspect
 import io
 from pathlib import Path
 
@@ -7,7 +8,7 @@ from pydantic import BaseModel
 
 from chronicler.core.container import Container
 from chronicler.core.remote import RemoteContainer
-from chronicler.core.rpc import RpcServer, service
+from chronicler.core.rpc import RpcServer, exposed_methods, get_services, service
 
 
 class Item(BaseModel):
@@ -15,7 +16,7 @@ class Item(BaseModel):
     name: str
 
 
-@service
+@service(expose=["add_item", "add_item_with_note", "get_items"])
 class MockService:
     async def get_items(self) -> list[Item]:
         return [Item(id=1, name="Test Item")]
@@ -241,3 +242,105 @@ async def test_upload_same_filename_twice_no_collision(tmp_path):
 
         assert paths[0] != paths[1]
         assert all(Path(p).exists() for p in paths)
+
+
+class TestExplicitExposure:
+    def test_a_service_publishes_only_what_it_names(self):
+        @service(expose=["wanted"])
+        class Sample:
+            async def wanted(self) -> str:
+                return "yes"
+
+            async def internal_helper(self) -> str:
+                return "no"
+
+        assert exposed_methods(Sample) == ["wanted"]
+
+    def test_naming_a_method_that_does_not_exist_fails_at_import_time(self):
+        with pytest.raises(ValueError, match="typo"):
+
+            @service(expose=["typo"])
+            class Sample:
+                async def real(self) -> str:
+                    return "x"
+
+    def test_naming_a_non_async_method_fails_at_import_time(self):
+        """Only coroutines can be served; a sync method would silently never be routed."""
+        with pytest.raises(ValueError, match="coroutine"):
+
+            @service(expose=["sync_one"])
+            class Sample:
+                def sync_one(self) -> str:
+                    return "x"
+
+    def test_a_service_with_no_expose_list_publishes_nothing(self):
+        @service
+        class Sample:
+            async def anything(self) -> str:
+                return "x"
+
+        assert exposed_methods(Sample) == []
+
+    def test_an_unregistered_class_exposes_nothing(self):
+        class NotAService:
+            async def anything(self) -> str:
+                return "x"
+
+        assert exposed_methods(NotAService) == []
+
+    def test_the_exposed_list_is_sorted_so_the_surface_is_reviewable(self):
+        @service(expose=["zebra", "apple"])
+        class Sample:
+            async def zebra(self) -> str:
+                return "z"
+
+            async def apple(self) -> str:
+                return "a"
+
+        assert exposed_methods(Sample) == ["apple", "zebra"]
+
+
+class TestTheRealServices:
+    def test_no_internal_helper_is_published(self):
+        """
+        Regression test: making a helper async used to publish it. `sources_dir` and
+        `source_path` became HTTP endpoints that way and leaked server paths.
+        """
+        from chronicler.core.services.transcript_service import TranscriptService
+
+        published = exposed_methods(TranscriptService)
+
+        assert "sources_dir" not in published
+        assert "source_path" not in published
+        assert "mark_source_transcribed" not in published
+
+    def test_every_published_method_exists_and_is_async(self):
+        for cls in get_services():
+            for name in exposed_methods(cls):
+                method = getattr(cls, name, None)
+                assert method is not None, f"{cls.__name__}.{name}"
+                assert inspect.iscoroutinefunction(method), f"{cls.__name__}.{name}"
+
+    def test_the_published_surface_is_what_we_think_it_is(self):
+        """
+        Counted per service rather than off `get_services()`, which is process-global and
+        collects the test-only services other modules register.
+        """
+        from chronicler.core.services import (
+            ChronicleService,
+            SystemService,
+            TaskService,
+            TranscriptService,
+        )
+
+        surface = {
+            cls.__name__: len(exposed_methods(cls))
+            for cls in (ChronicleService, TranscriptService, TaskService, SystemService)
+        }
+
+        assert surface == {
+            "ChronicleService": 8,
+            "TranscriptService": 13,
+            "TaskService": 8,
+            "SystemService": 4,
+        }

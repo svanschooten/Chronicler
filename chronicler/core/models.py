@@ -24,10 +24,7 @@ class TaskType(str, Enum):
     TRANSCRIBE = "TRANSCRIBE"
     NORMALIZE = "NORMALIZE"
     SUMMARIZE = "SUMMARIZE"
-    PROCESS = "PROCESS"
     CLEAN = "CLEAN"
-    EXPORT = "EXPORT"
-    TEST = "TEST"
 
 
 class Tag(BaseModel):

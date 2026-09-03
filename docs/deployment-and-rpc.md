@@ -96,3 +96,31 @@ rather than greying out actions over a network hiccup.
 
 Recording is deliberately absent from the list. It runs client-side in every mode, so a
 server capability would be answering the wrong question — see [recording.md](recording.md).
+
+## Exposure is explicit
+
+`@service(expose=[...])` names the methods that become HTTP routes. Anything not named is
+not published, however public or async it is.
+
+It used to be implicit: `@service` published every public coroutine. That made the API
+contract a side effect of an implementation detail — a helper that gained an `await`
+became a route, without anyone deciding it should. Two did exactly that, and served the
+server's absolute filesystem paths to any authenticated client:
+
+```text
+POST /transcript/source_path  {"filename": "../../../../etc/passwd"}
+  -> 200  "/ws/chronicles/<id>/sources/../../../../etc/passwd"
+```
+
+Nothing read the file, so this was path disclosure rather than traversal — but the
+mechanism would have kept producing endpoints nobody chose. The audit that found it also
+found that 15 of the 45 published methods were unreachable from any client.
+
+The list is validated when the class is decorated: naming a method that does not exist,
+or one that is not a coroutine, fails at import time rather than 404ing at runtime.
+`RemoteServiceProxy` builds its methods from the same list, so a thin client fails
+locally and clearly instead of over the wire.
+
+`tests/chronicler/core/test_rpc.py` asserts the exact size of each service's surface, so
+growing the API is a deliberate edit to a number rather than a side effect of writing a
+method.
