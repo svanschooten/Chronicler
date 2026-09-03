@@ -6,15 +6,14 @@ from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.file_staging import FileStager, LocalFileStager, RemoteFileStager
 from chronicler.core.local_container import register_local_repositories
 from chronicler.core.remote import RemoteContainer
+from chronicler.i18n import set_locale
 
 
 @dataclass
 class DesktopRuntime:
-    """Everything DesktopApp needs to run in either deployment mode, built once at
-    startup from Settings. `db_manager` is None in thin-client mode - there's no local
-    workspace at all, and DesktopApp uses its presence to decide whether it owns a
-    WorkerManager (thin client has no local tasks to run; the server it's pointed at
-    runs its own, see server/main.py).
+    """
+    Everything DesktopApp needs to run in either deployment mode, built once at startup from
+    Settings.
     """
 
     resolver: Container | RemoteContainer
@@ -24,10 +23,10 @@ class DesktopRuntime:
 
 
 def build_runtime(settings: Settings) -> DesktopRuntime:
+    set_locale(settings.ui.locale)
+
     mode = settings.mode
     if mode is None:
-        # Configs saved before Settings.mode existed - infer the same way
-        # desktop/main.py used to, rather than forcing a re-run of the wizard.
         mode = (
             "desktop:thin_client"
             if settings.server_url and not settings.workspace_path

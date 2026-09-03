@@ -28,11 +28,10 @@ def test_thin_client_settings_build_a_remote_container():
 
 
 def test_missing_mode_infers_thin_client_from_server_url_only(tmp_path):
-    """Configs saved before Settings.mode existed - inferred the same way
-    desktop/main.py used to, rather than forcing a wizard re-run."""
-    # workspace_path explicitly None: Settings() otherwise falls back to whatever this
-    # machine's real config file has, which would leak into the inference this test
-    # targets.
+    """
+    Configs saved before Settings.mode existed - inferred the same way desktop/main.py used
+    to, rather than forcing a wizard re-run.
+    """
     settings = Settings(
         server_url="http://example.invalid", api_key="key", mode=None, workspace_path=None
     )
@@ -58,3 +57,17 @@ def test_full_stack_without_workspace_path_raises():
     settings = Settings(mode="desktop:full_stack", workspace_path=None)
     with pytest.raises(ValueError, match="workspace_path"):
         build_runtime(settings)
+
+
+def test_build_runtime_activates_the_configured_locale(tmp_path):
+    from chronicler.i18n import get_locale, set_locale
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    settings = Settings(workspace_path=workspace, mode="desktop:full_stack")
+    settings.ui.locale = "nl"
+    try:
+        build_runtime(settings)
+        assert get_locale() == "nl"
+    finally:
+        set_locale("en")

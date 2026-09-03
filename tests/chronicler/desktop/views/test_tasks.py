@@ -18,8 +18,6 @@ def make_view():
             chronicle_service = AsyncMock()
             chronicle_service.list_chronicles.return_value = chronicles or []
         view = TasksView(task_service or AsyncMock(), chronicle_service, **kwargs)
-        # Not attached to a live Flet Page, so update() just needs to not raise
-        # (Control.update requires self.page, which is unavailable here).
         view.update = MagicMock()
         return view
 
@@ -27,9 +25,7 @@ def make_view():
 
 
 def _info_column(row):
-    """The type/subtitle/timestamps column of a task row. Left unannotated on purpose -
-    the tests below index into its children and read their `value`, which a declared
-    `ft.Column` return type would reject (`controls` is a list of bare `Control`)."""
+    """The type/subtitle/timestamps column of a task row."""
     return row.content.controls[1]
 
 
@@ -45,16 +41,15 @@ def _retry_buttons(row) -> list[ft.IconButton]:
     ]
 
 
-# -- construction --------------------------------------------------------------
-
-
 def test_hide_completed_defaults_to_true(make_view):
     assert make_view().hide_completed is True
 
 
 def test_dark_mode_flag_changes_task_row_colors(make_view):
-    """Regression test: TasksView used to hardcode BLUE_GREY_700/600 regardless of
-    dark_mode, so task rows stayed dark-styled even after switching to light mode."""
+    """
+    Regression test: TasksView used to hardcode BLUE_GREY_700/600 regardless of dark_mode,
+    so task rows stayed dark-styled even after switching to light mode.
+    """
     dark_view = make_view(dark_mode=True)
     light_view = make_view(dark_mode=False)
     task = Task(type=TaskType.IMPORT, status=TaskStatus.WORKING)
@@ -62,9 +57,6 @@ def test_dark_mode_flag_changes_task_row_colors(make_view):
     assert dark_view.create_task_row(task).bgcolor != light_view.create_task_row(task).bgcolor
     assert dark_view.colors == theme_colors(True)
     assert light_view.colors == theme_colors(False)
-
-
-# -- timestamps ----------------------------------------------------------------
 
 
 def test_task_row_shows_only_created_for_pending_task(make_view):
@@ -104,13 +96,12 @@ def test_task_row_shows_completed_for_terminal_task(make_view, status):
     assert "Completed 2026-01-01 12:45" in _timestamps_text(make_view().create_task_row(task))
 
 
-# -- naming the chronicle ------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_task_row_names_the_chronicle_it_belongs_to(make_view):
-    """A row used to show only its type and status, so a queue of several tasks gave no
-    indication of which chronicle each one was for."""
+    """
+    A row used to show only its type and status, so a queue of several tasks gave no
+    indication of which chronicle each one was for.
+    """
     chronicle = Chronicle(title="Weekly product sync")
     task = Task(type=TaskType.IMPORT, status=TaskStatus.PENDING, chronicle_id=chronicle.id)
     task_service = AsyncMock()
@@ -170,9 +161,6 @@ async def test_titles_are_resolved_once_per_load_not_once_per_row(make_view):
     chronicle_service.list_chronicles.assert_awaited_once()
 
 
-# -- errors and status icons ---------------------------------------------------
-
-
 def test_a_failed_task_shows_its_error(make_view):
     task = Task(
         type=TaskType.IMPORT, status=TaskStatus.FAILED, error="file_path must be inside imports"
@@ -213,9 +201,6 @@ def test_only_a_working_task_gets_a_progress_bar(make_view):
     assert not find_controls(pending, lambda c: isinstance(c, ft.ProgressBar))
 
 
-# -- retry ---------------------------------------------------------------------
-
-
 @pytest.mark.parametrize("status", [TaskStatus.FAILED, TaskStatus.DONE])
 def test_finished_tasks_offer_a_retry_button_carrying_the_task_id(make_view, status):
     task = Task(type=TaskType.IMPORT, status=status)
@@ -228,8 +213,10 @@ def test_finished_tasks_offer_a_retry_button_carrying_the_task_id(make_view, sta
 
 @pytest.mark.parametrize("status", [TaskStatus.PENDING, TaskStatus.WORKING])
 def test_unfinished_tasks_offer_no_retry_button(make_view, status):
-    """A WORKING task is already running - re-queueing it would let a second worker claim
-    it while the first is still going."""
+    """
+    A WORKING task is already running - re-queueing it would let a second worker claim it
+    while the first is still going.
+    """
     task = Task(type=TaskType.IMPORT, status=status)
 
     assert _retry_buttons(make_view().create_task_row(task)) == []
@@ -248,9 +235,6 @@ async def test_retry_clicked_requeues_the_task_and_reloads(make_view):
     task_service.retry_task.assert_awaited_once_with(task_id)
     view.show_snackbar.assert_called_once()
     view.load_tasks.assert_awaited_once()
-
-
-# -- loading -------------------------------------------------------------------
 
 
 @pytest.mark.asyncio

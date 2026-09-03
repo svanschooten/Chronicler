@@ -36,17 +36,14 @@ async def test_rpc_server_and_remote_proxy():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Missing key
         resp = await client.post("http://test/mock/get_items", json={})
         assert resp.status_code == 401
 
-        # Wrong key
         resp = await client.post(
             "http://test/mock/get_items", json={}, headers={"X-API-Key": "wrong-key"}
         )
         assert resp.status_code == 403
 
-        # Correct key
         resp = await client.post(
             "http://test/mock/get_items", json={}, headers={"X-API-Key": api_key}
         )
@@ -56,13 +53,10 @@ async def test_rpc_server_and_remote_proxy():
 
 @pytest.mark.asyncio
 async def test_optional_parameters_stay_optional_over_rpc():
-    """_add_route used to wrap every parameter as Body(..., ...) unconditionally -
-    Ellipsis means required in FastAPI/Pydantic, discarding the method's own default
-    regardless of what it was. That made every optional parameter on every service
-    method mandatory over RPC: omitting it, or explicitly sending null for it, both
-    422'd. Found via a live smoke test of Thin Client mode - ArchiveView's own
-    existing calls (e.g. create_chronicle with only some of its optional kwargs set)
-    would have broken the moment they ran against a real server.
+    """
+    _add_route used to wrap every parameter as Body(..., ...) unconditionally - Ellipsis
+    means required in FastAPI/Pydantic, discarding the method's own default regardless of
+    what it was.
     """
     container = Container()
     api_key = "test-secret-key"
@@ -73,14 +67,12 @@ async def test_optional_parameters_stay_optional_over_rpc():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"X-API-Key": api_key}
 
-        # Omitted entirely - falls back to the method's own default (None).
         resp = await client.post(
             "http://test/mock/add_item_with_note", json={"name": "a"}, headers=headers
         )
         assert resp.status_code == 200
         assert resp.json()["name"] == "a"
 
-        # Explicit null - also valid for an Optional[str] parameter.
         resp = await client.post(
             "http://test/mock/add_item_with_note",
             json={"name": "b", "note": None},
@@ -89,7 +81,6 @@ async def test_optional_parameters_stay_optional_over_rpc():
         assert resp.status_code == 200
         assert resp.json()["name"] == "b"
 
-        # A real value still works as before.
         resp = await client.post(
             "http://test/mock/add_item_with_note",
             json={"name": "c", "note": "urgent"},
@@ -100,9 +91,10 @@ async def test_optional_parameters_stay_optional_over_rpc():
 
 
 def test_cors_does_not_combine_wildcard_with_credentials():
-    """allow_origins=['*'] together with allow_credentials=True is an invalid, unsafe
-    combination that browsers reject outright - and unnecessary here anyway, since auth
-    is a bearer-style X-API-Key header that browsers never attach automatically.
+    """
+    allow_origins=['*'] together with allow_credentials=True is an invalid, unsafe
+    combination that browsers reject outright - and unnecessary here anyway, since auth is a
+    bearer-style X-API-Key header that browsers never attach automatically.
     """
     container = Container()
     server = RpcServer(container, services=[], api_key="test-key")
@@ -115,9 +107,10 @@ def test_cors_does_not_combine_wildcard_with_credentials():
 
 @pytest.mark.asyncio
 async def test_wrong_key_of_same_length_still_rejected():
-    """Exercises the secrets.compare_digest path with a same-length wrong key, since a
-    naive `!=` and compare_digest both reject it - the point is the endpoint stays
-    correct after switching comparison functions, not that we can observe timing here.
+    """
+    Exercises the secrets.compare_digest path with a same-length wrong key, since a naive
+    `!=` and compare_digest both reject it - the point is the endpoint stays correct after
+    switching comparison functions, not that we can observe timing here.
     """
     container = Container()
     api_key = "a" * 32
@@ -176,10 +169,6 @@ async def _build_upload_app(tmp_path):
     container.register_factory(TaskRepository, SQLiteTaskRepository)
     container.register_factory(TagRepository, SQLiteTagRepository)
 
-    # services=[] deliberately: these tests only exercise /upload, and leaving the
-    # default (None -> every globally @service-registered class) would make pass/fail
-    # depend on which other test modules happened to import first in this session and
-    # populate the global registry.
     server = RpcServer(container=container, services=[], api_key="test-key")
     return server.build(), db_manager.get_imports_path()
 
@@ -199,7 +188,6 @@ async def test_rpc_server_upload(tmp_path):
 
         result_path = Path(data["file_path"])
         assert result_path.exists()
-        # The on-disk name is server-generated, not the client-supplied filename.
         assert result_path.name != "test.wav"
         assert result_path.suffix == ".wav"
         assert result_path.parent.resolve() == upload_dir.resolve()
@@ -235,7 +223,6 @@ async def test_upload_rejects_oversized_file(tmp_path, monkeypatch):
         response = await client.post("/upload", files=files, headers={"X-API-Key": "test-key"})
         assert response.status_code == 413
 
-    # No partial file left behind.
     assert list(upload_dir.iterdir()) == []
 
 

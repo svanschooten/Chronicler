@@ -78,10 +78,7 @@ async def test_update_task_status(async_session):
 
 @pytest.mark.asyncio
 async def test_returning_a_task_to_pending_clears_the_previous_runs_traces(async_session):
-    """Progress, error and the claim all describe the run that just ended. Leaving
-    claimed_by/claimed_at behind made the Tasks view keep showing the *previous* run's
-    start time until something claimed the task again.
-    """
+    """Progress, error and the claim all describe the run that just ended."""
     repo = SQLiteTaskRepository(async_session)
     task = await repo.create(Task(type=TaskType.IMPORT))
     await repo.claim_next("worker-1")
@@ -100,8 +97,10 @@ async def test_returning_a_task_to_pending_clears_the_previous_runs_traces(async
 
 @pytest.mark.asyncio
 async def test_a_retried_task_keeps_its_attempt_count_and_is_claimable_once(async_session):
-    """A manually retried task is claimable again, but its spent automatic budget stays
-    spent - so one retry buys one attempt, not another full round of three."""
+    """
+    A manually retried task is claimable again, but its spent automatic budget stays spent -
+    so one retry buys one attempt, not another full round of three.
+    """
     repo = SQLiteTaskRepository(async_session)
     task = await repo.create(Task(type=TaskType.IMPORT, max_attempts=1))
     await repo.claim_next("worker-1")
@@ -114,7 +113,6 @@ async def test_a_retried_task_keeps_its_attempt_count_and_is_claimable_once(asyn
     claimed = await repo.claim_next("worker-2")
     assert claimed is not None and claimed.id == task.id
 
-    # Failing again exhausts it immediately rather than granting further retries.
     await repo.mark_failed_or_retry(task.id, "boom again")
     assert (await repo.get_by_id(task.id)).status == TaskStatus.FAILED
 
@@ -129,16 +127,13 @@ async def test_search_tasks(async_session):
     await task_repo.create(Task(type=TaskType.IMPORT, chronicle_id=chronicle.id))
     await task_repo.create(Task(type=TaskType.TRANSCRIBE))
 
-    # Search by type
     results = await task_repo.search("IMPORT")
     assert len(results) == 1
     assert results[0].type == TaskType.IMPORT
 
-    # Search by chronicle title
     results = await task_repo.search("D&D")
     assert len(results) == 1
     assert results[0].type == TaskType.IMPORT
 
-    # Search case insensitive
     results = await task_repo.search("d&d")
     assert len(results) == 1

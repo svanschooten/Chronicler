@@ -29,9 +29,10 @@ async def desktop_app(tmp_path):
 
 @pytest.mark.asyncio
 async def test_worker_session_is_separate_from_view_session(desktop_app):
-    """The UI and the background WorkerManager loop are separate coroutines on the
-    same event loop; sharing one AsyncSession between them risks
-    IllegalStateChangeError if their operations interleave. Confirms they never do.
+    """
+    The UI and the background WorkerManager loop are separate coroutines on the same event
+    loop; sharing one AsyncSession between them risks IllegalStateChangeError if their
+    operations interleave.
     """
     desktop_app._worker_session = desktop_app.db_manager.get_archive_session()
 
@@ -71,8 +72,9 @@ async def test_update_view_closes_previous_session_before_opening_next(desktop_a
 
 @pytest.mark.asyncio
 async def test_settings_view_has_no_session(desktop_app):
-    """SettingsView doesn't touch the database at all, so navigating to it shouldn't
-    open a session just to immediately hold it open unused.
+    """
+    SettingsView doesn't touch the database at all, so navigating to it shouldn't open a
+    session just to immediately hold it open unused.
     """
     desktop_app.state.navigate_to(ViewType.SETTINGS)
     await desktop_app.update_view()
@@ -101,8 +103,10 @@ async def test_cleanup_closes_both_view_and_worker_sessions(desktop_app):
 
 
 def test_thin_client_does_not_start_a_worker_manager():
-    """Thin client has no local tasks to run - the server it's pointed at runs its
-    own WorkerManager (Sprint 3 item 4)."""
+    """
+    Thin client has no local tasks to run - the server it's pointed at runs its own
+    WorkerManager (Sprint 3 item 4).
+    """
     settings = Settings(server_url="http://upstream", api_key="key", mode="desktop:thin_client")
     runtime = build_runtime(settings)
     assert runtime.db_manager is None
@@ -116,9 +120,6 @@ def test_thin_client_does_not_start_a_worker_manager():
 
 @pytest.mark.asyncio
 async def test_full_stack_starts_a_worker_manager(desktop_app, monkeypatch):
-    # Don't actually start the polling loop - this test only cares that a
-    # WorkerManager gets configured, not that it runs. Closing (not just discarding)
-    # the coroutine avoids a "was never awaited" warning.
     def fake_create_task(coro):
         coro.close()
         return MagicMock()
@@ -133,10 +134,6 @@ async def test_full_stack_starts_a_worker_manager(desktop_app, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_on_dark_mode_change_updates_page_and_persists(desktop_app, monkeypatch):
-    # Settings.save() writing to disk is already covered by test_config.py; here we
-    # only care that on_dark_mode_change calls it, so it doesn't need to actually run.
-    # Settings is a pydantic model - it rejects ad-hoc instance attribute assignment,
-    # so the class method is patched instead.
     save_mock = MagicMock()
     monkeypatch.setattr(type(desktop_app.runtime.settings), "save", save_mock)
 
@@ -152,11 +149,10 @@ async def test_on_dark_mode_change_updates_page_and_persists(desktop_app, monkey
 
 @pytest.mark.asyncio
 async def test_on_dark_mode_change_repaints_everything_the_app_owns(desktop_app, monkeypatch):
-    """The sidebar and content area paint themselves, but `page.bgcolor` is what shows
-    behind and around them (SafeArea insets, and any gap while a view is rebuilding) - it
-    was never set at all, so that area used Flet's default instead of the theme surface.
-    The divider between sidebar and content had the same problem in reverse: it was
-    coloured once at construction and never updated on a theme change.
+    """
+    The sidebar and content area paint themselves, but `page.bgcolor` is what shows behind
+    and around them (SafeArea insets, and any gap while a view is rebuilding) - it was never
+    set at all, so that area used Flet's default instead of the theme surface.
     """
     from chronicler.desktop.theme import theme_colors
 
@@ -178,8 +174,10 @@ async def test_on_dark_mode_change_repaints_everything_the_app_owns(desktop_app,
 
 
 def test_apply_theme_tolerates_controls_that_do_not_exist_yet():
-    """main() calls it before content_area and the divider are built, so it has to cope
-    with a partially constructed app."""
+    """
+    main() calls it before content_area and the divider are built, so it has to cope with a
+    partially constructed app.
+    """
     from chronicler.core.config import Settings
     from chronicler.desktop.theme import theme_colors
 
@@ -195,11 +193,10 @@ def test_apply_theme_tolerates_controls_that_do_not_exist_yet():
 
 @pytest.mark.asyncio
 async def test_on_dark_mode_change_rebuilds_current_view_with_new_colors(desktop_app, monkeypatch):
-    """Regression test: toggling dark mode used to only flip page.theme_mode - the
-    content_area background and every view's hardcoded colors stayed exactly as dark
-    as before, since views bake their colors in at construction time and nothing
-    rebuilt them. The current view (ARCHIVE, by AppState's default) must be
-    reconstructed with the new dark_mode so its colors actually change.
+    """
+    Regression test: toggling dark mode used to only flip page.theme_mode - the content_area
+    background and every view's hardcoded colors stayed exactly as dark as before, since
+    views bake their colors in at construction time and nothing rebuilt them.
     """
     monkeypatch.setattr(type(desktop_app.runtime.settings), "save", MagicMock())
 
@@ -212,10 +209,11 @@ async def test_on_dark_mode_change_rebuilds_current_view_with_new_colors(desktop
 
 
 async def _create_chronicle(desktop_app, title: str):
-    """A throwaway scope just to create a test fixture, closed immediately after -
-    unlike desktop_app._view_scope (torn down by update_view()/cleanup()), a scope
-    created ad hoc in a test body is otherwise never closed, and SQLAlchemy warns
-    about the abandoned connection when it's garbage collected.
+    """
+    A throwaway scope just to create a test fixture, closed immediately after - unlike
+    desktop_app._view_scope (torn down by update_view()/cleanup()), a scope created ad hoc
+    in a test body is otherwise never closed, and SQLAlchemy warns about the abandoned
+    connection when it's garbage collected.
     """
     from chronicler.core.services.chronicle_service import ChronicleService
 
@@ -250,7 +248,7 @@ async def test_on_task_completed_refreshes_transcript_view_for_matching_chronicl
 
     await desktop_app._on_task_completed(
         TaskCompletedEvent(
-            task_id=chronicle.id,  # any uuid - not read for this decision
+            task_id=chronicle.id,
             task_type=TaskType.TRANSCRIBE,
             status=TaskStatus.DONE,
             chronicle_id=chronicle.id,
@@ -278,7 +276,7 @@ async def test_on_task_completed_skips_refresh_for_a_different_chronicle(desktop
             task_id=uuid4(),
             task_type=TaskType.TRANSCRIBE,
             status=TaskStatus.DONE,
-            chronicle_id=uuid4(),  # a different chronicle
+            chronicle_id=uuid4(),
         )
     )
 
@@ -307,11 +305,12 @@ async def test_on_task_completed_skips_settings_view(desktop_app):
 
 @pytest.mark.asyncio
 async def test_update_view_transcript_refetches_chronicle(desktop_app):
-    """Regression target: TranscriptView bakes speakers_count/duration/status/tags
-    into its UI at construction time from whatever Chronicle object it's given -
-    reusing state.selected_chronicle as-is (a snapshot from whenever the user
-    navigated here) would keep showing stale values after a background task (e.g.
-    transcription) changes the chronicle.
+    """
+    Regression target: TranscriptView bakes speakers_count/duration/status/tags into its UI
+    at construction time from whatever Chronicle object it's given - reusing
+    state.selected_chronicle as-is (a snapshot from whenever the user navigated here) would
+    keep showing stale values after a background task (e.g. transcription) changes the
+    chronicle.
     """
     from chronicler.core.services.chronicle_service import ChronicleService
 
@@ -321,8 +320,6 @@ async def test_update_view_transcript_refetches_chronicle(desktop_app):
     await desktop_app.update_view()
     assert desktop_app.content_area.content.chronicle.duration is None
 
-    # Reuse the view's own (already-tracked, closed by the next navigation) scope
-    # rather than opening an extra untracked one just for this update.
     chronicle_service = desktop_app._view_scope.resolve(ChronicleService)
     chronicle.duration = "1h 0m"
     await chronicle_service.update_chronicle(chronicle)
@@ -343,7 +340,7 @@ async def test_update_view_transcript_goes_back_if_chronicle_was_deleted(desktop
     scope = desktop_app._new_scope()
     await scope.resolve(ChronicleService).delete_chronicle(chronicle.id)
     await scope.resolve(AsyncSession).close()
-    desktop_app._view_scope = None  # this ad hoc scope isn't the tracked view scope
+    desktop_app._view_scope = None
 
     await desktop_app.update_view()
 
@@ -352,8 +349,10 @@ async def test_update_view_transcript_goes_back_if_chronicle_was_deleted(desktop
 
 @pytest.mark.asyncio
 async def test_thin_client_resolves_a_working_remote_service(tmp_path):
-    """DesktopApp resolved through a RemoteContainer must get a proxy that actually
-    round-trips to a live server, not just an object of the right type."""
+    """
+    DesktopApp resolved through a RemoteContainer must get a proxy that actually round-trips
+    to a live server, not just an object of the right type.
+    """
     from httpx import ASGITransport, AsyncClient
 
     from chronicler.core.container import Container
@@ -391,3 +390,45 @@ async def test_thin_client_resolves_a_working_remote_service(tmp_path):
         assert chronicles[0].title == "Remote One"
     finally:
         await upstream_db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_refresh_models_caches_the_provider_listing(tmp_path):
+    """
+    Model discovery is a network round trip, so it runs once at startup rather than every
+    time a summary dialog opens.
+    """
+    from unittest.mock import AsyncMock
+
+    from chronicler.core.services.system_service import SystemService
+
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    app = DesktopApp(runtime)
+
+    system = AsyncMock()
+    system.list_models.return_value = ["qwen3", "llama3"]
+    original = runtime.resolver.resolve
+    runtime.resolver.resolve = lambda cls: system if cls is SystemService else original(cls)
+
+    await app.refresh_models()
+
+    assert app.available_models == ["qwen3", "llama3"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_models_survives_an_unreachable_provider(tmp_path):
+    from unittest.mock import AsyncMock
+
+    from chronicler.core.services.system_service import SystemService
+
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    app = DesktopApp(runtime)
+
+    system = AsyncMock()
+    system.list_models.side_effect = RuntimeError("connection refused")
+    original = runtime.resolver.resolve
+    runtime.resolver.resolve = lambda cls: system if cls is SystemService else original(cls)
+
+    await app.refresh_models()
+
+    assert app.available_models == []

@@ -1,9 +1,4 @@
-"""Staging files for import into a workspace's imports/ directory.
-
-Shared between the RPC server's /upload endpoint (chronicler/core/rpc.py) and the
-desktop app's local file-picker import flow (chronicler/desktop/views/archive.py) - both
-need the same rule: never trust a caller-supplied filename to build a destination path.
-"""
+"""Staging files for import into a workspace's imports/ directory."""
 
 import shutil
 import uuid
@@ -14,24 +9,14 @@ import httpx
 
 
 def sanitize_stage_name(original_filename: str | None) -> str:
-    """A fresh, collision-proof on-disk filename for a staged import file: a uuid4 with
-    only a whitelisted extension carried over from the original name, never the name
-    itself - so a path-traversal or otherwise malicious filename never reaches the
-    filesystem, regardless of where it came from (upload or a local file picker).
-    """
+    """A uuid4 filename carrying only a whitelisted extension from the original name."""
     raw_suffix = Path(original_filename).suffix if original_filename else ""
     safe_suffix = "".join(c for c in raw_suffix if c.isalnum() or c == ".")[:16]
     return f"{uuid.uuid4().hex}{safe_suffix}"
 
 
 def confine_to_directory(file_path: str | Path, root: Path, description: str) -> Path:
-    """Resolve `file_path` and reject it if it lands outside `root`.
-
-    The one implementation of "this path came from an RPC caller, so it is not
-    trustworthy". Checked at the point of access rather than at submission, so it
-    covers every caller regardless of how they obtained the string - see
-    HandlerBase.confine_to, which delegates here.
-    """
+    """Resolve `file_path` and reject it if it lands outside `root`."""
     resolved = Path(file_path).resolve()
     if not resolved.is_relative_to(root.resolve()):
         raise ValueError(f"file_path must be inside {description}: {file_path}")
@@ -39,13 +24,7 @@ def confine_to_directory(file_path: str | Path, root: Path, description: str) ->
 
 
 def safe_display_name(original_filename: str | None, fallback: str) -> str:
-    """The caller-supplied name reduced to a single, harmless path component.
-
-    Unlike sanitize_stage_name this keeps the readable name - a chronicle's sources/
-    listing is meant to show "session-3-gm.wav", not a uuid - so it has to strip
-    everything that could make the name act as a path instead: directory separators
-    (POSIX and Windows), NT drive letters and ADS colons, and the "." / ".." entries.
-    """
+    """The caller-supplied name reduced to a single, harmless path component."""
     name = Path((original_filename or "").replace("\\", "/")).name
     name = name.replace(":", "_").strip()
     if not name or name in (".", ".."):
@@ -54,11 +33,9 @@ def safe_display_name(original_filename: str | None, fallback: str) -> str:
 
 
 def stage_local_file(source_path: Path, imports_dir: Path) -> Path:
-    """Copy a local file (e.g. one returned by a native file picker) into imports_dir
-    under a fresh, safe name, and return the staged path. The source path itself is
-    never queued for import - only the staged copy is, so it satisfies the same
-    "must be inside the workspace's imports directory" confinement that
-    WorkerHandlers.handle_import enforces regardless of caller.
+    """
+    Copy a local file (e.g. one returned by a native file picker) into imports_dir under a
+    fresh, safe name, and return the staged path.
     """
     dest_path = imports_dir / sanitize_stage_name(source_path.name)
     shutil.copyfile(source_path, dest_path)
@@ -66,9 +43,10 @@ def stage_local_file(source_path: Path, imports_dir: Path) -> Path:
 
 
 class FileStager(ABC):
-    """Turns a locally-picked file path into something safe to pass to
-    TaskService.queue_import - the same operation, two different mechanisms depending
-    on where the worker that will actually read the file runs.
+    """
+    Turns a locally-picked file path into something safe to pass to TaskService.queue_import
+    - the same operation, two different mechanisms depending on where the worker that will
+    actually read the file runs.
     """
 
     @abstractmethod
@@ -77,8 +55,10 @@ class FileStager(ABC):
 
 
 class LocalFileStager(FileStager):
-    """Full-stack desktop mode: the worker runs in this same process, so staging is
-    just a local copy into the workspace's imports directory."""
+    """
+    Full-stack desktop mode: the worker runs in this same process, so staging is just a
+    local copy into the workspace's imports directory.
+    """
 
     def __init__(self, imports_dir: Path):
         self.imports_dir = imports_dir
@@ -88,9 +68,11 @@ class LocalFileStager(FileStager):
 
 
 class RemoteFileStager(FileStager):
-    """Thin-client desktop mode: the worker runs on the remote server, so the picked
-    file has to actually get there first - upload it via the same /upload endpoint the
-    web client's proxy already uses, and return the path the server reports back."""
+    """
+    Thin-client desktop mode: the worker runs on the remote server, so the picked file has
+    to actually get there first - upload it via the same /upload endpoint the web client's
+    proxy already uses, and return the path the server reports back.
+    """
 
     def __init__(self, base_url: str, api_key: str | None, client: httpx.AsyncClient | None = None):
         self.base_url = base_url.rstrip("/")

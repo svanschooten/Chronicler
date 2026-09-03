@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Table
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -9,7 +9,6 @@ class Base(DeclarativeBase):
     pass
 
 
-# Association table for Chronicles and Tags
 chronicle_tags = Table(
     "chronicle_tags",
     Base.metadata,
@@ -50,22 +49,29 @@ class DBTask(Base):
     __tablename__ = "tasks"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    type: Mapped[str] = mapped_column(String(50))  # e.g., IMPORT, TRANSCRIBE
+    type: Mapped[str] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(20), default="PENDING")
     priority: Mapped[int] = mapped_column(default=0)
     progress: Mapped[int] = mapped_column(default=0)
-    data: Mapped[str | None] = mapped_column(String)  # JSON data
+    data: Mapped[str | None] = mapped_column(String)
     error: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
     )
     chronicle_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("chronicles.id"))
-    # Identifies which WorkerManager instance currently owns this task, set atomically
-    # together with the PENDING -> WORKING transition (see
-    # SQLiteTaskRepository.claim_next). Cleared whenever the task goes back to PENDING
-    # for a retry.
     claimed_by: Mapped[str | None] = mapped_column(String(36))
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime)
     attempts: Mapped[int] = mapped_column(default=0)
     max_attempts: Mapped[int] = mapped_column(default=3)
+
+
+class DBKnownSpeaker(Base):
+    __tablename__ = "known_speakers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    normalized_name: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    uses: Mapped[int] = mapped_column(Integer, default=0)
+    first_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    last_used: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

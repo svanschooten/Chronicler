@@ -27,8 +27,10 @@ def test_navigate_to_carries_the_selected_chronicle():
 
 
 def test_navigating_away_clears_the_selected_chronicle():
-    """Otherwise a stale selection outlives the transcript view that used it, and a
-    later navigation back to TRANSCRIPT would render whatever was last open."""
+    """
+    Otherwise a stale selection outlives the transcript view that used it, and a later
+    navigation back to TRANSCRIPT would render whatever was last open.
+    """
     state = AppState()
     state.navigate_to(ViewType.TRANSCRIPT, Chronicle(title="T"))
 

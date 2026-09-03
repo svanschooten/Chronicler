@@ -1,17 +1,14 @@
 import inspect
+import types
 from collections.abc import Callable
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar, Union, cast, get_args, get_origin
 
 T = TypeVar("T")
 
 
 class Container:
     def __init__(self):
-        # Populated only by register_instance() - always shared, never rebuilt.
         self._explicit_instances: dict[type, Any] = {}
-        # Populated lazily by resolve() the first time a factory-backed (or
-        # auto-built) type is requested. Kept separate from _explicit_instances so
-        # create_scope() can share singletons while still rebuilding everything else.
         self._resolved_cache: dict[type, Any] = {}
         self._factories: dict[type, Callable] = {}
 
@@ -22,27 +19,18 @@ class Container:
         self._factories[cls] = factory
 
     def is_registered(self, cls: type) -> bool:
-        """Whether `cls` has an explicit registration (instance or factory) - as
-        opposed to something that would only resolve via the auto-build fallback for
-        plain concrete classes. Useful for optional cleanup: e.g. only bother closing
-        an AsyncSession if this container was actually set up to build one, rather
-        than triggering resolve()'s auto-build attempt on a type that was never meant
-        to be resolved here.
+        """
+        Whether `cls` has an explicit registration (instance or factory) - as opposed to
+        something that would only resolve via the auto-build fallback for plain concrete
+        classes.
         """
         return cls in self._explicit_instances or cls in self._factories
 
     def create_scope(self) -> "Container":
-        """A new Container that shares this one's explicit singletons (register_instance
-        - e.g. a DatabaseManager meant to live for the app's lifetime) and factory
-        recipes, but starts with an empty resolve cache of its own. Anything resolved
-        through the new container that isn't an explicit singleton is therefore built
-        fresh - a fresh AsyncSession, fresh repositories, a fresh service instance -
-        even if this container already resolved one. Used to give each unit of work
-        (an HTTP request, a task execution) its own session rather than sharing one
-        across the whole process.
-
-        Registrations added to this container *after* create_scope() is called are not
-        visible to the already-created scope.
+        """
+        A new Container that shares this one's explicit singletons (register_instance -
+        e.g. a DatabaseManager meant to live for the app's lifetime) and factory
+        recipes, but starts with an empty resolve cache of its own.
         """
         scope = Container()
         scope._explicit_instances = dict(self._explicit_instances)
@@ -73,6 +61,26 @@ class Container:
 
         raise ValueError(f"Could not resolve {cls}")
 
+    @staticmethod
+    def _optional_inner(annotation: Any) -> Any | None:
+        """The `T` of a `T | None` annotation, or None if it is not optional."""
+        if get_origin(annotation) not in (Union, types.UnionType):
+            return None
+        args = [arg for arg in get_args(annotation) if arg is not type(None)]
+        if len(args) != 1 or type(None) not in get_args(annotation):
+            return None
+        return args[0]
+
+    def _resolve_parameter(self, annotation: Any) -> Any:
+        """Resolves a constructor parameter, treating `T | None` as best-effort."""
+        inner = self._optional_inner(annotation)
+        if inner is None:
+            return self.resolve(annotation)
+        try:
+            return self.resolve(inner)
+        except (ValueError, TypeError):
+            return None
+
     def _build_instance(self, cls: type[T]) -> T:
         if cls.__init__ is object.__init__:
             return cast(T, cls.__new__(cls))
@@ -83,7 +91,7 @@ class Container:
             if name == "self":
                 continue
             if param.annotation is not inspect.Parameter.empty:
-                kwargs[name] = self.resolve(param.annotation)
+                kwargs[name] = self._resolve_parameter(param.annotation)
             else:
                 raise ValueError(
                     f"Cannot resolve parameter {name} of {cls.__name__}: missing type hint"
@@ -96,7 +104,7 @@ class Container:
         kwargs = {}
         for name, param in signature.parameters.items():
             if param.annotation is not inspect.Parameter.empty:
-                kwargs[name] = self.resolve(param.annotation)
+                kwargs[name] = self._resolve_parameter(param.annotation)
             else:
                 raise ValueError(
                     f"Cannot resolve parameter {name} of {func.__name__}: missing type hint"

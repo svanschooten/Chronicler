@@ -1,9 +1,4 @@
-"""The per-chronicle card rendered in the archive list.
-
-Split out from the view itself because it's pure presentation: given a Chronicle,
-the palette and a set of click handlers, it returns a Container. No state, no
-service calls, nothing to await.
-"""
+"""The per-chronicle card rendered in the archive list."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,17 +9,12 @@ import flet as ft
 from chronicler.core.models import Chronicle
 from chronicler.desktop.theme import ThemeColors
 
-#: Flet click handlers. Async handlers are bound directly (Flet awaits them itself);
-#: wrapping them in a lambda is what used to swallow the coroutine and make card
-#: buttons silently do nothing.
 Handler = Callable[[Any], Any]
 
 
 @dataclass(frozen=True)
 class ChronicleCardHandlers:
-    """Every action a card can trigger. Grouped into one object so adding a card
-    action doesn't mean threading another positional argument through the builder.
-    """
+    """Every action a card can trigger."""
 
     on_open: Handler
     on_import_audio: Handler
@@ -136,8 +126,9 @@ def _icon_action(
     on_click: Handler,
     tooltip: str,
 ) -> ft.IconButton:
-    """`data` is what the handler reads back off `e.control.data` - a whole Chronicle
-    where the handler needs its fields (edit, delete), just the id where it doesn't.
+    """
+    `data` is what the handler reads back off `e.control.data` - a whole Chronicle where the
+    handler needs its fields (edit, delete), just the id where it doesn't.
     """
     return ft.IconButton(
         icon=icon,

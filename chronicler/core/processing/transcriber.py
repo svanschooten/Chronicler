@@ -1,53 +1,53 @@
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from chronicler.core.config_sections import AUTO_LANGUAGE, TranscriptionSettings
 from chronicler.core.models import TranscriptLine
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
-# "base" balances download size (~150MB) against accuracy for a local-first desktop
-# app that can't assume a GPU. Not exposed as a Settings field yet - nobody's asked
-# to tune it, and it's one constant to change here when someone does.
-DEFAULT_MODEL_SIZE = "base"
-
-# Keyed by model_size: constructing WhisperModel is what triggers the (possibly
-# multi-hundred-MB) download from HuggingFace Hub on first use, so it's cached here
-# rather than reloaded per task.
-_model_cache: dict[str, Any] = {}
+_model_cache: dict[tuple[str, str, str], Any] = {}
 
 
-def _get_model(model_size: str) -> Any:
-    # Imported lazily, inside this function, not at module level: importing
-    # transcriber.py (e.g. because WorkerHandlers imports it) must not require
-    # faster-whisper to be installed, and must never trigger a model download just
-    # by being imported - only an actual transcribe_audio() call should do that.
+def _get_model(model_size: str, device: str, compute_type: str) -> Any:
     from faster_whisper import WhisperModel
 
-    if model_size not in _model_cache:
+    key = (model_size, device, compute_type)
+    if key not in _model_cache:
         logger.info(f"Loading faster-whisper model '{model_size}' (downloads on first use)")
-        _model_cache[model_size] = WhisperModel(model_size, device="cpu", compute_type="int8")
-    return _model_cache[model_size]
+        _model_cache[key] = WhisperModel(model_size, device=device, compute_type=compute_type)
+    return _model_cache[key]
 
 
 def transcribe_audio(
-    file_path: str, speaker_name: str, model_size: str = DEFAULT_MODEL_SIZE
+    file_path: str,
+    speaker_name: str,
+    language: str | None = None,
+    no_speech_threshold: float | None = None,
+    model_size: str | None = None,
+    device: str | None = None,
+    compute_type: str | None = None,
+    settings: TranscriptionSettings | None = None,
 ) -> list[TranscriptLine]:
-    """Synchronous and CPU-bound - callers on an event loop (see
-    WorkerHandlers.handle_transcribe) must run this via asyncio.to_thread(), not
-    await it directly, or a long transcription blocks everything else sharing that
-    loop (the desktop UI, in full-stack mode).
+    """Transcribes one single-speaker track, defaulting every parameter from settings."""
+    defaults = settings or TranscriptionSettings()
 
-    faster-whisper doesn't diarize, so every segment in one file belongs to the same
-    speaker - `speaker_name` says which, since one audio source is one participant's
-    own track and the caller already knows whose. Splitting a mixed recording into
-    per-speaker segments is future work (see TODO.md); until then this parameter is
-    what makes the output correctly attributed rather than generically labelled.
-    """
-    model = _get_model(model_size)
-    segments, _info = model.transcribe(file_path)
+    resolved_language = language if language is not None else defaults.language
+    if resolved_language == AUTO_LANGUAGE:
+        resolved_language = None
+
+    model = _get_model(
+        model_size or defaults.model_size,
+        device or defaults.device,
+        compute_type or defaults.compute_type,
+    )
+    segments, _info = model.transcribe(
+        file_path,
+        language=resolved_language,
+        no_speech_threshold=(
+            no_speech_threshold if no_speech_threshold is not None else defaults.no_speech_threshold
+        ),
+    )
 
     lines = []
     for segment in segments:

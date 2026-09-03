@@ -24,7 +24,6 @@ async def test_handle_import_rejects_file_path_outside_imports_dir(tmp_path):
     try:
         handlers = WorkerHandlers(db_manager)
 
-        # An absolute path that is not inside <workspace>/imports at all.
         outside_file = tmp_path / "secrets.txt"
         outside_file.write_text("top secret")
 
@@ -48,7 +47,6 @@ async def test_handle_import_rejects_traversal_relative_to_imports_dir(tmp_path)
         handlers = WorkerHandlers(db_manager)
         imports_dir = db_manager.get_imports_path()
 
-        # A path that starts inside imports/ but escapes via "..".
         escaping_path = imports_dir / ".." / ".." / "secrets.txt"
 
         task = Task(
@@ -149,8 +147,6 @@ async def test_handle_import_rolls_back_on_failure(tmp_path):
         )
         await handlers.handle_import(task, _noop_progress)
 
-        # A second import that fails partway through (after delete_all_lines(), before
-        # commit) must not leave the transcript half-deleted.
         transcript_file.write_text("Carol: Replacement line\n")
         second_task = Task(
             type=TaskType.IMPORT,
@@ -281,9 +277,10 @@ async def test_handle_import_without_append_still_overwrites(tmp_path):
 
 @pytest.mark.asyncio
 async def test_handle_import_logs_parse_count_and_finish(tmp_path, caplog):
-    """Regression test: previously the only log line was "Importing transcript
-    from..." at the very start - nothing logged how many lines were parsed or that
-    the import actually finished.
+    """
+    Regression test: previously the only log line was "Importing transcript from..." at the
+    very start - nothing logged how many lines were parsed or that the import actually
+    finished.
     """
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
@@ -312,9 +309,10 @@ async def test_handle_import_logs_parse_count_and_finish(tmp_path, caplog):
 
 @pytest.mark.asyncio
 async def test_handle_import_append_hands_the_offset_to_the_importer(tmp_path):
-    """Where an appended file starts on the chronicle's timeline is known before a
-    single line is parsed - so it's a parse-time input, not a shift applied to every
-    line after the fact.
+    """
+    Where an appended file starts on the chronicle's timeline is known before a single line
+    is parsed - so it's a parse-time input, not a shift applied to every line after the
+    fact.
     """
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
@@ -352,7 +350,6 @@ async def test_handle_import_append_hands_the_offset_to_the_importer(tmp_path):
         with patch.object(RegexImporter, "parse", _spy):
             await handlers.handle_import(second_task, _noop_progress)
 
-        # The first file ends at 2.0 (two lines, synthetic 0->1 and 1->2).
         assert seen["start_offset"] == 2.0
 
         session = await db_manager.get_project_session(str(chronicle_id))

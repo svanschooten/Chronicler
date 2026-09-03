@@ -59,9 +59,10 @@ class _MockUpstreamService:
 
 @pytest.mark.asyncio
 async def test_proxy_injects_api_key_server_side():
-    """The browser calls /api/{service}/{method} with no key at all; the web client
-    must attach X-API-Key itself when forwarding upstream, and the browser-facing
-    response must never contain the key.
+    """
+    The browser calls /api/{service}/{method} with no key at all; the web client must attach
+    X-API-Key itself when forwarding upstream, and the browser-facing response must never
+    contain the key.
     """
     upstream_container = Container()
     upstream_server = RpcServer(
@@ -70,15 +71,9 @@ async def test_proxy_injects_api_key_server_side():
     upstream_app = upstream_server.build()
     upstream_transport = ASGITransport(app=upstream_app)
 
-    # `chronicler.webclient.main.httpx` is the real httpx module (not a copy), so
-    # patching its AsyncClient attribute patches it globally - capture the real class
-    # first or the factory below would recurse into its own mock.
     real_async_client = httpx.AsyncClient
 
     def _upstream_client_factory(*args, **kwargs):
-        # The web client does `async with httpx.AsyncClient() as client:` per request;
-        # this stands in for that, routing through the fake upstream ASGI app instead
-        # of a real network connection.
         return real_async_client(transport=upstream_transport, base_url="http://upstream")
 
     settings = Settings(server_url="http://upstream", api_key="real-upstream-key")
@@ -90,7 +85,6 @@ async def test_proxy_injects_api_key_server_side():
     ):
         webclient_transport = ASGITransport(app=webclient_app)
         async with AsyncClient(transport=webclient_transport, base_url="http://browser") as browser:
-            # Browser sends no X-API-Key at all.
             response = await browser.post("/api/_mockupstream/echo", json={"value": "hello"})
             assert response.status_code == 200
             assert response.json() == "hello"

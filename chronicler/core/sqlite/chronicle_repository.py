@@ -15,9 +15,6 @@ class SQLiteChronicleRepository(ChronicleRepository):
         self.session = session
 
     async def get_all(self) -> list[Chronicle]:
-        # Newest first, matching the task list. Without an ORDER BY this returned
-        # whatever order SQLite happened to produce, so the archive list could reshuffle
-        # between two refreshes that changed nothing.
         result = await self.session.execute(
             select(DBChronicle).order_by(DBChronicle.created_at.desc())
         )
@@ -71,10 +68,6 @@ class SQLiteChronicleRepository(ChronicleRepository):
         raise ValueError(f"Chronicle {chronicle.id} not found")
 
     async def delete(self, chronicle_id: UUID) -> None:
-        # DBTask.chronicle_id and chronicle_tags have no ondelete=CASCADE at the
-        # schema level (SQLite doesn't enforce FKs by default here anyway - see
-        # database.py), so orphaned Task rows and tag associations are cleaned up
-        # explicitly, in the same transaction as the chronicle row itself.
         await self.session.execute(
             sa_delete(chronicle_tags).where(chronicle_tags.c.chronicle_id == str(chronicle_id))
         )
@@ -87,13 +80,7 @@ class SQLiteChronicleRepository(ChronicleRepository):
         await self.session.commit()
 
     async def search(self, query: str) -> list[Chronicle]:
-        """Chronicles whose title, description or any tag name contains `query`.
-
-        Tags are matched through a subquery rather than a join, so a chronicle carrying
-        two matching tags is returned once instead of twice - a `DISTINCT` over the whole
-        entity would work too, but only accidentally, and it would have to be revisited
-        the moment another to-many relationship joins the search.
-        """
+        """Chronicles whose title, description or any tag name contains `query`."""
         pattern = contains_pattern(query)
         tagged = (
             select(chronicle_tags.c.chronicle_id)

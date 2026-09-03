@@ -1,9 +1,4 @@
-"""Tests for build_worker_runtime.
-
-The point of this module existing at all is that a handler registered in only one
-entry point is a task type that silently never runs in the other, so the coverage
-here is deliberately "every TaskType that has a handler is registered".
-"""
+"""Tests for build_worker_runtime."""
 
 import pytest
 
@@ -25,6 +20,8 @@ async def test_registers_every_implemented_task_type(tmp_path):
             TaskType.IMPORT,
             TaskType.CLEAN,
             TaskType.TRANSCRIBE,
+            TaskType.NORMALIZE,
+            TaskType.SUMMARIZE,
         }
     finally:
         await runtime.session.close()
@@ -33,9 +30,9 @@ async def test_registers_every_implemented_task_type(tmp_path):
 
 @pytest.mark.asyncio
 async def test_each_runtime_gets_its_own_session(tmp_path):
-    """The worker loop's session must be separate from anything else on the same event
-    loop - see build_worker_runtime's docstring. Confirmed indirectly: two runtimes
-    each get their own session rather than sharing one.
+    """
+    The worker loop's session must be separate from anything else on the same event loop -
+    see build_worker_runtime's docstring.
     """
     db_manager = DatabaseManager(tmp_path)
     try:
@@ -72,8 +69,10 @@ async def test_event_bus_is_optional_and_forwarded_when_given(tmp_path):
 
 @pytest.mark.asyncio
 async def test_handlers_share_one_chronicle_repository_session(tmp_path):
-    """All three handlers come off one WorkerHandlers instance, so they share the
-    archive session the runtime owns - not one session each."""
+    """
+    All three handlers come off one WorkerHandlers instance, so they share the archive
+    session the runtime owns - not one session each.
+    """
     db_manager = DatabaseManager(tmp_path)
     try:
         await db_manager.init_archive()
@@ -90,3 +89,23 @@ async def test_handlers_share_one_chronicle_repository_session(tmp_path):
     finally:
         await runtime.session.close()
         await db_manager.close_all()
+
+
+def test_settings_reach_the_handlers(tmp_path):
+    from chronicler.core.config import Settings
+
+    settings = Settings()
+    settings.cleaning.hallucination_phrases = ["custom phrase"]
+    runtime = build_worker_runtime(DatabaseManager(tmp_path), settings=settings)
+
+    handler = runtime.manager.handlers[TaskType.CLEAN]
+
+    assert handler.__self__.settings.cleaning.hallucination_phrases == ["custom phrase"]
+
+
+def test_settings_default_to_the_process_configuration(tmp_path):
+    runtime = build_worker_runtime(DatabaseManager(tmp_path))
+
+    handler = runtime.manager.handlers[TaskType.CLEAN]
+
+    assert handler.__self__.settings is not None

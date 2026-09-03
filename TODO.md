@@ -25,6 +25,9 @@ client); the web client is a working reverse proxy over the server API.
 | 4 | The core loop — Chronicle CRUD, audio import, faster-whisper TRANSCRIBE, plain-text export, and four rounds of UI fixes found by actually running the app | 2026-08-13 |
 | 5 | Structure and hygiene — see below | 2026-08-17 |
 | 6 | Low-hanging fruit — see below | 2026-08-17 |
+| 7 | Configurability foundation — settings sections, i18n, cleaning pipeline, audio source records | 2026-09-03 |
+| 8 | Transcription parameters, editable settings, SRT export, speaker registry, thin-client handshake | 2026-09-03 |
+| 9 | Normalisation, LLM summarisation, recording, setup wizard, character designer extraction | 2026-09-03 |
 
 Sprint 4's detailed history is in the git log; [ASSESSMENT.md](ASSESSMENT.md) is the
 Sprint-1-era audit that started the re-baselining and is kept as a historical record.
@@ -64,6 +67,128 @@ Sprint-1-era audit that started the re-baselining and is kept as a historical re
   entirely. The Chronicler-specific parts have all been applied — see
   [Theme mockup: what was and wasn't applied](#theme-mockup-what-was-and-wasnt-applied)
   for the remaining gaps, which are now tracked as real items.
+
+### Sprint 9 — normalisation, summarisation, recording, wizard (2026-09-03)
+
+* [x] **Identify speakers backfills the workspace registry**, not just the count.
+* [x] **German locale**, alongside English and Dutch, in the interface and as a
+  transcription language.
+* [x] **Audio normalisation.** New `NORMALIZE` task on a PyAV `loudnorm` chain, zero new
+  dependencies. Writes `<stem>.normalized.wav` beside the source and never touches the
+  original. State, output filename and measured level are recorded per source. Verified on
+  real under-gained audio: -39.5 -> -17.1 dBFS.
+    * Available as a standalone action (hidden once a track is normalized) or via
+      `normalize_first` on a transcribe task, which skips already-normalized sources.
+    * **Transcription prefers the normalized copy** whenever a current one exists.
+    * Reported level is RMS dBFS, not LUFS - PyAV exposes no way to read filter metadata,
+      so ffmpeg's internal LUFS figure cannot be read back. `loudnorm` still targets LUFS.
+      See [docs/audio-normalization.md](docs/audio-normalization.md).
+* [x] **LLM pipeline.** One `LlmClient` interface: OpenAI-compatible over httpx (covers
+  llama.cpp-server, Ollama, LM Studio, vLLM, hosted gateways) and an optional in-process
+  `llama_cpp` provider. `ModelRegistry` discovers models once at startup and caches them,
+  falling back to the configured model when a server has no `/models` endpoint.
+* [x] **`SUMMARIZE` task.** Two-stage chunk-then-recap with real context budgeting.
+  Summaries are **numbered and accumulate**, each recording its model, provider, prompt,
+  chunk count and token usage - so several models can be compared on one transcript.
+  Prompts are configurable per task with defaults in settings. New project-db table
+  (migration `d4a81c62f9e5`).
+* [x] **Reading and browsing.** Summaries panel with read/delete, a full-transcript
+  reader, and **Open the chronicle folder** in the native file manager - including the
+  WSL2 `wslpath` translation.
+* [x] **Recording.** "Record a source" in a chronicle: device picker, start/stop, saved
+  into the chronicle. Needs **no new RPC** - the microphone is client-side, so the
+  recording goes through the existing `FileStager`, uploading in thin-client mode exactly
+  as a picked file does.
+* [x] **Setup wizard.** Now asks language first (en/nl/de, applied to both interface and
+  transcription) and offers an OS-aware workspace default under the user's Documents
+  folder. A clean install writes every settings section with working defaults.
+* [x] **Character designer extracted** to `characterDesigner/` as a liftable subproject
+  with its own `pyproject.toml`, no `chronicler` import, the 31-race table as data, a
+  provider protocol, and a design document. Recommended name: **Dramatis**.
+
+Fixed on the way: `TranscriptService.source_path` was sync, so `RemoteServiceProxy` never
+exposed it and the Sources panel would have raised on a thin client - `AudioSource` now
+carries its server-resolved path instead.
+
+### Sprint 8 — parameters, subtitles, thin-client handshake (2026-09-03)
+
+* [x] **Transcription parameters.** `language`, `no_speech_threshold`, `model_size`,
+  `device` and `compute_type` all resolve task payload -> settings -> field default.
+  Nothing is hardcoded; `DEFAULT_MODEL_SIZE` is gone. `auto` is a real selectable value
+  so a task can override a configured language. The model cache keys on
+  (size, device, compute_type) rather than size alone.
+    * Fixed on the way: the "install the transcription extra" guard wrapped an import
+      that could never fail (faster-whisper is imported lazily inside `_get_model`), so
+      the helpful message never appeared. It now wraps the call.
+* [x] **Settings are editable and persist.** `SettingsView` is a package with a Flet-free
+  `SettingsEditor` doing validate-then-save against the tracked config file. Editable:
+  UI locale, transcription language/model/threshold/normalise-first, the cleaning phrase
+  list, match mode, repeat window and strip patterns, LLM provider/URL/key/model/path,
+  and the workspace folder (the previously disabled picker now works). Per-section
+  "restore defaults". Invalid input is rejected without touching the stored value.
+* [x] **Language picker offers the available locales plus `auto`**, built from a
+  configurable `transcription.available_languages` merged with the UI locales.
+* [x] **SRT export.** Hand-written, no dependency. Refuses a text-imported transcript
+  whose timings are synthetic line indices rather than seconds, instead of silently
+  writing meaningless subtitles.
+* [x] **Workspace-wide speaker registry.** New archive table `known_speakers`
+  (migration `c9f2a4e17b30`), case-insensitively deduplicated. The transcribe picker now
+  offers every speaker used anywhere in the workspace, not just this chronicle's.
+* [x] **Thin-client handshake.** New `SystemService.get_server_info()` reports version,
+  chronicle count and which optional extras the server actually has. On boot a thin
+  client verifies the server is reachable, **requires an exact version match**, and pulls
+  the chronicle list; a mismatch exits with a clear message instead of failing later.
+* [x] **Thin-client testing.** In-process integration tests drive a real
+  `RemoteContainer` against the real server app (handshake, version mismatch,
+  unreachable, wrong API key). `scripts/thin_client_check.py` runs a real server
+  subprocess plus a real client and reports pass/fail. `--keep-running` leaves it up for
+  another device; WSL2 `netsh portproxy` steps are documented.
+* [x] **`chronicler server --host/--port`**, needed for the LAN test and useful anyway.
+* [x] **`Container` resolves optional dependencies** (`T | None`), so a service can
+  declare a dependency that is absent in some deployments.
+
+### Sprint 7 — configurability foundation (2026-09-03)
+
+Phases 01-04 of the post-prototype-salvage plan. See [docs/](docs/) for the reasoning
+behind each; the code itself no longer carries explanatory comments.
+
+* [x] **Comment sweep.** All 618 inline comments and 199 multi-line docstrings moved
+  into a new `docs/` tree (10 pages). Code keeps one-line docstrings and functional
+  comments (`type: ignore`, `noqa`) only. 1,514 lines removed, no behaviour change.
+* [x] **Nested settings sections** — `transcription`, `cleaning`, `normalization`,
+  `llm`, `ui` on `Settings`, all defaulted so existing config files keep loading.
+  `CHRONICLER_TRANSCRIPTION__LANGUAGE=nl` works via `env_nested_delimiter`. An invalid
+  section falls back to defaults with a warning instead of failing startup.
+* [x] **i18n** — `chronicler/i18n/` with nested message maps, `t("path.in.map")`,
+  `{named}` interpolation, and an `nl` catalogue alongside `en`. Four integrity tests:
+  no orphan keys, every leaf a string, placeholders matching across locales, and every
+  literal `t()` call site in the package resolving against the English catalogue.
+* [x] **Configurable cleaning pipeline** — eight single-purpose rules, each switchable
+  and parameterised, replacing the merge-and-normalise-only cleaner. Configurable
+  hallucination phrase list with `exact` / `normalized` / `regex` matching, repeat-loop
+  detection, duplicate-segment removal, strip patterns (ReDoS-guarded), minimum line
+  length. `CLEAN` tasks accept a per-task override.
+    * Measured on a real 2,816-turn prototype session: 650 junk turns removed (23%),
+      of which 401 were repeat loops led by 232 `"Thank you."` hallucinations.
+    * Defaults deliberately exclude `"Okay."`, `"Thank you."` and `"Bye."` — they are
+      ordinary speech, and the repeat rule catches the looping case anyway. See
+      [docs/cleaning.md](docs/cleaning.md).
+* [x] **Audio source records** — new `audio_sources` table in the project database
+  (migration `b3c7e1d94a02`) carrying per-track transcription state, normalisation
+  state, remembered speaker, and a content fingerprint. Filesystem owns existence, the
+  database owns state; `list_audio_sources` reconciles them, so tracks copied in by
+  hand are picked up with no import step. A deleted file is flagged `missing`, not
+  dropped. Completion requires state `DONE` *and* a matching hash, so replacing a file
+  re-offers the work. Closes the "no resumability" gap below.
+* [x] **Speaker quick-lookup** — the Sources panel shows per-track state and offers a
+  searchable dropdown of known speakers with a free-text entry for a new one,
+  pre-selected from the source record. Assigning a speaker is now its own action,
+  separate from transcribing; transcribe only prompts when there is no speaker yet.
+* [x] `TaskType.NORMALIZE` and `TaskType.SUMMARIZE` reserved (handlers not built yet).
+
+Still open from the plan: transcription language/threshold parameters, SRT export,
+audio normalisation, LLM summarisation, the settings panel, recording, and thin-client
+test tooling.
 
 ### Sprint 6 — low-hanging fruit (2026-08-17)
 

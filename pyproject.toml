@@ -52,6 +52,12 @@ server = [
 transcription = [
     "faster-whisper>=1.1,<2",
 ]
+llm = [
+    "llama-cpp-python>=0.3,<1",
+]
+recording = [
+    "sounddevice>=0.4,<1",
+]
 
 [project.scripts]
 chronicler = "chronicler.__main__:main"
@@ -95,4 +101,10 @@ python_version = "3.12"
 # error with import-untyped. ignore_missing_imports covers both cases.
 [[tool.mypy.overrides]]
 module = "faster_whisper"
+ignore_missing_imports = true
+
+# Optional extras, imported lazily and deliberately not installed in CI. Neither ships a
+# py.typed marker, so ignore_missing_imports covers both the absent and present cases.
+[[tool.mypy.overrides]]
+module = ["llama_cpp", "sounddevice"]
 ignore_missing_imports = true

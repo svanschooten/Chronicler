@@ -1,8 +1,4 @@
-"""Tests for ImportCoordinator.
-
-No Flet involved: this is the part of an import that decides what happens to the
-workspace, which is exactly the part worth testing without a page attached.
-"""
+"""Tests for ImportCoordinator."""
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -53,16 +49,14 @@ async def _never_asked() -> str:
     raise AssertionError("the overwrite/append prompt should not have been reached")
 
 
-# -- audio ---------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_import_audio_stages_a_file_from_outside_the_workspace(
     make_coordinator, imports_dir, picked_file
 ):
-    """Importing an audio source doesn't queue a transcription - it stages the file and
-    hands it to add_audio_source. Transcribing a specific source with a speaker
-    assigned is a separate action, from the transcript view's Sources panel."""
+    """
+    Importing an audio source doesn't queue a transcription - it stages the file and hands
+    it to add_audio_source.
+    """
     chronicle_service = AsyncMock()
     coordinator = make_coordinator(chronicle_service=chronicle_service)
     chronicle_id = uuid4()
@@ -72,8 +66,6 @@ async def test_import_audio_stages_a_file_from_outside_the_workspace(
     called_id, staged_path, original_name = chronicle_service.add_audio_source.call_args.args
     assert called_id == chronicle_id
     assert Path(staged_path).resolve().is_relative_to(imports_dir.resolve())
-    # Staging deliberately renames to a throwaway UUID; the original name travels
-    # separately so the durable copy can still be readable.
     assert Path(staged_path).name != "recording.mp3"
     assert original_name == "recording.mp3"
 
@@ -82,9 +74,10 @@ async def test_import_audio_stages_a_file_from_outside_the_workspace(
 async def test_import_audio_without_a_chronicle_creates_one_named_after_the_file(
     make_coordinator, picked_file
 ):
-    """create_chronicle gets no source_file= - the file lives in the durable sources/
-    dir now, and a single source_file field can't represent a chronicle with multiple
-    tracks anyway."""
+    """
+    create_chronicle gets no source_file= - the file lives in the durable sources/ dir now,
+    and a single source_file field can't represent a chronicle with multiple tracks anyway.
+    """
     chronicle_service = AsyncMock()
     chronicle_service.create_chronicle.return_value = Chronicle(title="recording")
     coordinator = make_coordinator(chronicle_service=chronicle_service)
@@ -94,9 +87,6 @@ async def test_import_audio_without_a_chronicle_creates_one_named_after_the_file
     chronicle_service.create_chronicle.assert_awaited_once_with("recording")
     chronicle_service.add_audio_source.assert_awaited_once()
     assert "recording" in message
-
-
-# -- transcript ----------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -173,8 +163,10 @@ async def test_import_transcript_into_an_empty_chronicle_skips_the_prompt(
 async def test_import_transcript_over_an_existing_transcript_honours_the_choice(
     make_coordinator, picked_file, choice, expect_queued, expect_append
 ):
-    """A second transcript import would silently destroy the first, so it has to ask
-    first - and then actually do what the answer said."""
+    """
+    A second transcript import would silently destroy the first, so it has to ask first -
+    and then actually do what the answer said.
+    """
     task_service = AsyncMock()
     transcript_service = AsyncMock()
     transcript_service.get_transcript.return_value = [MagicMock()]
@@ -195,15 +187,14 @@ async def test_import_transcript_over_an_existing_transcript_honours_the_choice(
         assert message is not None
 
 
-# -- linking -------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_link_chronicle_does_not_stage_the_external_file(
     make_coordinator, imports_dir, tmp_path
 ):
-    """A linked chronicle references an external project.db directly - copying it into
-    the workspace would defeat the point of linking."""
+    """
+    A linked chronicle references an external project.db directly - copying it into the
+    workspace would defeat the point of linking.
+    """
     external_db = tmp_path / "external" / "project.db"
     external_db.parent.mkdir(parents=True)
     external_db.write_text("not a real db")

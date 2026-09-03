@@ -1,9 +1,4 @@
-"""Tests for ArchiveView's own plumbing.
-
-What each import actually does is covered by test_imports.py, and the dialogs by
-test_forms.py / test_dialogs.py - this is about the view translating Flet events into
-those calls and their results back into UI.
-"""
+"""Tests for ArchiveView's own plumbing."""
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
@@ -27,8 +22,6 @@ def make_view():
             transcript_service or AsyncMock(),
             **kwargs,
         )
-        # Reloading the list hits the service and needs a live page to update; the
-        # tests below assert it was requested, not what it rendered.
         view.load_chronicles = AsyncMock()
         return view
 
@@ -39,14 +32,12 @@ def _event(data=None):
     return MagicMock(control=MagicMock(data=data))
 
 
-# -- lifecycle -----------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_mount_registers_the_file_picker_as_a_service_not_an_overlay(make_view, attach_page):
-    """Regression test: FilePicker is a Service (flet.controls.services.service), not a
-    visual control - the client fails with "Unknown control: FilePicker" if it's added
-    to page.overlay, which expects renderable widgets.
+    """
+    Regression test: FilePicker is a Service (flet.controls.services.service), not a visual
+    control - the client fails with "Unknown control: FilePicker" if it's added to
+    page.overlay, which expects renderable widgets.
     """
     view = make_view()
     page = attach_page(ArchiveView)
@@ -75,8 +66,10 @@ async def test_mount_attaches_every_form_and_unmount_detaches_them(make_view, at
 
 
 def test_show_snackbar_uses_page_show_dialog(make_view, attach_page):
-    """Regression test: ft.Page has no `snack_bar` attribute in flet 0.86.4 - a SnackBar
-    is shown via page.show_dialog(), the same mechanism as ft.AlertDialog."""
+    """
+    Regression test: ft.Page has no `snack_bar` attribute in flet 0.86.4 - a SnackBar is
+    shown via page.show_dialog(), the same mechanism as ft.AlertDialog.
+    """
     view = make_view()
     page = attach_page(ArchiveView)
 
@@ -84,9 +77,6 @@ def test_show_snackbar_uses_page_show_dialog(make_view, attach_page):
 
     (dialog,), _ = page.show_dialog.call_args
     assert isinstance(dialog, ft.SnackBar)
-
-
-# -- listing -------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -133,8 +123,10 @@ async def test_load_chronicles_shows_a_placeholder_when_there_are_none(make_view
 
 @pytest.mark.asyncio
 async def test_load_chronicles_reports_a_service_failure_in_place(make_view):
-    """A failed load must leave a visible message, not an empty list that reads as "you
-    have no chronicles"."""
+    """
+    A failed load must leave a visible message, not an empty list that reads as "you have no
+    chronicles".
+    """
     chronicle_service = AsyncMock()
     chronicle_service.list_chronicles.side_effect = RuntimeError("db is gone")
     view = make_view(chronicle_service=chronicle_service)
@@ -154,9 +146,6 @@ async def test_open_chronicle_clicked_forwards_the_chronicle(make_view):
     await view.open_chronicle_clicked(_event(chronicle))
 
     view.on_open_chronicle.assert_awaited_once_with(chronicle)
-
-
-# -- per-chronicle actions -----------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -197,9 +186,6 @@ async def test_identify_speakers_message_is_singular_for_one_speaker(make_view):
     await view.identify_speakers_clicked(_event(uuid4()))
 
     view.show_snackbar.assert_called_once_with("Found 1 speaker")
-
-
-# -- create / edit / delete ----------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -307,9 +293,6 @@ async def test_delete_clicked_does_nothing_when_cancelled(make_view, attach_page
     chronicle_service.delete_chronicle.assert_not_awaited()
 
 
-# -- picker dispatch -----------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_import_audio_clicked_records_the_action_and_opens_the_picker(make_view):
     view = make_view()
@@ -333,7 +316,6 @@ async def test_import_transcript_clicked_opens_the_options_form_first(make_view,
 
     assert view.current_chronicle_id == chronicle_id
     assert view.transcript_form.dialog.open is True
-    # The picker only opens once the options are confirmed.
     assert view.picker_action is None
 
 

@@ -1,12 +1,4 @@
-"""Tests for the shared await-a-dialog-choice helpers.
-
-These exercise the real show_dialog()/pop_dialog() mechanism rather than the views
-that use it. The regression they guard against: an earlier version removed the dialog
-from page.overlay immediately after setting `open = False`, which drops AlertDialog's
-close animation and its post-animation dismiss callback. The buttons still "worked"
-(the future resolved and the caller proceeded) but the dialog never visually closed -
-so a test that only checks the resolved value would have passed throughout.
-"""
+"""Tests for the shared await-a-dialog-choice helpers."""
 
 import asyncio
 from unittest.mock import MagicMock
@@ -18,8 +10,10 @@ from chronicler.desktop.dialogs import Choice, ask_choice, ask_text, confirm
 
 
 async def _click(coro, button_index: int, before_click=None):
-    """Starts `coro`, lets it reach its shown-dialog await point, clicks the button at
-    `button_index`, and returns (result, page, dialog)."""
+    """
+    Starts `coro`, lets it reach its shown-dialog await point, clicks the button at
+    `button_index`, and returns (result, page, dialog).
+    """
     page = MagicMock(spec=ft.Page)
     task = asyncio.ensure_future(coro(page))
     await asyncio.sleep(0)
@@ -56,9 +50,11 @@ async def test_ask_choice_resolves_to_the_clicked_choices_value():
 
 @pytest.mark.asyncio
 async def test_ask_choice_binds_each_button_to_its_own_value():
-    """Regression guard for the loop that builds the buttons: a closure over the loop
-    variable without a per-iteration binding would make every button resolve to the
-    last choice's value."""
+    """
+    Regression guard for the loop that builds the buttons: a closure over the loop variable
+    without a per-iteration binding would make every button resolve to the last choice's
+    value.
+    """
 
     async def call(page):
         return await ask_choice(
@@ -117,9 +113,11 @@ async def test_confirm_uses_a_custom_confirm_label():
 
 @pytest.mark.asyncio
 async def test_ask_text_resolves_to_the_fields_value_at_click_time():
-    """The value getter has to be lazy: the user types *after* the dialog is built, so
-    a button bound to `field.value` as read at build time would always resolve to the
-    field's initial contents."""
+    """
+    The value getter has to be lazy: the user types *after* the dialog is built, so a button
+    bound to `field.value` as read at build time would always resolve to the field's initial
+    contents.
+    """
     field = ft.TextField(label="Speaker name")
 
     async def call(page):

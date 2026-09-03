@@ -1,9 +1,4 @@
-"""Repo-relative paths for tests that read fixture files off disk.
-
-Anchored here rather than with `Path(__file__).parents[n]` in each test module: the
-tests tree mirrors the package tree, so a module's depth changes whenever it moves,
-and a hardcoded parent count silently starts pointing at the wrong directory.
-"""
+"""Repo-relative paths for tests that read fixture files off disk."""
 
 from pathlib import Path
 

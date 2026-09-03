@@ -1,20 +1,4 @@
-"""Await-a-dialog-choice helpers shared by every desktop view.
-
-Flet has no built-in primitive for "show a modal and await what the user picked",
-so `_await_dialog` below is the standard workaround: a Future that the action
-buttons resolve, mirroring how `ft.FilePicker.pick_files` itself is implemented
-under the hood.
-
-It goes through `page.show_dialog()`/`page.pop_dialog()` rather than manually
-appending to `page.overlay` and toggling `open` - `AlertDialog`'s close is animated
-client-side, and `show_dialog()` wraps `on_dismiss` so the dialog is only actually
-removed once the client confirms the animation finished (see
-`BasePage._wrap_dialog_on_dismiss`'s own comment: removing it earlier "can drop the
-post-animation dismiss callback entirely"). An earlier version of this code called
-`page.overlay.remove(dialog)` immediately after `open = False`, which did exactly
-that - the buttons worked (the future resolved, the import proceeded) but the dialog
-visually never closed.
-"""
+"""Await-a-dialog-choice helpers shared by every desktop view."""
 
 import asyncio
 from collections.abc import Callable, Sequence
@@ -28,27 +12,20 @@ T = TypeVar("T")
 
 @dataclass(frozen=True)
 class Choice(Generic[T]):
-    """One action button on a choice dialog. `primary` renders it as a FilledButton
-    rather than a TextButton - use it for the action the dialog is really asking
-    about, not for Cancel."""
+    """One action button on a choice dialog."""
 
     label: str
     value: T
     primary: bool = False
 
 
-async def _await_dialog(
+async def await_dialog(
     page: ft.Page,
     dialog_factory: Callable[[Callable[[Callable[[], T]], Any]], ft.AlertDialog],
 ) -> T:
-    """Shows the dialog built by `dialog_factory` and resolves to whatever the
-    clicked button asked for.
-
-    `dialog_factory` receives an `on_choice` builder: call it with a zero-argument
-    getter and it returns a Flet click handler that resolves this dialog's future to
-    that getter's return value. The getter is deliberately lazy rather than a plain
-    value so a button can resolve to something only known at click time - the current
-    contents of a TextField, say (see `ask_text`).
+    """
+    Shows the dialog built by `dialog_factory` and resolves to whatever the clicked button
+    asked for.
     """
     future: asyncio.Future[T] = asyncio.get_event_loop().create_future()
 
@@ -85,12 +62,11 @@ async def ask_choice(
             ],
         )
 
-    return await _await_dialog(page, build)
+    return await await_dialog(page, build)
 
 
 async def confirm(page: ft.Page, title: str, message: str, confirm_label: str = "Delete") -> bool:
-    """The yes/no case of `ask_choice`. Cancel is the non-primary button, so a
-    destructive confirmation never renders Cancel as the emphasized action."""
+    """The yes/no case of `ask_choice`."""
     return await ask_choice(
         page,
         title,
@@ -106,9 +82,10 @@ async def ask_text(
     field: ft.TextField,
     confirm_label: str = "OK",
 ) -> str | None:
-    """A modal that collects free text, resolving to the field's contents - or None
-    if the user cancelled. `field` is passed in rather than built here so the caller
-    controls its label, hint and initial value."""
+    """
+    A modal that collects free text, resolving to the field's contents - or None if the user
+    cancelled.
+    """
 
     def build(on_choice) -> ft.AlertDialog:
         return ft.AlertDialog(
@@ -120,4 +97,4 @@ async def ask_text(
             ],
         )
 
-    return await _await_dialog(page, build)
+    return await await_dialog(page, build)

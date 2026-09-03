@@ -65,8 +65,10 @@ async def test_delete_chronicle_removes_directory_for_non_linked_chronicle(tmp_p
 
 @pytest.mark.asyncio
 async def test_delete_chronicle_does_not_touch_directory_for_linked_chronicle(tmp_path):
-    """A linked chronicle's project.db lives wherever the user pointed it - outside
-    the workspace, on purpose. Deleting the archive record must never delete that."""
+    """
+    A linked chronicle's project.db lives wherever the user pointed it - outside the
+    workspace, on purpose.
+    """
     chronicle_id = uuid4()
     external_dir = tmp_path / "elsewhere"
     external_dir.mkdir()
@@ -135,8 +137,10 @@ async def test_add_audio_source_avoids_overwriting_same_name(tmp_path):
 
 
 def _service_with_workspace(tmp_path, chronicle_id):
-    """A ChronicleService whose imports/ and sources/ directories really exist, so the
-    path confinement in add_audio_source is exercised against real paths."""
+    """
+    A ChronicleService whose imports/ and sources/ directories really exist, so the path
+    confinement in add_audio_source is exercised against real paths.
+    """
     imports_dir = tmp_path / "imports"
     imports_dir.mkdir(parents=True, exist_ok=True)
     sources_dir = tmp_path / "chronicles" / str(chronicle_id) / "sources"
@@ -150,10 +154,7 @@ def _service_with_workspace(tmp_path, chronicle_id):
 
 @pytest.mark.asyncio
 async def test_add_audio_source_rejects_file_outside_imports_dir(tmp_path):
-    """add_audio_source is an @service method, so file_path arrives from an RPC caller.
-    Unconfined, it moved *any* readable path on the server into the chronicle - which
-    both destroys the original and exposes it through the transcript.
-    """
+    """add_audio_source is an @service method, so file_path arrives from an RPC caller."""
     chronicle_id = uuid4()
     service, _imports_dir, sources_dir = _service_with_workspace(tmp_path, chronicle_id)
 
@@ -196,8 +197,10 @@ async def test_add_audio_source_rejects_traversal_out_of_imports_dir(tmp_path):
     ],
 )
 async def test_add_audio_source_keeps_hostile_original_name_inside_sources(tmp_path, hostile_name):
-    """original_name is kept readable rather than uuid'd, so it must not be able to
-    act as a path - it used to be joined onto sources_dir verbatim."""
+    """
+    original_name is kept readable rather than uuid'd, so it must not be able to act as a
+    path - it used to be joined onto sources_dir verbatim.
+    """
     chronicle_id = uuid4()
     service, imports_dir, sources_dir = _service_with_workspace(tmp_path, chronicle_id)
 

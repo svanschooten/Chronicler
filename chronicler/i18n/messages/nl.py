@@ -1,0 +1,212 @@
+"""Dutch message catalogue."""
+
+MESSAGES = {
+    "app": {
+        "tagline": "Bewaar gesprekken.",
+    },
+    "nav": {
+        "archive": "Archief",
+        "tasks": "Taken",
+        "settings": "Instellingen",
+    },
+    "common": {
+        "cancel": "Annuleren",
+        "save": "Opslaan",
+        "delete": "Verwijderen",
+        "close": "Sluiten",
+        "refresh": "Vernieuwen",
+        "browse": "Bladeren",
+        "unknown": "Onbekend",
+        "none": "Geen",
+    },
+    "settings": {
+        "title": "Instellingen",
+        "subtitle": "Voorkeuren voor deze machine en werkruimte.",
+        "appearance": {
+            "title": "Weergave",
+            "dark_mode": "Donkere werkruimte",
+            "dark_mode_description": (
+                "Een gedempte interface voor het lezen van lange transcripten."
+            ),
+            "language": "Taal van de interface",
+            "language_description": "De taal waarin Chronicler zijn eigen labels toont.",
+        },
+        "workspace": {
+            "title": "Werkruimte",
+            "local": "Lokale werkruimte",
+            "not_configured": "Niet ingesteld",
+            "not_configured_thin": "Niet ingesteld (thin client)",
+            "choose": "Kies een werkruimtemap",
+            "changed": "Werkruimte ingesteld op {path}. Herstart Chronicler om hem te gebruiken.",
+        },
+        "connection": {
+            "title": "Verbinding",
+            "remote_server": "Externe server",
+            "service_layer": "Servicelaag",
+            "local_ready": "Lokale services zijn klaar voor gebruik.",
+            "thin_client": "Thin client",
+            "full_stack": "Volledige installatie",
+        },
+        "transcription": {
+            "title": "Transcriptie",
+            "language": "Taal van de opname",
+            "language_description": "Laat leeg om de taal per opname te laten detecteren.",
+            "model_size": "Whisper-model",
+            "model_size_description": "Grotere modellen zijn nauwkeuriger en langzamer.",
+            "no_speech_threshold": "Stiltedrempel",
+            "no_speech_threshold_description": (
+                "Hoe zeker het model moet zijn dat een fragment stilte is voordat het "
+                "wordt weggelaten. Verhoog dit als er verzonnen zinnen verschijnen."
+            ),
+            "normalize_first": "Audio normaliseren voor transcriptie",
+            "normalize_first_description": (
+                "Egaliseer elke opname eerst. Al genormaliseerde opnames worden overgeslagen."
+            ),
+        },
+        "cleaning": {
+            "title": "Opschonen",
+            "hallucination_phrases": "Gehallucineerde zinnen",
+            "hallucination_phrases_description": (
+                "Eén per regel. Regels die hieraan voldoen worden als modelartefact verwijderd."
+            ),
+            "hallucination_match": "Zinvergelijking",
+            "hallucination_match_description": (
+                "Hoe zinnen worden vergeleken: normalized negeert hoofdletters en leestekens."
+            ),
+            "repetition_window": "Herhaalvenster (seconden)",
+            "repetition_window_description": (
+                "Een spreker die binnen dit venster dezelfde regel herhaalt geldt als lus."
+            ),
+            "strip_patterns": "Verwijderpatronen",
+            "strip_patterns_description": (
+                "Reguliere expressies die uit elke regel worden verwijderd. Eén per regel."
+            ),
+        },
+        "restore_defaults": "Standaardwaarden herstellen",
+        "llm": {
+            "title": "Taalmodel",
+            "provider": "Aanbieder",
+            "provider_description": "Waar samenvattingen worden gemaakt.",
+            "provider_none": "Uitgeschakeld",
+            "provider_openai_compatible": "OpenAI-compatibele server",
+            "provider_llama_cpp": "Lokaal modelbestand",
+            "base_url": "Server-URL",
+            "base_url_description": "Bijvoorbeeld http://localhost:8080/v1",
+            "api_key": "API-sleutel",
+            "model": "Modelnaam",
+            "model_path": "Modelbestand (.gguf)",
+            "test": "Verbinding testen",
+            "test_ok": "Verbonden met {model}.",
+            "test_failed": "Kan het model niet bereiken: {error}",
+            "not_configured": "Niet ingesteld",
+        },
+        "saved": "Instellingen opgeslagen.",
+        "save_failed": "Kan instellingen niet opslaan: {error}",
+    },
+    "archive": {
+        "title": "Archief",
+        "empty": "Nog geen kronieken.",
+        "search": "Zoek in kronieken",
+        "new": "Nieuwe kroniek",
+        "import": "Importeren",
+        "speakers": "{count} sprekers",
+        "no_tags": "Geen labels",
+        "unknown_duration": "Onbekende duur",
+    },
+    "tasks": {
+        "title": "Taken",
+        "empty": "Nog geen taken.",
+        "retry": "Opnieuw",
+        "status": "Status: {status}",
+        "queued_import": "Transcript-import in de wachtrij",
+        "queued_append": "Transcript-toevoeging in de wachtrij",
+        "queued_clean": "Opschoontaak in de wachtrij",
+        "queued_normalize": "Normalisatie van '{name}' in de wachtrij",
+        "queued_transcribe": "Transcriptie van '{name}' als {speaker} in de wachtrij",
+    },
+    "transcript": {
+        "title": "Transcript",
+        "loading": "Transcript laden...",
+        "empty": "Transcript is leeg of wordt nog verwerkt.",
+        "error": "Fout bij laden van transcript: {error}",
+        "show_timestamps": "Tijdcodes tonen",
+        "chronicle": "Kroniek",
+        "speakers": "Sprekers",
+        "speakers_identified": "{count} herkend",
+        "tags": "Labels",
+    },
+    "sources": {
+        "title": "Bronnen",
+        "empty": "Nog geen audiobronnen.",
+        "transcribe": "Transcribeer deze opname",
+        "transcribe_action": "Transcriberen",
+        "no_speaker": "Geen spreker",
+        "missing": "Ontbreekt",
+        "missing_cannot_transcribe": "'{name}' staat niet meer op schijf.",
+        "transcribed": "Getranscribeerd",
+        "transcribing": "Bezig met transcriberen",
+        "normalize": "Normaliseer deze opname",
+        "normalized": "Genormaliseerd",
+        "failed": "Mislukt",
+        "record": "Neem een nieuwe bron op",
+        "assign_speaker": "Wijs een spreker toe",
+        "speaker": "Spreker",
+        "new_speaker": "Nieuwe spreker",
+        "ask_speaker_title": "'{name}' transcriberen",
+        "ask_speaker_message": (
+            "Welke spreker is deze opname? Een audiobron wordt verondersteld één spreker "
+            "te bevatten - transcriberen vervangt alleen de regels van die spreker."
+        ),
+    },
+    "recording": {
+        "title": "Bron opnemen",
+        "device": "Invoerapparaat",
+        "name": "Bestandsnaam",
+        "default_name": "opname.wav",
+        "ready": "Klaar om op te nemen.",
+        "recording": "Bezig met opnemen...",
+        "recorded": "{seconds}s opgenomen.",
+        "start": "Starten",
+        "stop": "Stoppen",
+        "save": "Opslaan in kroniek",
+        "saved": "'{name}' toegevoegd aan deze kroniek",
+        "failed": "Kan de opname niet opslaan: {error}",
+        "unavailable": "Opnemen is niet beschikbaar in deze sessie.",
+    },
+    "summaries": {
+        "title": "Samenvattingen",
+        "empty": "Nog geen samenvattingen.",
+        "generate": "Genereer een samenvatting",
+        "generate_action": "Genereren",
+        "generate_message": "Laat de instructie leeg voor de ingestelde standaard.",
+        "queued": "Samenvattingstaak in de wachtrij",
+        "read": "Lees deze samenvatting",
+        "untitled": "Naamloos",
+        "model": "Model",
+        "name": "Naam",
+        "prompt": "Instructie",
+        "prompt_hint": "Hoe moet deze samenvatting geschreven worden?",
+        "delete_title": "Samenvatting verwijderen",
+        "delete_message": (
+            "Samenvatting {number} verwijderen? Dit kan niet ongedaan worden gemaakt."
+        ),
+        "read_transcript": "Lees het volledige transcript",
+        "open_folder": "Open de kroniekmap",
+        "folder_failed": "Kan de map niet openen: {error}",
+        "record": "Neem een bron op",
+    },
+    "export": {
+        "menu": "Exporteren",
+        "tooltip": "Transcript exporteren",
+        "plaintext": "Platte tekst (.txt)",
+        "plaintext_timestamps": "Platte tekst met tijdcodes (.txt)",
+        "srt": "Ondertitels (.srt)",
+        "html": "HTML (binnenkort)",
+        "pdf": "PDF (binnenkort)",
+        "zip": "Kroniek .zip (binnenkort)",
+        "saved": "Geëxporteerd naar {path}",
+        "failed": "Fout bij exporteren: {error}",
+        "write_failed": "Fout bij schrijven van bestand: {error}",
+        "no_picker": "Bestandskiezer niet beschikbaar.",
+    },
+}

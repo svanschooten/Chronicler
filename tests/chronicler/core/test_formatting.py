@@ -13,7 +13,7 @@ from chronicler.core.formatting import format_duration, format_timestamp, parse_
         (72, "1m 12s"),
         (3599, "59m 59s"),
         (3600, "1h 0m"),
-        (5025, "1h 23m"),  # seconds within the hour are dropped once hours show
+        (5025, "1h 23m"),
     ],
 )
 def test_format_duration(seconds, expected):
@@ -39,7 +39,7 @@ def test_format_timestamp(seconds, expected):
         ("00:00:00", 0.0),
         ("00:01:05", 65.0),
         ("01:01:01", 3661.0),
-        ("01:05", 65.0),  # MM:SS, no hours
+        ("01:05", 65.0),
         ("00:01:05.500", 65.5),
     ],
 )

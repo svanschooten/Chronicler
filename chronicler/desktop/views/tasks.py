@@ -12,9 +12,6 @@ logger = logging.getLogger(__name__)
 
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
 
-#: Statuses a task can be put back on the queue from. WORKING is excluded on purpose -
-#: it's already running, and re-queueing it would let a second worker claim it while the
-#: first is still going.
 RETRYABLE = (TaskStatus.FAILED, TaskStatus.DONE)
 
 
@@ -32,9 +29,6 @@ class TasksView(ft.Column):
         self.task_list = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True, spacing=16)
         self.query = ""
         self.hide_completed = True
-        # Resolved on each load so a row can name the chronicle its task belongs to -
-        # a Task only carries chronicle_id, and a queue of several tasks is unreadable
-        # without it.
         self.chronicle_titles: dict[UUID, str] = {}
 
         super().__init__(
@@ -122,9 +116,10 @@ class TasksView(ft.Column):
             self.update()
 
     async def _load_chronicle_titles(self) -> None:
-        """One listing per load rather than a lookup per row - the archive is small, and a
-        per-row fetch would be a query per task. A failure here is not worth failing the
-        whole view over: rows fall back to showing no chronicle name."""
+        """
+        One listing per load rather than a lookup per row - the archive is small, and a
+        per-row fetch would be a query per task.
+        """
         try:
             chronicles = await self.chronicle_service.list_chronicles()
         except Exception as e:
@@ -133,8 +128,10 @@ class TasksView(ft.Column):
         self.chronicle_titles = {c.id: c.title for c in chronicles}
 
     def _subtitle(self, task: Task) -> str:
-        """`<chronicle> · <status>`, dropping the chronicle when there isn't one to name -
-        a task whose chronicle has since been deleted, or one that isn't chronicle-scoped.
+        """
+        `<chronicle> · <status>`, dropping the chronicle when there isn't one to name -
+        a task whose chronicle has since been deleted, or one that isn't chronicle-
+        scoped.
         """
         title = self.chronicle_titles.get(task.chronicle_id) if task.chronicle_id else None
         status = f"Status: {task.status.value}"
@@ -142,10 +139,6 @@ class TasksView(ft.Column):
 
     @staticmethod
     def _timestamps(task: Task) -> str:
-        # claimed_at/updated_at already exist for claim_next()/update_status() - "started"
-        # and "completed" don't need their own columns. updated_at is bumped on every write
-        # to the row, so once the task has reached a terminal state it's exactly the
-        # completion time.
         parts = [f"Created {task.created_at.strftime(TIMESTAMP_FORMAT)}"]
         if task.claimed_at:
             parts.append(f"Started {task.claimed_at.strftime(TIMESTAMP_FORMAT)}")

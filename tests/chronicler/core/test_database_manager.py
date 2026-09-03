@@ -73,7 +73,7 @@ async def test_init_archive_twice_is_a_noop_not_an_error(tmp_path):
     """Simulates a second app launch against an already-migrated workspace."""
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
-    await db_manager.init_archive()  # must not raise
+    await db_manager.init_archive()
 
     async with db_manager.get_archive_session() as session:
         result = await session.execute(text("SELECT COUNT(*) FROM alembic_version"))
@@ -101,7 +101,7 @@ async def test_project_session_opened_twice_is_a_noop_not_an_error(tmp_path):
 
     session1 = await db_manager.get_project_session("test-chronicle")
     await session1.close()
-    session2 = await db_manager.get_project_session("test-chronicle")  # must not raise
+    session2 = await db_manager.get_project_session("test-chronicle")
 
     async with session2:
         result = await session2.execute(text("SELECT COUNT(*) FROM alembic_version"))

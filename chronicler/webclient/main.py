@@ -16,7 +16,6 @@ def create_app() -> FastAPI:
 
     static_path = Path(__file__).parent / "src"
 
-    # Mount the static files directory
     app.mount("/src", StaticFiles(directory=static_path), name="src")
 
     def _not_configured() -> JSONResponse:
@@ -28,9 +27,6 @@ def create_app() -> FastAPI:
     @app.get("/config")
     async def get_config():
         settings = get_settings()
-        # Intentionally no server_url or api_key here: the browser talks to this web
-        # client only, over /api/..., which injects the key server-side. Never hand the
-        # upstream credential to an unauthenticated caller on the network.
         return {"connected": bool(settings.server_url and settings.api_key)}
 
     @app.post("/api/upload")

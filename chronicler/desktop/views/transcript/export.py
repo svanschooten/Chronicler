@@ -1,9 +1,4 @@
-"""The transcript view's Export menu and save flow.
-
-Split from the view because exporting is a self-contained errand - pick a format,
-ask the service to render it, ask the user where to put it, write the file - that
-happens to need none of the view's state beyond the chronicle it belongs to.
-"""
+"""The transcript view's Export menu and save flow."""
 
 import logging
 from collections.abc import Callable
@@ -13,6 +8,7 @@ import flet as ft
 from chronicler.core.models import Chronicle
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.widgets import amber_button
+from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -28,45 +24,45 @@ class TranscriptExporter:
         self.chronicle = chronicle
         self.transcript_service = transcript_service
         self.show_snackbar = show_snackbar
-        # A getter, not the picker itself: the view only creates its FilePicker once
-        # it's mounted (a Service has to be registered on a live page), which is after
-        # this object is built.
         self._file_picker = file_picker
 
     def menu(self) -> ft.PopupMenuButton:
-        """The Export dropdown. The disabled entries are deliberate signposting of
-        formats that are planned but not built yet (see TODO.md, Phase 6) rather than
-        silently offering only plain text."""
+        """The Export dropdown."""
         return ft.PopupMenuButton(
-            content=amber_button("Export", ft.Icons.FILE_DOWNLOAD, dropdown=True),
+            content=amber_button(t("export.menu"), ft.Icons.FILE_DOWNLOAD, dropdown=True),
             items=[
                 ft.PopupMenuItem(
-                    content=ft.Text("Plain text (.txt)"),
+                    content=ft.Text(t("export.plaintext")),
                     icon=ft.Icons.DESCRIPTION,
                     data=False,
                     on_click=self.export_plaintext_clicked,
                 ),
                 ft.PopupMenuItem(
-                    content=ft.Text("Plain text with timestamps (.txt)"),
+                    content=ft.Text(t("export.plaintext_timestamps")),
                     icon=ft.Icons.SCHEDULE,
                     data=True,
                     on_click=self.export_plaintext_clicked,
                 ),
                 ft.PopupMenuItem(
-                    content=ft.Text("HTML (coming soon)"), icon=ft.Icons.HTML, disabled=True
+                    content=ft.Text(t("export.srt")),
+                    icon=ft.Icons.SUBTITLES,
+                    on_click=self.export_srt_clicked,
                 ),
                 ft.PopupMenuItem(
-                    content=ft.Text("PDF (coming soon)"),
+                    content=ft.Text(t("export.html")), icon=ft.Icons.HTML, disabled=True
+                ),
+                ft.PopupMenuItem(
+                    content=ft.Text(t("export.pdf")),
                     icon=ft.Icons.PICTURE_AS_PDF,
                     disabled=True,
                 ),
                 ft.PopupMenuItem(
-                    content=ft.Text("Chronicle .zip (coming soon)"),
+                    content=ft.Text(t("export.zip")),
                     icon=ft.Icons.FOLDER_ZIP,
                     disabled=True,
                 ),
             ],
-            tooltip="Export transcript",
+            tooltip=t("export.tooltip"),
         )
 
     async def export_plaintext_clicked(self, e):
@@ -105,8 +101,42 @@ class TranscriptExporter:
 
         self.show_snackbar(f"Exported to {destination}")
 
+    async def export_srt_clicked(self, e):
+        try:
+            content = await self.transcript_service.export_srt(self.chronicle.id)
+        except Exception as ex:
+            logger.error(f"Error exporting subtitles: {ex}")
+            self.show_snackbar(t("export.failed", error=ex))
+            return
+
+        await self._save(content, f"{self.default_file_stem()}.srt", "srt")
+
+    async def _save(self, content: str, file_name: str, extension: str) -> None:
+        picker = self._file_picker()
+        if picker is None:
+            self.show_snackbar(t("export.no_picker"))
+            return
+
+        destination = await picker.save_file(
+            dialog_title=t("export.tooltip"),
+            file_name=file_name,
+            file_type=ft.FilePickerFileType.CUSTOM,
+            allowed_extensions=[extension],
+        )
+        if not destination:
+            return
+
+        try:
+            with open(destination, "w", encoding="utf-8") as handle:
+                handle.write(content)
+        except OSError as ex:
+            logger.error(f"Error writing export file: {ex}")
+            self.show_snackbar(t("export.write_failed", error=ex))
+            return
+
+        self.show_snackbar(t("export.saved", path=destination))
+
     def default_file_stem(self) -> str:
-        """The chronicle title reduced to something safe to suggest as a filename.
-        Falls back to "transcript" when the title has no usable characters at all."""
+        """The chronicle title reduced to something safe to suggest as a filename."""
         safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in self.chronicle.title)
         return safe or "transcript"

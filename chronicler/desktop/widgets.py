@@ -9,11 +9,10 @@ def amber_button(
     on_click=None,
     dropdown: bool = False,
 ) -> ft.Container:
-    """A single styling source for every amber action button (New Chronicle, Import,
-    Export, ...) so they render identically instead of each call site hand-rolling
-    its own Container/Row and drifting apart. `dropdown=True` appends a small
-    separator + chevron, signaling the button opens a menu rather than acting
-    directly - only set it when this is wrapped in a PopupMenuButton.
+    """
+    A single styling source for every amber action button (New Chronicle, Import, Export,
+    ...) so they render identically instead of each call site hand-rolling its own
+    Container/Row and drifting apart.
     """
     row_controls: list[ft.Control] = [
         ft.Icon(icon, color=ft.Colors.BROWN_900),

@@ -24,9 +24,6 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         if not db_speaker:
             db_speaker = DBSpeaker(name=name)
             self.session.add(db_speaker)
-            # flush (not commit): makes the row visible to refresh() and to later
-            # queries within this same transaction, without ending it - the caller
-            # controls the transaction boundary (see handlers.py).
             await self.session.flush()
             await self.session.refresh(db_speaker)
         return Speaker.model_validate(db_speaker)
@@ -72,11 +69,6 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         await self.session.flush()
 
     async def delete_all_lines(self) -> None:
-        # Deliberately doesn't touch DBSpeaker (this used to be delete_all() and wiped
-        # speakers too, which meant get_or_create_speaker() never found an existing
-        # speaker after a delete - every import/clean assigned fresh speaker ids). Not
-        # deleting speakers here lets that lookup-by-name reuse the same row, and
-        # therefore the same id, across re-imports/cleans of the same chronicle.
         await self.session.execute(sa_delete(DBTranscriptLine))
 
     async def delete_lines_by_speaker(self, speaker_id: UUID) -> None:
@@ -85,7 +77,4 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         )
 
     async def search(self, query: str) -> list[TranscriptLine]:
-        # Not implemented yet (SQLite FTS - see TODO.md). Raising rather than silently
-        # returning None against a `-> list[...]` annotation, which is a real footgun
-        # for any caller (see SearchService, which had exactly this bug).
         raise NotImplementedError("Transcript full-text search is not implemented yet")

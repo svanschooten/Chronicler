@@ -1,10 +1,4 @@
-"""Tests for TranscriptService.export_plaintext.
-
-The expected output here is deliberately spelled out character for character: the
-padded, colon-aligned speaker column and the preservation of the original line breaks
-are the whole point of this exporter, and they were both got wrong before real output
-was compared against what was actually wanted.
-"""
+"""Tests for TranscriptService.export_plaintext."""
 
 import json
 
@@ -24,13 +18,11 @@ async def _noop_progress(_progress: int) -> None:
 
 @pytest.mark.asyncio
 async def test_export_plaintext_preserves_raw_turn_structure_from_real_example(tmp_path):
-    """The concrete acceptance test for the plaintext export format, pinned to a
-    real excerpt of examples/example_transcript_001.txt (not hand-written): a
-    multi-line speaker turn ("Maldal" spanning 5 original lines) must come out as
-    separate indented lines under a padded, colon-aligned speaker column - not
-    flattened into one wrapped paragraph. Import only (no Clean): RegexImporter now
-    joins a turn's original lines with "\\n" rather than " " specifically so this
-    structure survives into the export (see importers.py).
+    """
+    The concrete acceptance test for the plaintext export format, pinned to a real excerpt
+    of examples/example_transcript_001.txt (not hand-written): a multi-line speaker turn
+    ("Maldal" spanning 5 original lines) must come out as separate indented lines under a
+    padded, colon-aligned speaker column - not flattened into one wrapped paragraph.
     """
     db_manager = DatabaseManager(tmp_path)
     try:
@@ -191,10 +183,11 @@ async def test_export_plaintext_with_timestamps_prefixes_and_aligns(tmp_path):
 
 @pytest.mark.asyncio
 async def test_export_plaintext_wraps_long_merged_lines_with_hanging_indent(tmp_path):
-    """A Cleaned turn has no "\\n" of its own (TranscriptCleaner flattens whitespace
-    when merging consecutive same-speaker lines) - a single long line like that must
-    still wrap at PLAINTEXT_EXPORT_WIDTH, hanging-indented under the padded speaker
-    column, rather than exporting as one unreadably long physical line.
+    """
+    A Cleaned turn has no "\n" of its own (TranscriptCleaner flattens whitespace when
+    merging consecutive same-speaker lines) - a single long line like that must still wrap
+    at PLAINTEXT_EXPORT_WIDTH, hanging-indented under the padded speaker column, rather than
+    exporting as one unreadably long physical line.
     """
     db_manager = DatabaseManager(tmp_path)
     try:
@@ -224,7 +217,7 @@ async def test_export_plaintext_wraps_long_merged_lines_with_hanging_indent(tmp_
         exported_lines = exported.splitlines()
         assert len(exported_lines) > 1
         assert exported_lines[0].startswith("GM: ")
-        assert exported_lines[1].startswith("    ")  # hanging indent, no "GM: " repeat
+        assert exported_lines[1].startswith("    ")
         assert all(len(line) <= 140 for line in exported_lines)
     finally:
         await db_manager.close_all()

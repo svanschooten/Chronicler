@@ -1,10 +1,4 @@
-"""Helpers for asserting against a built Flet control tree.
-
-Views here are unit-tested by building them and inspecting the controls they
-produced, rather than by rendering - so several test modules need the same walk over
-a tree whose children hang off `controls`, `items` or `content` depending on the
-control.
-"""
+"""Helpers for asserting against a built Flet control tree."""
 
 from collections.abc import Callable
 

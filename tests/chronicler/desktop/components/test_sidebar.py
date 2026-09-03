@@ -16,9 +16,10 @@ def _attach_mock_page(view):
 
 
 def test_dark_mode_flag_changes_sidebar_colors():
-    """Regression test: the sidebar used to hardcode BLUE_GREY_900/700/400/WHITE
-    regardless of dark_mode, so it stayed dark even after switching the rest of the
-    app to light mode."""
+    """
+    Regression test: the sidebar used to hardcode BLUE_GREY_900/700/400/WHITE regardless of
+    dark_mode, so it stayed dark even after switching the rest of the app to light mode.
+    """
     dark_sidebar = Sidebar(AsyncMock(), dark_mode=True)
     light_sidebar = Sidebar(AsyncMock(), dark_mode=False)
 

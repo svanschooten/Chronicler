@@ -33,7 +33,6 @@ async def test_queue_import_rejects_catastrophic_regex():
             chronicle_id=uuid4(), file_path="/imports/x.txt", regex=r"(a+)+$"
         )
 
-    # No task should have been created for a rejected pattern.
     repo.create.assert_not_called()
 
 
@@ -128,3 +127,53 @@ async def test_queue_transcribe_creates_transcribe_task():
     assert task.type == TaskType.TRANSCRIBE
     assert json.loads(task.data)["file_path"] == "/imports/audio.mp3"
     assert json.loads(task.data)["speaker_name"] == "Alice"
+
+
+class TestTranscribeParameters:
+    @pytest.mark.asyncio
+    async def test_language_and_threshold_are_carried_on_the_task(self):
+        repo = MagicMock(spec=TaskRepository)
+        repo.create = AsyncMock(side_effect=lambda task: task)
+        service = TaskService(repo)
+
+        task = await service.queue_transcribe(
+            uuid4(), "/s/a.wav", "GM", language="nl", no_speech_threshold=0.4, model_size="small"
+        )
+
+        data = json.loads(task.data)
+        assert data["language"] == "nl"
+        assert data["no_speech_threshold"] == 0.4
+        assert data["model_size"] == "small"
+
+    @pytest.mark.asyncio
+    async def test_omitted_parameters_are_absent_so_settings_apply(self):
+        repo = MagicMock(spec=TaskRepository)
+        repo.create = AsyncMock(side_effect=lambda task: task)
+        service = TaskService(repo)
+
+        task = await service.queue_transcribe(uuid4(), "/s/a.wav", "GM")
+
+        data = json.loads(task.data)
+        assert "language" not in data
+        assert "no_speech_threshold" not in data
+        assert data == {"file_path": "/s/a.wav", "speaker_name": "GM"}
+
+    @pytest.mark.asyncio
+    async def test_auto_language_is_recorded_so_it_beats_a_configured_default(self):
+        repo = MagicMock(spec=TaskRepository)
+        repo.create = AsyncMock(side_effect=lambda task: task)
+        service = TaskService(repo)
+
+        task = await service.queue_transcribe(uuid4(), "/s/a.wav", "GM", language="auto")
+
+        assert json.loads(task.data)["language"] == "auto"
+
+    @pytest.mark.asyncio
+    async def test_normalize_first_is_carried(self):
+        repo = MagicMock(spec=TaskRepository)
+        repo.create = AsyncMock(side_effect=lambda task: task)
+        service = TaskService(repo)
+
+        task = await service.queue_transcribe(uuid4(), "/s/a.wav", "GM", normalize_first=True)
+
+        assert json.loads(task.data)["normalize_first"] is True

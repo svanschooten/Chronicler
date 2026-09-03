@@ -37,17 +37,9 @@ class RemoteServiceProxy:
         param_hints = get_type_hints(method)
 
         async def remote_method(*args, **kwargs):
-            # Map args to their names
-            bound_args = sig.bind(None, *args, **kwargs)  # 'None' for self
+            bound_args = sig.bind(None, *args, **kwargs)
             payload = {k: v for k, v in bound_args.arguments.items() if k != "self"}
 
-            # Serialize each argument per its *declared* parameter type via
-            # TypeAdapter, not by inspecting the runtime value - handles UUID,
-            # datetime, Path, Enums and pydantic models uniformly and correctly,
-            # rather than only pydantic models (the previous `hasattr(v,
-            # "model_dump")` check left everything else, e.g. a bare UUID chronicle_id
-            # - the single most common argument shape in this codebase - to fall
-            # through unserialized and fail httpx's JSON encoding entirely.
             json_payload = {}
             for k, v in payload.items():
                 param_type = param_hints.get(k)
@@ -68,11 +60,9 @@ class RemoteServiceProxy:
 
             data = response.json()
 
-            # Deserialize response
             return_type = param_hints.get("return")
 
             if return_type:
-                # TypeAdapter can handle list[Model], Model | None, etc.
                 return TypeAdapter(return_type).validate_python(data)
 
             return data

@@ -42,11 +42,9 @@ async def test_search_tags(async_session):
     assert len(results) == 1
     assert results[0].name == "D&D Session"
 
-    # Case-insensitive substring match
     results = await repo.search("interview")
     assert len(results) == 1
     assert results[0].name == "Interview"
 
-    # No match
     results = await repo.search("nonexistent")
     assert results == []

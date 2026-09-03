@@ -1,14 +1,23 @@
+from unittest.mock import patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chronicler import __version__
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.local_container import register_local_repositories
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import RpcServer, service
-from chronicler.core.services import ChronicleService, SearchService, TaskService, TranscriptService
+from chronicler.core.services import (
+    ChronicleService,
+    SearchService,
+    SystemService,
+    TaskService,
+    TranscriptService,
+)
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
     SQLiteTaskRepository,
@@ -18,9 +27,9 @@ from chronicler.core.sqlite import (
 
 @service
 class _SessionIdProbeService:
-    """Test-only service exposing which AsyncSession backs its repository, so tests
-    can prove each request gets a fresh one rather than reaching into RpcServer
-    internals.
+    """
+    Test-only service exposing which AsyncSession backs its repository, so tests can prove
+    each request gets a fresh one rather than reaching into RpcServer internals.
     """
 
     def __init__(self, repository: TaskRepository):
@@ -39,7 +48,13 @@ def _build_server_app(tmp_path, api_key: str = "test-key"):
 
     server = RpcServer(
         container,
-        services=[ChronicleService, SearchService, TaskService, TranscriptService],
+        services=[
+            ChronicleService,
+            SearchService,
+            SystemService,
+            TaskService,
+            TranscriptService,
+        ],
         api_key=api_key,
     )
     return db_manager, server.build()
@@ -57,7 +72,8 @@ async def test_server_builds_without_error(tmp_path):
 
 @pytest.mark.asyncio
 async def test_search_service_resolves(tmp_path):
-    """Reproduces the historical blocker directly: resolving SearchService used to raise
+    """
+    Reproduces the historical blocker directly: resolving SearchService used to raise
     TypeError because SQLiteTagRepository didn't implement the abstract `search` method.
     """
     db_manager = DatabaseManager(tmp_path)
@@ -84,9 +100,6 @@ async def test_server_routes_reject_missing_key(tmp_path):
             resp = await client.post("/chronicle/list_chronicles", json={})
             assert resp.status_code == 401
 
-            # Routing successfully reaches the auth dependency for SearchService at all
-            # is itself meaningful: before the fix, resolving SearchService raised
-            # TypeError while the app was still being built, so this route didn't exist.
             resp = await client.post("/search/search_tags", json={"query": ""})
             assert resp.status_code == 401
 
@@ -113,9 +126,6 @@ async def test_server_routes_respond_with_valid_key(tmp_path):
             assert resp.status_code == 200
             assert resp.json() == []
 
-            # The repository-backed search methods answer for real now; only content
-            # and speaker search still raise NotImplementedError (they need an FTS
-            # index / per-project fan-out - see search_service.py and TODO.md Phase 3).
             for route in ("search_tags", "search_tasks", "search_chronicle_meta"):
                 resp = await client.post(f"/search/{route}", json={"query": ""}, headers=headers)
                 assert resp.status_code == 200, route
@@ -126,9 +136,10 @@ async def test_server_routes_respond_with_valid_key(tmp_path):
 
 @pytest.mark.asyncio
 async def test_each_request_gets_a_fresh_session(tmp_path):
-    """Before this sprint, RpcServer resolved each service once at build() time, so
-    every request shared one AsyncSession for the server's entire lifetime - unsafe
-    under concurrent use. Each request must now see a distinct session.
+    """
+    Before this sprint, RpcServer resolved each service once at build() time, so every
+    request shared one AsyncSession for the server's entire lifetime - unsafe under
+    concurrent use.
     """
     db_manager = DatabaseManager(tmp_path)
     try:
@@ -191,9 +202,10 @@ async def test_request_scoped_session_is_closed_after_request(tmp_path, monkeypa
 
 @pytest.mark.asyncio
 async def test_transcript_reachable_over_rpc(tmp_path):
-    """TranscriptService wasn't registered as an RPC service at all before this sprint
-    - there was no way to reach it remotely, which is why Thin Client transcript
-    viewing didn't work. Confirms it's reachable and returns real data end to end.
+    """
+    TranscriptService wasn't registered as an RPC service at all before this sprint - there
+    was no way to reach it remotely, which is why Thin Client transcript viewing didn't
+    work.
     """
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
     try:
@@ -233,14 +245,14 @@ async def test_transcript_reachable_over_rpc(tmp_path):
 
 @pytest.mark.asyncio
 async def test_thin_client_full_flow_via_remote_container(tmp_path):
-    """End-to-end thin-client story through RemoteContainer specifically (not raw
-    HTTP): create a chronicle, queue a task, let the server's own WorkerManager pick
-    it up, then read it back - exactly the flow a live smoke test against a real
-    running server exercised, which is what surfaced two real bugs this covers as
-    regressions: RemoteServiceProxy failing to serialize UUID arguments at all
-    (test_remote.py), and queue_import/queue_clean missing return type annotations,
-    which silently made RemoteContainer callers get a raw dict back instead of a Task
-    (fixed in task_service.py).
+    """
+    End-to-end thin-client story through RemoteContainer specifically (not raw HTTP): create
+    a chronicle, queue a task, let the server's own WorkerManager pick it up, then read it
+    back - exactly the flow a live smoke test against a real running server exercised, which
+    is what surfaced two real bugs this covers as regressions: RemoteServiceProxy failing to
+    serialize UUID arguments at all (test_remote.py), and queue_import/queue_clean missing
+    return type annotations, which silently made RemoteContainer callers get a raw dict back
+    instead of a Task (fixed in task_service.py).
     """
     from chronicler.core.remote import RemoteContainer
     from chronicler.core.worker_wiring import build_worker_runtime
@@ -269,4 +281,78 @@ async def test_thin_client_full_flow_via_remote_container(tmp_path):
             assert updated_task.status.value == "DONE"
     finally:
         await worker_runtime.session.close()
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_handshake_succeeds_against_a_real_server(tmp_path):
+    from chronicler.core.handshake import perform_handshake
+    from chronicler.core.remote import RemoteContainer
+
+    db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
+    try:
+        await db_manager.init_archive()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
+            await remote.resolve(ChronicleService).create_chronicle("Existing")
+
+            result = await perform_handshake(remote)
+
+            assert result.version_matches is True
+            assert result.server_info.version == __version__
+            assert result.chronicle_count == 1
+            assert "import" in result.server_info.capabilities
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_handshake_refuses_a_mismatched_server_version(tmp_path):
+    from chronicler.core.handshake import VersionMismatchError, perform_handshake
+    from chronicler.core.remote import RemoteContainer
+
+    db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
+    try:
+        await db_manager.init_archive()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
+
+            with patch("chronicler.core.services.system_service.__version__", "9.9.9"):
+                with pytest.raises(VersionMismatchError):
+                    await perform_handshake(remote)
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_handshake_reports_an_unreachable_server(tmp_path):
+    from chronicler.core.handshake import ServerUnreachableError, perform_handshake
+    from chronicler.core.remote import RemoteContainer
+
+    remote = RemoteContainer("http://127.0.0.1:9", api_key="valid-key")
+
+    with pytest.raises(ServerUnreachableError):
+        await perform_handshake(remote)
+
+
+@pytest.mark.asyncio
+async def test_handshake_rejects_a_wrong_api_key(tmp_path):
+    from chronicler.core.handshake import ServerUnreachableError, perform_handshake
+    from chronicler.core.remote import RemoteContainer
+
+    db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
+    try:
+        await db_manager.init_archive()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            remote = RemoteContainer("http://test", client=client, api_key="wrong-key")
+
+            with pytest.raises(ServerUnreachableError):
+                await perform_handshake(remote)
+    finally:
         await db_manager.close_all()

@@ -18,14 +18,14 @@ CATASTROPHIC_PATTERNS = [
 ]
 
 LEGITIMATE_PATTERNS = [
-    r"^([A-Za-z0-9 _]+)\s*:(.*)$",  # DefaultImporter's actual pattern
+    r"^([A-Za-z0-9 _]+)\s*:(.*)$",
     r"^([A-Za-z]+):\s*(.*)$",
     r"^\[INFO\] ([A-Za-z0-9]+):\s*(.*)$",
     r"^(\w+)\s*-\s*(.*)$",
     r".*",
     r"^(Speaker \d+):(.*)$",
-    r"(cat|dog)+",  # disjoint alternation under a repeat is fine
-    r"((a)(b))+",  # nested groups without nested repeats are fine
+    r"(cat|dog)+",
+    r"((a)(b))+",
 ]
 
 
@@ -37,7 +37,7 @@ def test_rejects_catastrophic_patterns(pattern):
 
 @pytest.mark.parametrize("pattern", LEGITIMATE_PATTERNS)
 def test_accepts_legitimate_patterns(pattern):
-    assert_safe_pattern(pattern)  # must not raise
+    assert_safe_pattern(pattern)
 
 
 def test_rejects_overlong_pattern():

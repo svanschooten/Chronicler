@@ -42,8 +42,10 @@ async def test_get_all_chronicles(async_session):
 
 @pytest.mark.asyncio
 async def test_get_all_orders_newest_first(async_session):
-    """Without an ORDER BY this returned whatever order SQLite produced, so the archive
-    list could reshuffle between two refreshes that changed nothing."""
+    """
+    Without an ORDER BY this returned whatever order SQLite produced, so the archive list
+    could reshuffle between two refreshes that changed nothing.
+    """
     repo = SQLiteChronicleRepository(async_session)
     await repo.create(Chronicle(title="Older", created_at=datetime(2026, 1, 1)))
     await repo.create(Chronicle(title="Newer", created_at=datetime(2026, 6, 1)))
@@ -122,10 +124,12 @@ async def test_delete_chronicle(async_session):
 
 @pytest.mark.asyncio
 async def test_delete_chronicle_cascades_tasks_and_tags(async_session):
-    """DBTask.chronicle_id and chronicle_tags have no ondelete=CASCADE at the schema
-    level - deleting a chronicle must clean these up explicitly or they're orphaned
-    forever (a Task row pointing at a chronicle_id that no longer exists, or a tag
-    association nothing will ever read again)."""
+    """
+    DBTask.chronicle_id and chronicle_tags have no ondelete=CASCADE at the schema level -
+    deleting a chronicle must clean these up explicitly or they're orphaned forever (a Task
+    row pointing at a chronicle_id that no longer exists, or a tag association nothing will
+    ever read again).
+    """
     chronicle_repo = SQLiteChronicleRepository(async_session)
     task_repo = SQLiteTaskRepository(async_session)
 
@@ -177,8 +181,10 @@ async def test_search_matches_the_description(async_session):
 
 @pytest.mark.asyncio
 async def test_search_matches_a_tag_name(async_session):
-    """Tagging a chronicle "product" and then searching "product" found nothing before -
-    search only looked at the title."""
+    """
+    Tagging a chronicle "product" and then searching "product" found nothing before - search
+    only looked at the title.
+    """
     repo = SQLiteChronicleRepository(async_session)
     tagged = await repo.create(Chronicle(title="Weekly sync"))
     await repo.create(Chronicle(title="Interview"))

@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 import flet as ft
 
@@ -7,9 +8,14 @@ from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
+from chronicler.desktop.dialogs import await_dialog
+from chronicler.desktop.reveal import RevealError, open_in_file_manager
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.transcript.export import TranscriptExporter
+from chronicler.desktop.views.transcript.recording import RecordingDialog
 from chronicler.desktop.views.transcript.sources import SourcesPanel
+from chronicler.desktop.views.transcript.summaries import SummariesPanel
+from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +28,17 @@ class TranscriptView(ft.Column):
         transcript_service: TranscriptService,
         task_service: TaskService,
         dark_mode: bool = True,
+        chronicle_service=None,
+        file_stager=None,
+        available_models=None,
     ):
         super().__init__(expand=True, spacing=16)
         self.chronicle = chronicle
         self.on_back = on_back
         self.transcript_service = transcript_service
+        self.task_service = task_service
+        self.chronicle_service = chronicle_service
+        self.file_stager = file_stager
         self.file_picker: ft.FilePicker | None = None
 
         self.colors = theme_colors(dark_mode)
@@ -51,10 +63,16 @@ class TranscriptView(ft.Column):
         self.sources = SourcesPanel(
             chronicle, transcript_service, task_service, self.colors, self.show_snackbar
         )
+        self.summaries = SummariesPanel(
+            chronicle,
+            transcript_service,
+            task_service,
+            self.colors,
+            self.show_snackbar,
+            available_models,
+        )
 
         self.controls = [self._header(), self._body()]
-
-    # -- layout ---------------------------------------------------------------
 
     def _header(self) -> ft.Row:
         return ft.Row(
@@ -80,6 +98,18 @@ class TranscriptView(ft.Column):
                             color=self.colors.muted,
                         ),
                     ],
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.MENU_BOOK,
+                    icon_color=self.colors.muted,
+                    tooltip=t("summaries.read_transcript"),
+                    on_click=self.read_transcript_clicked,
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.FOLDER_OPEN,
+                    icon_color=self.colors.muted,
+                    tooltip=t("summaries.open_folder"),
+                    on_click=self.open_folder_clicked,
                 ),
                 self.exporter.menu(),
             ],
@@ -142,19 +172,25 @@ class TranscriptView(ft.Column):
                     ft.Text("Tags", weight=ft.FontWeight.BOLD, color=self.colors.text),
                     ft.Text(tags or "No tags", color=self.colors.muted),
                     ft.Divider(color=self.colors.border),
+                    ft.Row(
+                        controls=[
+                            ft.TextButton(
+                                t("summaries.record"),
+                                icon=ft.Icons.MIC,
+                                on_click=self.record_clicked,
+                            )
+                        ]
+                    ),
                     self.sources,
-                ]
+                    ft.Divider(color=self.colors.border),
+                    self.summaries,
+                ],
+                scroll=ft.ScrollMode.AUTO,
             ),
-            width=220,
+            width=260,
         )
 
-    # -- lifecycle ------------------------------------------------------------
-
     def did_mount(self):
-        # FilePicker is a Service, not a visual control - it belongs in
-        # page.services, not page.overlay. Putting it in overlay (which expects
-        # renderable widgets) makes the client choke with "Unknown control:
-        # FilePicker".
         if self.file_picker is None:
             self.file_picker = ft.FilePicker()
         if self.file_picker not in self.page.services:
@@ -162,6 +198,7 @@ class TranscriptView(ft.Column):
             self.page.update()
         self.page.run_task(self.load_transcript)
         self.page.run_task(self.sources.load)
+        self.page.run_task(self.summaries.load)
 
     def will_unmount(self):
         if self.file_picker and self.file_picker in self.page.services:
@@ -174,7 +211,60 @@ class TranscriptView(ft.Column):
     async def back_clicked(self, e):
         await self.on_back()
 
-    # -- transcript -----------------------------------------------------------
+    async def open_folder_clicked(self, e):
+        try:
+            directory = await self.transcript_service.chronicle_directory(self.chronicle.id)
+            open_in_file_manager(Path(directory))
+        except (RevealError, OSError) as error:
+            self.show_snackbar(t("summaries.folder_failed", error=error))
+
+    async def read_transcript_clicked(self, e):
+        try:
+            text = await self.transcript_service.read_transcript_text(
+                self.chronicle.id, include_timestamps=self.show_timestamps
+            )
+        except Exception as error:
+            self.show_snackbar(t("transcript.error", error=error))
+            return
+
+        def build(on_choice) -> ft.AlertDialog:
+            return ft.AlertDialog(
+                title=ft.Text(self.chronicle.title),
+                content=ft.Container(
+                    width=760,
+                    height=520,
+                    content=ft.Column(
+                        scroll=ft.ScrollMode.AUTO,
+                        controls=[
+                            ft.Text(
+                                text or t("transcript.empty"),
+                                selectable=True,
+                                font_family="monospace",
+                                size=12,
+                                color=self.colors.text,
+                            )
+                        ],
+                    ),
+                ),
+                actions=[ft.TextButton(t("common.close"), on_click=on_choice(lambda: None))],
+            )
+
+        await await_dialog(self.page, build)
+
+    async def record_clicked(self, e):
+        if self.chronicle_service is None or self.file_stager is None:
+            self.show_snackbar(t("recording.unavailable"))
+            return
+
+        dialog = RecordingDialog(
+            self.chronicle,
+            self.chronicle_service,
+            self.file_stager,
+            self.show_snackbar,
+            self.colors,
+        )
+        await dialog.run(self.page)
+        await self.sources.load()
 
     async def load_transcript(self):
         try:
@@ -186,8 +276,6 @@ class TranscriptView(ft.Column):
         self._render_transcript()
 
     def _render_transcript(self):
-        # Reformats already-fetched lines rather than re-querying - toggling
-        # "Show timestamps" shouldn't cost a round trip or flash "Loading...".
         if not self.transcript_lines:
             self.transcript_area.value = "Transcript is empty or still processing."
         else:

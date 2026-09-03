@@ -53,10 +53,10 @@ async def test_search_tasks_delegates_to_the_task_repository():
 @pytest.mark.parametrize("method", ["search_chronicle_content", "search_speakers"])
 @pytest.mark.asyncio
 async def test_per_project_searches_fail_loudly_rather_than_returning_nothing(method):
-    """Transcript lines and speakers live in per-chronicle project databases, so these
-    can't be a repository query against the archive - they need an FTS index or
-    per-project fan-out first (TODO.md Phase 3). Raising is deliberate: silently
-    returning [] would read as "no matches" and hide that nothing was searched.
+    """
+    Transcript lines and speakers live in per-chronicle project databases, so these can't be
+    a repository query against the archive - they need an FTS index or per-project fan-out
+    first (TODO.md Phase 3).
     """
     with pytest.raises(NotImplementedError):
         await getattr(_service(), method)("anything")

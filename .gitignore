@@ -29,3 +29,4 @@ env/
 # binaries, so committing it as-is would leak a credential and bloat the repo. Remove
 # this line only after the token is revoked and the binaries are stripped.
 ChroniclerProto/
+

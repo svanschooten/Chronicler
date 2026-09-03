@@ -53,7 +53,6 @@ def test_stage_local_file_copies_into_imports_dir(tmp_path):
     assert staged.name != "transcript.txt"
     assert staged.suffix == ".txt"
     assert staged.read_text() == "Alice: hello\n"
-    # Original file is untouched, not moved.
     assert source_file.exists()
 
 
@@ -67,7 +66,7 @@ def test_stage_local_file_two_files_same_name_no_collision(tmp_path):
     file_a.write_text("first")
     staged_a = stage_local_file(file_a, imports_dir)
 
-    file_a.write_text("second")  # simulate picking a different file with the same name
+    file_a.write_text("second")
     staged_b = stage_local_file(file_a, imports_dir)
 
     assert staged_a != staged_b
@@ -102,9 +101,10 @@ async def test_local_file_stager_copies_into_imports_dir(tmp_path):
 
 @pytest.mark.asyncio
 async def test_remote_file_stager_uploads_and_returns_server_path(tmp_path):
-    """Same primitive as LocalFileStager (turn a local path into something safe to
-    queue), but for thin-client mode: actually upload it via /upload, the same
-    endpoint the web client's proxy already uses.
+    """
+    Same primitive as LocalFileStager (turn a local path into something safe to queue), but
+    for thin-client mode: actually upload it via /upload, the same endpoint the web client's
+    proxy already uses.
     """
     db_manager = DatabaseManager(tmp_path)
     try:

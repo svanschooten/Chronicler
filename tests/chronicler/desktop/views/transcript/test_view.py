@@ -1,7 +1,4 @@
-"""Tests for TranscriptView - layout, lifecycle and transcript rendering.
-
-Export and the Sources panel have their own modules.
-"""
+"""Tests for TranscriptView - layout, lifecycle and transcript rendering."""
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -29,9 +26,6 @@ def make_view():
         return view
 
     return _make
-
-
-# -- layout --------------------------------------------------------------------
 
 
 def test_header_summarizes_the_chronicle(make_view):
@@ -80,14 +74,11 @@ def test_panels_take_their_colors_from_the_palette(make_view, dark_mode):
     assert all(panel.bgcolor == colors.card for panel in panels)
 
 
-# -- lifecycle -----------------------------------------------------------------
-
-
 def test_did_mount_registers_the_file_picker_as_a_service_not_an_overlay(attach_page):
-    """Regression test: FilePicker is a Service (flet.controls.services.service), not a
-    visual control - the client fails with "Unknown control: FilePicker" if it's added
-    to page.overlay. Built directly rather than through make_view, which pre-stubs
-    file_picker, so did_mount exercises the real construction path.
+    """
+    Regression test: FilePicker is a Service (flet.controls.services.service), not a visual
+    control - the client fails with "Unknown control: FilePicker" if it's added to
+    page.overlay.
     """
     view = TranscriptView(Chronicle(title="T"), AsyncMock(), AsyncMock(), AsyncMock())
     page = attach_page(TranscriptView)
@@ -128,9 +119,6 @@ async def test_back_clicked_calls_back(make_view):
     await view.back_clicked(MagicMock())
 
     view.on_back.assert_awaited_once()
-
-
-# -- transcript rendering -------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -183,8 +171,10 @@ async def test_lines_with_no_speaker_render_as_unknown(make_view):
 
 @pytest.mark.asyncio
 async def test_show_timestamps_reformats_without_refetching(make_view):
-    """Toggling the checkbox shouldn't cost a round trip or flash "Loading..." - the
-    lines are already in memory."""
+    """
+    Toggling the checkbox shouldn't cost a round trip or flash "Loading..." - the lines are
+    already in memory.
+    """
     transcript_service = AsyncMock()
     transcript_service.get_transcript.return_value = [
         TranscriptLine(speaker_name="Alice", text="Hi", start_time=65.0, end_time=66.0)

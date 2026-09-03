@@ -11,10 +11,6 @@ from chronicler.core.models import Task, TaskStatus
 from chronicler.core.repositories import TaskRepository
 from chronicler.core.sqlite.patterns import LIKE_ESCAPE, contains_pattern
 
-# How many PENDING candidates to consider per claim_next() call before giving up and
-# waiting for the next poll cycle. Guards against pathologically unlucky contention
-# without looping forever; in practice a single caller almost always claims its first
-# candidate.
 _MAX_CLAIM_CANDIDATES = 5
 
 
@@ -82,9 +78,6 @@ class SQLiteTaskRepository(TaskRepository):
             await self.session.commit()
             if update_result.rowcount == 1:
                 return await self.get_by_id(UUID(candidate_id))
-            # rowcount == 0: another worker claimed this candidate between our SELECT
-            # and this UPDATE. Try the next candidate rather than returning None
-            # outright - there may still be unclaimed work.
 
         return None
 
@@ -110,12 +103,6 @@ class SQLiteTaskRepository(TaskRepository):
             db_task.status = status
             db_task.error = error
             if status == TaskStatus.PENDING:
-                # Returning a task to the queue means it hasn't been attempted from the
-                # queue's point of view: the previous run's error, progress and claim are
-                # all stale. Same clearing mark_failed_or_retry() does for the same
-                # transition - leaving claimed_by/claimed_at behind made the Tasks view
-                # keep showing the *previous* run's start time until something claimed
-                # it again.
                 db_task.progress = 0
                 db_task.error = None
                 db_task.claimed_by = None

@@ -21,7 +21,7 @@ def test_wizard_full_stack(tmp_path):
     )
     with (
         config_dir_patch,
-        patch("builtins.input", side_effect=["1", str(tmp_path / "workspace"), "1"]),
+        patch("builtins.input", side_effect=["1", "1", str(tmp_path / "workspace"), "1"]),
         patch("builtins.print"),
     ):
         wizard = ConfigWizard()
@@ -47,7 +47,7 @@ def test_wizard_full_stack_manual_api_key(tmp_path):
         config_dir_patch,
         patch(
             "builtins.input",
-            side_effect=["1", str(tmp_path / "workspace"), "2", "my-custom-key"],
+            side_effect=["1", "1", str(tmp_path / "workspace"), "2", "my-custom-key"],
         ),
         patch("builtins.print"),
     ):
@@ -66,7 +66,7 @@ def test_wizard_thin_client(tmp_path):
     )
     with (
         config_dir_patch,
-        patch("builtins.input", side_effect=["2", "http://remote:8000", "secret-key"]),
+        patch("builtins.input", side_effect=["1", "2", "http://remote:8000", "secret-key"]),
         patch("builtins.print"),
     ):
         wizard = ConfigWizard()
@@ -90,7 +90,7 @@ def test_wizard_reports_correct_path(tmp_path):
     )
     with (
         config_dir_patch,
-        patch("builtins.input", side_effect=["1", str(tmp_path / "workspace"), "3"]),
+        patch("builtins.input", side_effect=["1", "1", str(tmp_path / "workspace"), "3"]),
         patch("sys.stdout", new=out),
     ):
         wizard = ConfigWizard()
@@ -109,7 +109,7 @@ def test_wizard_server(tmp_path):
     )
     with (
         config_dir_patch,
-        patch("builtins.input", side_effect=["3", str(tmp_path / "srv-workspace"), "1"]),
+        patch("builtins.input", side_effect=["1", "3", str(tmp_path / "srv-workspace"), "1"]),
         patch("builtins.print"),
     ):
         wizard = ConfigWizard()
@@ -128,7 +128,7 @@ def test_wizard_web_client(tmp_path):
     )
     with (
         config_dir_patch,
-        patch("builtins.input", side_effect=["4", "http://server:8000", "web-key"]),
+        patch("builtins.input", side_effect=["1", "4", "http://server:8000", "web-key"]),
         patch("builtins.print"),
     ):
         wizard = ConfigWizard()
@@ -142,7 +142,6 @@ def test_wizard_web_client(tmp_path):
 
 def test_api_key_step_generates_on_empty_input():
     settings = Settings()
-    # Option 2 is "Enter an existing API key"
     inputs = ["2", ""]
 
     with (
@@ -155,18 +154,17 @@ def test_api_key_step_generates_on_empty_input():
         step.run(settings)
 
         assert settings.api_key is not None
-        assert len(settings.api_key) == 43  # secrets.token_urlsafe(32) produces ~43 chars
+        assert len(settings.api_key) == 43
         assert "Generated API key:" in fake_out.getvalue()
 
 
 def test_remote_server_step_reprompts_on_empty_api_key():
-    """RemoteServerStep connects to an existing server, so the key must match one the
-    server operator already configured - generating a random one on blank input (the
-    old behavior) silently guaranteed every subsequent request would 403. It must
-    re-prompt instead of ever inventing a key.
+    """
+    RemoteServerStep connects to an existing server, so the key must match one the server
+    operator already configured - generating a random one on blank input (the old behavior)
+    silently guaranteed every subsequent request would 403.
     """
     settings = Settings()
-    # First attempt left blank, second attempt provides the real key.
     inputs = ["http://localhost:8000", "", "the-real-server-key"]
 
     with (
@@ -186,7 +184,10 @@ def test_remote_server_step_reprompts_on_empty_api_key():
 @patch("chronicler.core.wizard.WorkspaceStep.run")
 @patch("chronicler.core.wizard.ApiKeyStep.run")
 def test_wizard_run_server_mode(mock_api, mock_ws, tmp_path):
-    with patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)):
+    with (
+        patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)),
+        patch("chronicler.core.wizard.LanguageStep.run"),
+    ):
         settings = Settings(workspace_path=None)
         wizard = ConfigWizard(settings=settings)
         wizard.run(mode="server")
@@ -198,7 +199,10 @@ def test_wizard_run_server_mode(mock_api, mock_ws, tmp_path):
 
 @patch("chronicler.core.wizard.RemoteServerStep.run")
 def test_wizard_run_webclient_mode(mock_remote, tmp_path):
-    with patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)):
+    with (
+        patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)),
+        patch("chronicler.core.wizard.LanguageStep.run"),
+    ):
         settings = Settings(server_url=None)
         wizard = ConfigWizard(settings=settings)
         wizard.run(mode="client:web")
@@ -219,15 +223,13 @@ def test_wizard_run_desktop_mode_missing(mock_choice, tmp_path):
 
 def test_wizard_skips_satisfied_steps(tmp_path):
     with patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)):
-        # Simulate previous run that set api_key
         settings = Settings(api_key="existing-key", workspace_path=None)
         wizard = ConfigWizard(settings=settings)
 
-        # 'server' mode runs WorkspaceStep and ApiKeyStep.
-        # It should only run WorkspaceStep because api_key is already set.
         with (
             patch("chronicler.core.wizard.WorkspaceStep.run") as mock_ws,
             patch("chronicler.core.wizard.ApiKeyStep.run") as mock_api,
+            patch("chronicler.core.wizard.LanguageStep.run"),
         ):
             wizard.run(mode="server")
 
@@ -237,11 +239,9 @@ def test_wizard_skips_satisfied_steps(tmp_path):
 
 def test_wizard_desktop_choice_skips_satisfied_steps(tmp_path):
     with patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)):
-        # Simulate previous run that set api_key
         settings = Settings(api_key="existing-key", workspace_path=None, server_url=None)
         wizard = ConfigWizard(settings=settings)
 
-        # User chooses '1' (Full Stack): should run WorkspaceStep but skip ApiKeyStep.
         with (
             patch("builtins.input", return_value="1"),
             patch("chronicler.core.wizard.WorkspaceStep.run") as mock_ws,

@@ -46,14 +46,6 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
-    # Embedded use (DatabaseManager): a sync Connection is handed in directly via
-    # config.attributes["connection"], bridged from the app's own async engine via
-    # AsyncConnection.run_sync() - reuses the same connection/transaction rather than
-    # opening a second one, and runs against whichever chronicle's project.db the
-    # caller opened (there's no single fixed URL for this chain - every chronicle has
-    # its own file). Falls back to building a standalone async engine from
-    # sqlalchemy.url for CLI use (`alembic revision --autogenerate`, manual `alembic
-    # upgrade head` against one specific project.db passed with -x db_url=...).
     connection = config.attributes.get("connection")
     if connection is not None:
         do_run_migrations(connection)

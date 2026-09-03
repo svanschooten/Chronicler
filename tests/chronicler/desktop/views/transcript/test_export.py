@@ -1,9 +1,4 @@
-"""Tests for TranscriptExporter - the Export menu and save flow.
-
-What the exported text actually looks like is covered by
-tests/chronicler/core/services/test_transcript_export.py; this is about the menu, the
-save dialog and writing the file.
-"""
+"""Tests for TranscriptExporter - the Export menu and save flow."""
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -40,10 +35,8 @@ def test_menu_offers_plain_text_now_and_signposts_the_rest():
 
     enabled = [item for item in menu.items if not item.disabled]
     disabled = [item for item in menu.items if item.disabled]
-    assert len(enabled) == 2
-    assert [item.data for item in enabled] == [False, True]
-    # HTML, PDF and .zip are planned, not built - offered but disabled rather than
-    # silently absent.
+    assert len(enabled) == 3
+    assert [item.data for item in enabled[:2]] == [False, True]
     assert len(disabled) == 3
 
 
@@ -112,7 +105,6 @@ async def test_export_reports_a_write_failure(make_exporter, tmp_path):
     transcript_service = AsyncMock()
     transcript_service.export_plaintext.return_value = "text"
     exporter, picker = make_exporter(transcript_service=transcript_service)
-    # A directory path can't be opened for writing.
     picker.save_file.return_value = str(tmp_path)
 
     await exporter.export_plaintext_clicked(_event())
@@ -163,3 +155,43 @@ async def test_export_suggests_a_filename_with_no_path_separators(make_exporter,
     assert "/" not in file_name
     assert file_name.endswith(".txt")
     assert picker.save_file.call_args.kwargs["file_type"] == ft.FilePickerFileType.CUSTOM
+
+
+@pytest.mark.asyncio
+async def test_export_srt_writes_subtitles_to_the_chosen_file(make_exporter, tmp_path):
+    transcript_service = AsyncMock()
+    transcript_service.export_srt.return_value = "1\n00:00:00,000 --> 00:00:01,000\nGM: hi\n"
+    exporter, picker = make_exporter(transcript_service=transcript_service)
+    destination = tmp_path / "subs.srt"
+    picker.save_file.return_value = str(destination)
+
+    await exporter.export_srt_clicked(_event())
+
+    assert destination.read_text(encoding="utf-8").startswith("1\n00:00:00,000")
+    assert picker.save_file.await_args.kwargs["allowed_extensions"] == ["srt"]
+
+
+@pytest.mark.asyncio
+async def test_export_srt_reports_a_transcript_without_real_timestamps(make_exporter):
+    from chronicler.core.services.srt import NoRealTimestampsError
+
+    transcript_service = AsyncMock()
+    transcript_service.export_srt.side_effect = NoRealTimestampsError("no timings")
+    exporter, picker = make_exporter(transcript_service=transcript_service)
+
+    await exporter.export_srt_clicked(_event())
+
+    exporter.show_snackbar.assert_called_once()
+    picker.save_file.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_export_srt_cancelled_at_the_picker_writes_nothing(make_exporter, tmp_path):
+    transcript_service = AsyncMock()
+    transcript_service.export_srt.return_value = "1\n"
+    exporter, picker = make_exporter(transcript_service=transcript_service)
+    picker.save_file.return_value = None
+
+    await exporter.export_srt_clicked(_event())
+
+    assert list(tmp_path.iterdir()) == []

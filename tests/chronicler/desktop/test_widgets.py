@@ -28,9 +28,10 @@ def test_amber_button_wires_on_click():
 
 
 def test_two_amber_buttons_render_identically_regardless_of_label():
-    """The concrete fix for "Import and New Chronicle still don't look the same":
-    both now go through the same builder, so their Container styling (padding,
-    radius, bgcolor) is guaranteed identical, not just coincidentally matching.
+    """
+    The concrete fix for "Import and New Chronicle still don't look the same": both now go
+    through the same builder, so their Container styling (padding, radius, bgcolor) is
+    guaranteed identical, not just coincidentally matching.
     """
     import_button = amber_button("Import", ft.Icons.ADD, dropdown=True)
     new_chronicle_button = amber_button("New Chronicle", ft.Icons.ADD)

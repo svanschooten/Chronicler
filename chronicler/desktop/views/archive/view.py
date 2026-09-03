@@ -21,9 +21,6 @@ from chronicler.desktop.widgets import amber_button
 
 logger = logging.getLogger(__name__)
 
-#: What the pending file-picker result should be used for. Set before opening the
-#: picker and consumed by handle_file_result, because Flet's picker result arrives
-#: without any indication of which action asked for it.
 PickerAction = str
 
 
@@ -66,8 +63,6 @@ class ArchiveView(ft.Column):
         )
 
         super().__init__(expand=True, spacing=16, controls=self._build_controls())
-
-    # -- layout ---------------------------------------------------------------
 
     def _build_controls(self) -> list[ft.Control]:
         return [
@@ -133,18 +128,12 @@ class ArchiveView(ft.Column):
     def _forms(self) -> list[CreateChronicleForm | EditChronicleForm | TranscriptImportForm]:
         return [self.create_form, self.edit_form, self.transcript_form]
 
-    # -- lifecycle ------------------------------------------------------------
-
     def did_mount(self):
         logger.debug("ArchiveView loaded")
         self.page.run_task(self.mount_async)
 
     async def mount_async(self):
         logger.debug("ArchiveView.mount_async started")
-        # FilePicker is a Service, not a visual control - it belongs in
-        # page.services, not page.overlay. Putting it in overlay (which expects
-        # renderable widgets) makes the client choke with "Unknown control:
-        # FilePicker".
         if self.file_picker is None:
             self.file_picker = ft.FilePicker()
         if self.file_picker not in self.page.services:
@@ -166,11 +155,7 @@ class ArchiveView(ft.Column):
         self.page.update()
 
     def show_snackbar(self, message: str):
-        # flet 0.86.4's ft.Page has no `snack_bar` attribute (that was a pre-0.70
-        # API) - a SnackBar is a dialog shown through the same stack as ft.AlertDialog.
         self.page.show_dialog(ft.SnackBar(ft.Text(message)))
-
-    # -- chronicle list -------------------------------------------------------
 
     async def refresh_clicked(self, e):
         await self.load_chronicles()
@@ -212,8 +197,6 @@ class ArchiveView(ft.Column):
 
     async def open_chronicle_clicked(self, e):
         await self.on_open_chronicle(e.control.data)
-
-    # -- create / edit --------------------------------------------------------
 
     async def show_create_dialog(self, e):
         self.create_form.open(self.page)
@@ -266,8 +249,6 @@ class ArchiveView(ft.Column):
         self.show_snackbar(f"Deleted '{chronicle.title}'")
         await self.load_chronicles()
 
-    # -- per-chronicle task actions -------------------------------------------
-
     async def clean_clicked(self, e):
         await self.task_service.queue_clean(e.control.data)
         self.show_snackbar("Clean task queued")
@@ -277,11 +258,7 @@ class ArchiveView(ft.Column):
         self.show_snackbar(f"Found {count} speaker{'s' if count != 1 else ''}")
         await self.load_chronicles()
 
-    # -- importing ------------------------------------------------------------
-
     async def import_audio_clicked(self, e):
-        # The header menu item has no `data` (None -> creates a new chronicle); a
-        # card's menu item carries the chronicle id it belongs to via e.control.data.
         self.picker_action = "AUDIO"
         self.current_chronicle_id = e.control.data
         await self.pick_file(allowed_extensions=["mp3", "wav", "m4a"])
@@ -321,9 +298,7 @@ class ArchiveView(ft.Column):
             self.show_snackbar(f"Error picking files: {ex}")
 
     async def handle_file_result(self, file_path):
-        """Dispatches the picked file to whichever import the user asked for. The
-        actual work lives in ImportCoordinator; this only translates picker state into
-        a call and its result into a snackbar."""
+        """Dispatches the picked file to whichever import the user asked for."""
         try:
             message: str | None = None
             if self.picker_action == "AUDIO":

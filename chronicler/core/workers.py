@@ -19,15 +19,9 @@ class WorkerManager:
         event_bus: TaskEventBus | None = None,
     ):
         self.repository = repository
-        # Identifies this WorkerManager instance for claim_next()'s claimed_by column
-        # - useful when more than one process (desktop + server) points at the same
-        # workspace, and for any future stale-claim recovery.
         self.worker_id = worker_id or str(uuid.uuid4())
         self.handlers: dict[TaskType, Callable[[Task, Callable[[int], Any]], Any]] = {}
         self._running = False
-        # Optional: only the desktop app passes one today (see DesktopApp), so it can
-        # refresh whatever view is open when a task it started finishes. None is a
-        # legitimate default everywhere else (server mode, tests) - see task_events.py.
         self.event_bus = event_bus
 
     def register_handler(
@@ -50,12 +44,6 @@ class WorkerManager:
         logger.info("Worker manager stopped")
 
     async def process_tasks(self):
-        # Bounded to what was pending *before* this cycle started: a task that
-        # mark_failed_or_retry() puts back to PENDING mid-cycle (see _execute_task)
-        # is immediately re-claimable, and an unbounded claim loop would burn through
-        # all of a task's retries in one instant burst instead of spreading them
-        # across poll cycles - which defeats the point of retrying at all, since an
-        # instant re-attempt gives a transient failure no time to clear.
         pending_count = len(await self.repository.get_pending())
         for _ in range(pending_count):
             task = await self.repository.claim_next(self.worker_id)
@@ -65,10 +53,6 @@ class WorkerManager:
 
     async def _execute_task(self, task: Task):
         if task.type not in self.handlers:
-            # claim_next() already moved this task to WORKING - there's no handler
-            # that will ever appear for it, so retrying wouldn't help. Fail it
-            # outright rather than leaving it stuck in WORKING or busy-looping it
-            # through repeated claim/no-handler/reclaim cycles.
             logger.warning(f"No handler registered for task type: {task.type}")
             await self.repository.update_status(
                 task.id,
@@ -103,8 +87,6 @@ class WorkerManager:
             return
         task = await self.repository.get_by_id(task_id)
         if task is None or task.status == TaskStatus.PENDING:
-            # mark_failed_or_retry() put it back to PENDING - retries remain, so
-            # this isn't "completed" from a listener's point of view yet.
             return
         await self.event_bus.publish(
             TaskCompletedEvent(

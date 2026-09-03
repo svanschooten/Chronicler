@@ -17,12 +17,10 @@ _MIGRATIONS_ROOT = Path(__file__).resolve().parent.parent / "migrations"
 
 
 def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
-    """Run one migration chain ("archive" or "project") to head against an
-    already-open sync connection - see chronicler/migrations/<chain>/env.py, which
-    picks this connection up via config.attributes["connection"] instead of opening
-    its own engine. No static alembic.ini: the project chain runs against a different
-    project.db file per chronicle, so there's no single fixed URL to put in a config
-    file - the already-open connection carries that instead.
+    """
+    Run one migration chain ("archive" or "project") to head against an already-open sync
+    connection - see chronicler/migrations/<chain>/env.py, which picks this connection up
+    via config.attributes["connection"] instead of opening its own engine.
     """
     logger.info(f"Running {chain} migrations")
     cfg = Config()
@@ -53,11 +51,10 @@ class DatabaseManager:
         return path
 
     def get_chronicle_sources_path(self, chronicle_id: str) -> Path:
-        """Durable per-chronicle storage for audio sources (as opposed to
+        """
+        Durable per-chronicle storage for audio sources (as opposed to
         get_imports_path()'s shared scratch space, which a worker is free to
-        overwrite/lose). Used by both ChronicleService (adding a source) and
-        WorkerHandlers (transcribing one), so it needs to be computed identically in
-        both places.
+        overwrite/lose).
         """
         path = self.workspace_path / "chronicles" / chronicle_id / "sources"
         path.mkdir(parents=True, exist_ok=True)

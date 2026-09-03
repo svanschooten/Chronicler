@@ -36,7 +36,7 @@ def test_container_resolves_factory_function_with_hints():
 def test_container_fails_on_missing_type_hint_in_factory():
     container = Container()
 
-    def factory(dep):  # No type hint
+    def factory(dep):
         return Service(dep)
 
     container.register_factory(Service, factory)
@@ -78,11 +78,9 @@ def test_scope_rebuilds_factory_backed_types_fresh():
 
     container.register_factory(Service, factory)
 
-    # Resolving on the root container once...
     root_service = container.resolve(Service)
     assert build_count == 1
 
-    # ...does not poison a later scope: each new scope rebuilds its own instance.
     scope1 = container.create_scope()
     scope2 = container.create_scope()
     service1 = scope1.resolve(Service)
@@ -91,8 +89,6 @@ def test_scope_rebuilds_factory_backed_types_fresh():
     assert build_count == 3
     assert service1 is not service2
     assert service1 is not root_service
-    # But resolving twice *within* the same scope still caches, same as a plain
-    # Container would - a scope is just a Container with a fresh cache.
     assert scope1.resolve(Service) is service1
     assert build_count == 3
 
@@ -108,11 +104,57 @@ def test_scope_registrations_are_independent_of_parent_after_creation():
 
     scope = container.create_scope()
 
-    # Registered on the parent *after* the scope already exists.
     later_dep = Dependency()
     container.register_instance(Service, later_dep)
 
-    # The scope's snapshot predates this registration, so it still builds Service via
-    # the factory it captured at create_scope() time, not the later override.
     assert scope.resolve(Service) is not later_dep
     assert isinstance(scope.resolve(Service), Service)
+
+
+class TestOptionalDependencies:
+    def test_an_optional_dependency_resolves_when_registered(self):
+        class Thing:
+            pass
+
+        class Needs:
+            def __init__(self, thing: Thing | None):
+                self.thing = thing
+
+        container = Container()
+        registered = Thing()
+        container.register_instance(Thing, registered)
+
+        assert container.resolve(Needs).thing is registered
+
+    def test_an_optional_dependency_becomes_none_when_unresolvable(self):
+        class Unbuildable:
+            def __init__(self, untyped):
+                pass
+
+        class Needs:
+            def __init__(self, thing: Unbuildable | None):
+                self.thing = thing
+
+        assert Container().resolve(Needs).thing is None
+
+    def test_a_required_dependency_that_cannot_resolve_still_raises(self):
+        class Needs:
+            def __init__(self, untyped):
+                pass
+
+        container = Container()
+        with pytest.raises(ValueError, match="missing type hint"):
+            container.resolve(Needs)
+
+    def test_an_optional_abstract_dependency_becomes_none(self):
+        from abc import ABC, abstractmethod
+
+        class Port(ABC):
+            @abstractmethod
+            def go(self) -> None: ...
+
+        class Needs:
+            def __init__(self, port: Port | None):
+                self.port = port
+
+        assert Container().resolve(Needs).port is None

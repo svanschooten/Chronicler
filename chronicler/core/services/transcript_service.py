@@ -1,3 +1,4 @@
+import logging
 import textwrap
 from pathlib import Path
 from uuid import UUID
@@ -6,28 +7,39 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.formatting import format_timestamp
-from chronicler.core.models import TranscriptLine
-from chronicler.core.repositories import ChronicleRepository
+from chronicler.core.models import AudioSource, Summary, TranscriptLine
+from chronicler.core.processing.fingerprint import fingerprint_file
+from chronicler.core.repositories import ChronicleRepository, KnownSpeakerRepository
 from chronicler.core.rpc import service
-from chronicler.core.sqlite import SQLiteTranscriptRepository
+from chronicler.core.services.srt import format_srt
+from chronicler.core.sqlite import (
+    SQLiteAudioSourceRepository,
+    SQLiteSummaryRepository,
+    SQLiteTranscriptRepository,
+)
+
+logger = logging.getLogger(__name__)
 
 PLAINTEXT_EXPORT_WIDTH = 140
+NORMALIZED_SUFFIX = ".normalized.wav"
 
 
 @service
 class TranscriptService:
-    """Project-scoped, unlike every other service here: which project.db to read
-    depends on chronicle_id, known only per-call, not at construction time. Opens its
-    own project session per call instead of taking a pre-bound TranscriptRepository -
-    the same pattern WorkerHandlers already uses in processing/handlers.py. This is
-    what lets it be resolved the same way locally (Container) or remotely
-    (RemoteContainer/RPC) as every other service: DatabaseManager is a singleton
-    either way, and chronicle_id is just another request-body field.
+    """
+    Project-scoped, unlike every other service here: which project.db to read depends on
+    chronicle_id, known only per-call, not at construction time.
     """
 
-    def __init__(self, db_manager: DatabaseManager, chronicle_repository: ChronicleRepository):
+    def __init__(
+        self,
+        db_manager: DatabaseManager,
+        chronicle_repository: ChronicleRepository,
+        known_speakers: KnownSpeakerRepository | None = None,
+    ):
         self.db_manager = db_manager
         self.chronicle_repository = chronicle_repository
+        self.known_speakers = known_speakers
 
     async def _get_repository(
         self, chronicle_id: UUID
@@ -42,30 +54,19 @@ class TranscriptService:
         )
         return session, SQLiteTranscriptRepository(session)
 
+    async def _project_session(self, chronicle_id: UUID) -> AsyncSession:
+        session, _ = await self._get_repository(chronicle_id)
+        return session
+
     async def get_transcript(self, chronicle_id: UUID) -> list[TranscriptLine]:
         session, repo = await self._get_repository(chronicle_id)
         async with session:
             return await repo.get_lines()
 
     async def update_line(self, chronicle_id: UUID, line: TranscriptLine) -> TranscriptLine:
-        # Not implemented yet (Sprint 4 - see TODO.md "Edit text"). Still project-
-        # scoped and chronicle_id-aware for API consistency with get_transcript, but
-        # behavior is unchanged: returns the input without persisting.
         return line
 
     async def export_plaintext(self, chronicle_id: UUID, include_timestamps: bool = False) -> str:
-        # Speaker names are padded to a fixed column (the longest name in this
-        # transcript) so every colon lines up, matching examples/
-        # example_transcript_001.txt's own convention. A turn's original line breaks
-        # (RegexImporter joins them with "\n", not " " - see importers.py) are kept
-        # as separate output lines rather than flattened into one paragraph; each of
-        # those (and a Cleaned turn's single merged line, which has no "\n" of its
-        # own) is still wrapped at PLAINTEXT_EXPORT_WIDTH if it's long enough to need
-        # it, hanging-indented under the padded speaker column. Lines with no real
-        # text (blank/whitespace only) are dropped rather than exported as a bare
-        # "Speaker: ". include_timestamps prepends each line's "[HH:MM:SS] " (a fixed
-        # width, unlike the speaker column) - same wrap/indent rules either way, just
-        # a wider prefix to align continuation lines under.
         lines = [line for line in await self.get_transcript(chronicle_id) if line.text.strip()]
         if not lines:
             return ""
@@ -93,18 +94,131 @@ class TranscriptService:
                 )
         return "\n".join(formatted)
 
-    async def list_audio_sources(self, chronicle_id: UUID) -> list[str]:
-        """Full paths (not just filenames) - the caller needs one back verbatim to
-        pass to TaskService.queue_transcribe, and this runs server-side even in thin
-        client mode (see rpc.py - only coroutine functions are remotable, which is
-        also why this is async despite being plain filesystem I/O), so the path is
-        always meaningful on whichever machine will actually read it. The
-        sources/ directory itself is the source of truth for "what audio tracks does
-        this chronicle have" (see ChronicleService.add_audio_source) - no DB table
-        needed for that yet.
-        """
-        sources_dir = self.db_manager.get_chronicle_sources_path(str(chronicle_id))
-        return sorted(str(p) for p in sources_dir.iterdir() if p.is_file())
+    def sources_dir(self, chronicle_id: UUID) -> Path:
+        return self.db_manager.get_chronicle_sources_path(str(chronicle_id))
+
+    def source_path(self, chronicle_id: UUID, filename: str) -> Path:
+        return self.sources_dir(chronicle_id) / filename
+
+    def _on_disk(self, chronicle_id: UUID) -> list[Path]:
+        return sorted(
+            path
+            for path in self.sources_dir(chronicle_id).iterdir()
+            if path.is_file() and not path.name.endswith(NORMALIZED_SUFFIX)
+        )
+
+    async def export_srt(self, chronicle_id: UUID, include_speaker: bool = True) -> str:
+        """Subtitles for a transcribed chronicle, refusing text imports that have no timings."""
+        lines = await self.get_transcript(chronicle_id)
+        return format_srt(lines, include_speaker=include_speaker, require_real_timestamps=True)
+
+    async def list_summaries(self, chronicle_id: UUID) -> list[Summary]:
+        """Every generated summary, numbered in the order they were produced."""
+        session = await self._project_session(chronicle_id)
+        async with session:
+            return await SQLiteSummaryRepository(session).list_summaries()
+
+    async def get_summary(self, chronicle_id: UUID, summary_id: UUID) -> Summary | None:
+        session = await self._project_session(chronicle_id)
+        async with session:
+            return await SQLiteSummaryRepository(session).get(summary_id)
+
+    async def delete_summary(self, chronicle_id: UUID, summary_id: UUID) -> None:
+        session = await self._project_session(chronicle_id)
+        async with session:
+            await SQLiteSummaryRepository(session).delete(summary_id)
+            await session.commit()
+
+    async def read_transcript_text(
+        self, chronicle_id: UUID, include_timestamps: bool = False
+    ) -> str:
+        """The transcript as one readable block, for reading rather than editing."""
+        return await self.export_plaintext(chronicle_id, include_timestamps=include_timestamps)
+
+    async def chronicle_directory(self, chronicle_id: UUID) -> str:
+        """Where this chronicle's files live, so a client can offer to open it."""
+        chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
+        if chronicle and chronicle.project_path:
+            return str(Path(chronicle.project_path).parent)
+        return str(self.db_manager.workspace_path / "chronicles" / str(chronicle_id))
+
+    async def list_audio_sources(self, chronicle_id: UUID) -> list[AudioSource]:
+        """This chronicle's tracks, reconciling what is on disk with the recorded state."""
+        session = await self._project_session(chronicle_id)
+        async with session:
+            repo = SQLiteAudioSourceRepository(session)
+            present = set()
+            for path in self._on_disk(chronicle_id):
+                present.add(path.name)
+                await repo.register(
+                    path.name,
+                    content_hash=fingerprint_file(path),
+                    size_bytes=path.stat().st_size,
+                )
+            await session.commit()
+            sources = await repo.list_sources()
+
+        for source in sources:
+            source.missing = source.filename not in present
+            source.path = str(self.source_path(chronicle_id, source.filename))
+        return sources
+
+    async def assign_speaker(
+        self, chronicle_id: UUID, filename: str, speaker_name: str | None
+    ) -> AudioSource | None:
+        """Remembers which speaker a track belongs to, creating the speaker if needed."""
+        session = await self._project_session(chronicle_id)
+        async with session:
+            transcripts = SQLiteTranscriptRepository(session)
+            sources = SQLiteAudioSourceRepository(session)
+            try:
+                speaker_id = None
+                if speaker_name:
+                    speaker_id = (await transcripts.get_or_create_speaker(speaker_name)).id
+                await sources.set_speaker(filename, speaker_id)
+                await session.commit()
+                if speaker_name:
+                    await self._remember_speaker(speaker_name)
+            except Exception:
+                await session.rollback()
+                raise
+            return await sources.get_by_filename(filename)
+
+    async def _remember_speaker(self, name: str) -> None:
+        """Adds a name to the workspace-wide registry, ignoring a registry-side failure."""
+        if self.known_speakers is None:
+            return
+        try:
+            await self.known_speakers.register(name)
+        except Exception:
+            logger.warning("Could not record speaker %r in the workspace registry", name)
+
+    async def list_known_speakers(self) -> list[str]:
+        """Every speaker name seen anywhere in this workspace, not just this chronicle."""
+        if self.known_speakers is None:
+            return []
+        return await self.known_speakers.list_names()
+
+    async def speaker_suggestions(self, chronicle_id: UUID) -> list[str]:
+        """Workspace-wide names first-class, with this chronicle's own folded in."""
+        names = set(await self.list_known_speakers())
+        names.update(await self.list_speaker_names(chronicle_id))
+        return sorted(names, key=str.casefold)
+
+    async def mark_source_transcribed(
+        self, chronicle_id: UUID, filename: str, language: str | None, model: str | None
+    ) -> None:
+        path = self.source_path(chronicle_id, filename)
+        content_hash = fingerprint_file(path) if path.exists() else None
+        session = await self._project_session(chronicle_id)
+        async with session:
+            repo = SQLiteAudioSourceRepository(session)
+            await repo.mark_transcribed(filename, content_hash, language, model)
+            await session.commit()
+
+    async def list_audio_source_paths(self, chronicle_id: UUID) -> list[str]:
+        """Full paths, for callers that only need somewhere to read the audio from."""
+        return [str(path) for path in self._on_disk(chronicle_id)]
 
     async def list_speaker_names(self, chronicle_id: UUID) -> list[str]:
         session, repo = await self._get_repository(chronicle_id)
@@ -112,15 +226,18 @@ class TranscriptService:
             return sorted(speaker.name for speaker in await repo.get_speakers())
 
     async def refresh_speaker_count(self, chronicle_id: UUID) -> int:
-        """Recompute Chronicle.speakers_count from the project db's speakers table -
-        a manual reconciliation action for chronicles imported before this existed, or
-        whose transcript was hand-edited since. Import/clean already backfill this
-        automatically as a side effect (see WorkerHandlers), so this is only needed
-        as an explicit "Identify Speakers" user action, not on every load.
+        """
+        Recompute Chronicle.speakers_count from the project db's speakers table - a
+        manual reconciliation action for chronicles imported before this existed, or
+        whose transcript was hand-edited since.
         """
         session, repo = await self._get_repository(chronicle_id)
         async with session:
-            count = len(await repo.get_speakers())
+            speakers = await repo.get_speakers()
+        count = len(speakers)
+
+        for speaker in speakers:
+            await self._remember_speaker(speaker.name)
 
         chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
         if chronicle and chronicle.speakers_count != count:

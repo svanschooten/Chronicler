@@ -11,10 +11,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class TaskCompletedEvent:
-    """Published once a task reaches a terminal state - DONE, or FAILED with no
-    retries left. A retry that puts a task back to PENDING does *not* publish one;
-    from a listener's point of view the task isn't "completed" yet.
-    """
+    """Published once a task reaches a terminal state - DONE, or FAILED with no retries left."""
 
     task_id: UUID
     task_type: TaskType
@@ -26,18 +23,10 @@ TaskEventListener = Callable[[TaskCompletedEvent], "Awaitable[None] | None"]
 
 
 class TaskEventBus:
-    """In-process publish/subscribe for task completion, so a UI sharing the same
-    event loop as the WorkerManager (desktop full-stack mode) can refresh live
-    instead of only on the next manual navigation/refresh click.
-
-    Deliberately just a callback list, not a message queue or external broker -
-    today's only real subscriber is the desktop UI in the same process. The shape
-    (subscribe/publish over TaskCompletedEvent) is deliberately transport-agnostic
-    though: a future websocket/SSE-backed bus for thin-client/web could implement the
-    same interface and be handed to WorkerManager the same way, without
-    WorkerManager itself changing. Today's RPC (RemoteServiceProxy, request/response
-    only) has no server-push mechanism to build that on yet - this class doesn't
-    solve that, it just avoids closing the door on it.
+    """
+    In-process publish/subscribe for task completion, so a UI sharing the same event loop as
+    the WorkerManager (desktop full-stack mode) can refresh live instead of only on the next
+    manual navigation/refresh click.
     """
 
     def __init__(self):
@@ -53,8 +42,6 @@ class TaskEventBus:
         return unsubscribe
 
     async def publish(self, event: TaskCompletedEvent) -> None:
-        # A broken listener must not stop other listeners from hearing about the
-        # event, and must never take down the worker loop that published it.
         for listener in list(self._listeners):
             try:
                 result = listener(event)

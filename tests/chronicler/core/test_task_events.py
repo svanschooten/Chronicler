@@ -64,7 +64,7 @@ async def test_a_broken_listener_does_not_stop_other_listeners():
     bus.subscribe(broken_listener)
     bus.subscribe(lambda event: received.append(event))
 
-    await bus.publish(_event())  # must not raise
+    await bus.publish(_event())
 
     assert len(received) == 1
 

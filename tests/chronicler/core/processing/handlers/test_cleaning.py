@@ -1,9 +1,4 @@
-"""Tests for the CLEAN task handler.
-
-Cleaning operates on lines that are already in a project database, so these tests
-seed one by running a real import first rather than writing rows by hand - that keeps
-what's being cleaned identical in shape to what the app actually produces.
-"""
+"""Tests for the CLEAN task handler."""
 
 import json
 from unittest.mock import patch
@@ -23,9 +18,10 @@ async def _noop_progress(_progress: int) -> None:
 
 @pytest.mark.asyncio
 async def test_handle_clean_preserves_speaker_ids_across_runs(tmp_path):
-    """Regression test: delete_all() used to wipe DBSpeaker too, so
-    get_or_create_speaker() never found an existing speaker after a clean - every
-    clean run assigned fresh speaker ids. delete_all_lines() must not repeat that.
+    """
+    Regression test: delete_all() used to wipe DBSpeaker too, so get_or_create_speaker()
+    never found an existing speaker after a clean - every clean run assigned fresh speaker
+    ids. delete_all_lines() must not repeat that.
     """
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
@@ -51,7 +47,7 @@ async def test_handle_clean_preserves_speaker_ids_across_runs(tmp_path):
 
         clean_task = Task(type=TaskType.CLEAN, chronicle_id=chronicle_id)
         await handlers.handle_clean(clean_task, _noop_progress)
-        await handlers.handle_clean(clean_task, _noop_progress)  # run twice for good measure
+        await handlers.handle_clean(clean_task, _noop_progress)
 
         session = await db_manager.get_project_session(str(chronicle_id))
         async with session:
@@ -90,8 +86,6 @@ async def test_handle_clean_backfills_speaker_count_without_retagging(tmp_path):
 
             updated = await chronicle_repo.get_by_id(chronicle.id)
             assert updated.speakers_count == 2
-            # Clean doesn't create a new transcript, so it shouldn't tag again -
-            # add_tag is idempotent anyway, but this pins the intent.
             assert [t.name for t in updated.tags] == ["Transcript"]
     finally:
         await db_manager.close_all()
@@ -128,10 +122,9 @@ async def test_handle_clean_logs_line_counts_and_finish(tmp_path, caplog):
 
 @pytest.mark.asyncio
 async def test_handle_clean_reuses_the_speaker_ids_already_on_the_lines(tmp_path):
-    """Cleaning reads its lines straight out of the project database, so every one of
-    them already carries a resolved speaker_id. Looking the speaker up by name again
-    is a round-trip per speaker for an answer that's already in hand - and the ids it
-    stamps back are the ones that were there to begin with.
+    """
+    Cleaning reads its lines straight out of the project database, so every one of them
+    already carries a resolved speaker_id.
     """
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
@@ -155,8 +148,6 @@ async def test_handle_clean_reuses_the_speaker_ids_already_on_the_lines(tmp_path
             repo = SQLiteTranscriptRepository(session)
             ids_before = {line.speaker_name: line.speaker_id for line in await repo.get_lines()}
 
-        # Spying rather than stubbing: if the call does happen, the clean still
-        # behaves normally and the assertion below is what reports the problem.
         looked_up: list[str] = []
         real_get_or_create = SQLiteTranscriptRepository.get_or_create_speaker
 
@@ -176,5 +167,112 @@ async def test_handle_clean_reuses_the_speaker_ids_already_on_the_lines(tmp_path
             ids_after = {line.speaker_name: line.speaker_id for line in await repo.get_lines()}
 
         assert ids_after == ids_before
+    finally:
+        await db_manager.close_all()
+
+
+async def _import_lines(handlers, chronicle_id, db_manager, text):
+    transcript_file = db_manager.get_imports_path() / f"{uuid4().hex}.txt"
+    transcript_file.write_text(text)
+    await handlers.handle_import(
+        Task(
+            type=TaskType.IMPORT,
+            chronicle_id=chronicle_id,
+            data=json.dumps({"file_path": str(transcript_file)}),
+        ),
+        _noop_progress,
+    )
+
+
+async def _texts(db_manager, chronicle_id):
+    session = await db_manager.get_project_session(str(chronicle_id))
+    async with session:
+        return [line.text for line in await SQLiteTranscriptRepository(session).get_lines()]
+
+
+@pytest.mark.asyncio
+async def test_handle_clean_uses_the_configured_hallucination_phrases(tmp_path):
+    from chronicler.core.config import Settings
+
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    try:
+        settings = Settings()
+        settings.cleaning.hallucination_phrases = ["Ondertiteling door"]
+        settings.cleaning.merge_same_speaker = False
+        handlers = WorkerHandlers(db_manager, settings=settings)
+
+        chronicle_id = uuid4()
+        await _import_lines(
+            handlers,
+            chronicle_id,
+            db_manager,
+            "Alice: Real content\nAlice: Ondertiteling door\nAlice: More content\n",
+        )
+
+        await handlers.handle_clean(
+            Task(type=TaskType.CLEAN, chronicle_id=chronicle_id), _noop_progress
+        )
+
+        assert await _texts(db_manager, chronicle_id) == ["Real content", "More content"]
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_handle_clean_accepts_a_per_task_override(tmp_path):
+    from chronicler.core.config import Settings
+
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    try:
+        settings = Settings()
+        settings.cleaning.merge_same_speaker = False
+        handlers = WorkerHandlers(db_manager, settings=settings)
+
+        chronicle_id = uuid4()
+        await _import_lines(
+            handlers, chronicle_id, db_manager, "Alice: Keep this\nAlice: Drop this\n"
+        )
+
+        await handlers.handle_clean(
+            Task(
+                type=TaskType.CLEAN,
+                chronicle_id=chronicle_id,
+                data=json.dumps(
+                    {
+                        "cleaning": {
+                            "hallucination_phrases": ["Drop this"],
+                            "merge_same_speaker": False,
+                        }
+                    }
+                ),
+            ),
+            _noop_progress,
+        )
+
+        assert await _texts(db_manager, chronicle_id) == ["Keep this"]
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_handle_clean_rejects_an_unsafe_override_pattern(tmp_path):
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    try:
+        handlers = WorkerHandlers(db_manager)
+        chronicle_id = uuid4()
+        await _import_lines(handlers, chronicle_id, db_manager, "Alice: Hello\n")
+
+        with pytest.raises(ValueError):
+            await handlers.handle_clean(
+                Task(
+                    type=TaskType.CLEAN,
+                    chronicle_id=chronicle_id,
+                    data=json.dumps({"cleaning": {"strip_patterns": ["(a+)+$"]}}),
+                ),
+                _noop_progress,
+            )
     finally:
         await db_manager.close_all()

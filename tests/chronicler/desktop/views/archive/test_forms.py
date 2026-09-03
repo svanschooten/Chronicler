@@ -25,9 +25,6 @@ def any_form(request):
     return request.param(MagicMock(), MagicMock())
 
 
-# -- shared overlay plumbing ----------------------------------------------------
-
-
 def test_attach_adds_the_dialog_to_the_overlay_once(any_form, page):
     any_form.attach(page)
     any_form.attach(page)
@@ -53,9 +50,6 @@ def test_open_and_close_toggle_the_dialog_and_refresh_the_page(any_form, page):
     assert page.update.call_count == 2
 
 
-# -- create --------------------------------------------------------------------
-
-
 def test_create_form_reports_and_clears_its_title():
     form = CreateChronicleForm(MagicMock(), MagicMock())
     form.title_field.value = "New Chronicle"
@@ -64,9 +58,6 @@ def test_create_form_reports_and_clears_its_title():
 
     form.clear()
     assert form.title == ""
-
-
-# -- edit ----------------------------------------------------------------------
 
 
 def test_edit_form_fills_from_a_chronicle():
@@ -88,8 +79,10 @@ def test_edit_form_fills_from_a_chronicle():
 
 
 def test_edit_form_blanks_the_kind_field_when_it_is_the_unknown_default():
-    """ "Unknown" is the model default, not a value the user typed - the field should
-    start blank rather than round-tripping the placeholder as if it were real data."""
+    """
+    "Unknown" is the model default, not a value the user typed - the field should start
+    blank rather than round-tripping the placeholder as if it were real data.
+    """
     form = EditChronicleForm(MagicMock(), MagicMock())
 
     form.fill_from(Chronicle(title="Some Chronicle"))
@@ -127,9 +120,6 @@ def test_edit_form_keeps_the_existing_title_and_restores_defaults_when_blanked()
     assert updated.duration is None
 
 
-# -- transcript import ---------------------------------------------------------
-
-
 def test_transcript_form_defaults_to_group_1_and_2_with_no_timestamps():
     options = TranscriptImportForm(MagicMock(), MagicMock()).options()
 
@@ -152,8 +142,10 @@ def test_transcript_form_parses_group_indices_as_ints():
 
 
 def test_transcript_form_treats_a_blank_timestamp_field_as_no_timestamps():
-    """Blank must mean None, not group 0 - group 0 is the whole match, which would
-    silently produce nonsense timestamps."""
+    """
+    Blank must mean None, not group 0 - group 0 is the whole match, which would silently
+    produce nonsense timestamps.
+    """
     form = TranscriptImportForm(MagicMock(), MagicMock())
     form.timestamp_group_field.value = "   "
 

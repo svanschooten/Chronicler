@@ -4,6 +4,21 @@ from pathlib import Path
 
 from chronicler.core.config import Settings
 
+LANGUAGE_NAMES = {"en": "English", "nl": "Nederlands", "de": "Deutsch"}
+
+
+def supported_languages() -> list[str]:
+    """The locales Chronicler ships, offered for both the interface and transcription."""
+    return list(LANGUAGE_NAMES)
+
+
+def default_workspace_path() -> Path:
+    """A sensible per-OS home for the workspace, preferring the user's Documents folder."""
+    home = Path.home()
+    documents = home / "Documents"
+    base = documents if documents.is_dir() else home
+    return (base / "Chronicler").expanduser()
+
 
 class WizardStep:
     def run(self, settings: Settings) -> None:
@@ -15,13 +30,36 @@ class WizardStep:
         return False
 
 
+class LanguageStep(WizardStep):
+    def run(self, settings: Settings) -> None:
+        languages = supported_languages()
+        print("\n--- Language ---")
+        print("Used for Chronicler's own labels and as the default for new transcriptions.")
+        for index, code in enumerate(languages, start=1):
+            print(f"{index}. {LANGUAGE_NAMES[code]} ({code})")
+
+        while True:
+            choice = input(f"\nSelect a language (1-{len(languages)}) [1]: ").strip() or "1"
+            if choice.isdigit() and 1 <= int(choice) <= len(languages):
+                code = languages[int(choice) - 1]
+                settings.ui.locale = code
+                settings.transcription.language = code
+                return
+            print(f"Invalid choice. Please select 1-{len(languages)}.")
+
+    def is_satisfied(self, settings: Settings) -> bool:
+        return settings.transcription.language is not None
+
+
 class WorkspaceStep(WizardStep):
     def run(self, settings: Settings) -> None:
-        default_path = Path.home() / "ChroniclerWorkspace"
+        default_path = default_workspace_path()
         print("\n--- Local Workspace Setup ---")
-        print("Chronicler stores your data in a workspace.")
+        print("Chronicler stores your chronicles, recordings and databases in a workspace.")
         path_str = input(f"Enter workspace path [{default_path}]: ").strip()
-        settings.workspace_path = Path(path_str) if path_str else default_path
+        settings.workspace_path = (
+            Path(path_str).expanduser().resolve() if path_str else default_path
+        )
 
     def is_satisfied(self, settings: Settings) -> bool:
         return settings.workspace_path is not None
@@ -65,9 +103,6 @@ class RemoteServerStep(WizardStep):
         print("Connect to an existing Chronicler Server.")
         settings.server_url = input("Enter server URL (e.g. http://localhost:8000): ").strip()
 
-        # Unlike ApiKeyStep (setting up a new server, where generating a fresh key is
-        # correct), this key must match one the server operator already configured -
-        # generating a random one here would silently guarantee every request 403s.
         while True:
             api_key = input("Enter API key (ask the server operator for it): ").strip()
             if api_key:
@@ -94,15 +129,15 @@ class ConfigWizard:
             print(f"Configuration is missing or incomplete for mode: {mode}")
 
             if mode == "server":
+                self._run_step(LanguageStep())
                 self._run_step(WorkspaceStep())
                 self._run_step(ApiKeyStep())
                 self.settings.mode = "server"
             elif mode == "client:web":
+                self._run_step(LanguageStep())
                 self._run_step(RemoteServerStep())
                 self.settings.mode = "client:web"
             elif mode == "client:desktop":
-                # For desktop we don't know if they want full stack or thin client
-                # so we show the main choice
                 self._show_main_choice()
         else:
             print("========================================")
@@ -120,6 +155,7 @@ class ConfigWizard:
             step.run(self.settings)
 
     def _show_main_choice(self):
+        self._run_step(LanguageStep())
         print("\nHow would you like to run Chronicler?")
         print("1. Full Stack (Local processing and storage)")
         print("2. Thin Client (Connect to a remote Chronicler Server)")

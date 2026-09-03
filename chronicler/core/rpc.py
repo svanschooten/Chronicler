@@ -19,7 +19,7 @@ def get_services() -> list[type]:
 
 
 class RpcServer:
-    MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB - generous headroom for audio files
+    MAX_UPLOAD_SIZE = 500 * 1024 * 1024
     UPLOAD_CHUNK_SIZE = 1024 * 1024
 
     def __init__(
@@ -63,17 +63,10 @@ class RpcServer:
             if param_name == "self":
                 continue
 
-            # Variadic parameters (*args, **kwargs) cannot have default values
             if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
                 new_params.append(param)
                 continue
 
-            # Treat all parameters as body fields, preserving the method's own
-            # default (including None) rather than always using Body(...) (Ellipsis =
-            # required) - that unconditionally made every parameter mandatory
-            # regardless of the method's actual signature, so any caller (a
-            # RemoteContainer proxy or otherwise) that omitted or explicitly passed
-            # None for a genuinely optional argument got a 422.
             original_default = (
                 param.default if param.default is not inspect.Parameter.empty else ...
             )
@@ -83,11 +76,6 @@ class RpcServer:
         new_sig = sig.replace(parameters=new_params)
 
         async def wrapper(*args, **kwargs):
-            # A fresh scope per request: a fresh AsyncSession, fresh repositories, a
-            # fresh service instance. Only DatabaseManager (an explicit singleton) is
-            # shared across requests - see Container.create_scope(). Without this,
-            # every request would share one AsyncSession for the server's entire
-            # lifetime, which isn't safe under concurrent use.
             if self.container is None:
                 raise RuntimeError("RpcServer has no container configured")
             scope = self.container.create_scope()
@@ -96,10 +84,6 @@ class RpcServer:
                 bound_method = getattr(instance, name)
                 return await bound_method(*args, **kwargs)
             finally:
-                # Only if this scope actually built one - a service with no
-                # database dependency (e.g. tests using a bare Container()) should
-                # not trigger Container's auto-build fallback for AsyncSession, which
-                # isn't constructible without a bound engine and would raise.
                 if scope.is_registered(AsyncSession):
                     await scope.resolve(AsyncSession).close()
 
@@ -132,10 +116,6 @@ class RpcServer:
             dependencies=[Depends(verify_api_key)],
         )
 
-        # Auth here is a bearer-style X-API-Key header, not a cookie, so browsers never
-        # attach it automatically the way they do credentials - allow_credentials=True
-        # combined with a wildcard origin would be both invalid (browsers reject the
-        # combination) and unnecessary here.
         self._app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -152,10 +132,6 @@ class RpcServer:
             db_manager = self.container.resolve(DatabaseManager)
             upload_dir = db_manager.get_imports_path()
 
-            # file.filename is fully client-controlled - never use it to build a path
-            # (e.g. "../../.ssh/authorized_keys" would escape upload_dir). Generate the
-            # on-disk name server-side; keep only a whitelisted extension for
-            # readability, and store the original name as metadata, not as a path.
             file_path = upload_dir / sanitize_stage_name(file.filename)
 
             bytes_written = 0
@@ -178,8 +154,6 @@ class RpcServer:
 
             return {"file_path": str(file_path), "original_filename": file.filename}
 
-        # Without a container there's nothing to resolve service instances from, so
-        # only /upload (which needs just a DatabaseManager) is worth exposing.
         if self.container:
             target_services = self.services if self.services is not None else get_services()
             for service_cls in target_services:

@@ -1,7 +1,4 @@
-"""Tests for TranscriptService - reading, speaker bookkeeping and audio sources.
-
-Plain-text export has its own module (test_transcript_export.py).
-"""
+"""Tests for TranscriptService - reading, speaker bookkeeping and audio sources."""
 
 import pytest
 
@@ -26,7 +23,6 @@ async def test_get_transcript_reads_from_the_chronicles_project_db(tmp_path):
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Session One"))
 
-        # Write directly into the chronicle's project.db, independent of the service.
         project_session = await db_manager.get_project_session(str(chronicle.id))
         async with project_session:
             repo = SQLiteTranscriptRepository(project_session)
@@ -64,7 +60,6 @@ async def test_get_transcript_uses_custom_project_path_for_linked_chronicles(tmp
                 Chronicle(title="Linked", project_path=str(external_db))
             )
 
-        # Write into the *external* path, not the default workspace/chronicles/<id> one.
         external_session = await db_manager.get_project_session(
             str(chronicle.id), custom_path=external_db
         )
@@ -146,9 +141,11 @@ async def test_refresh_speaker_count_backfills_from_project_db(tmp_path):
 
 @pytest.mark.asyncio
 async def test_delete_lines_by_speaker_leaves_other_speakers_untouched(tmp_path):
-    """The concrete requirement behind re-transcribing a single-speaker audio
-    source: overwriting one speaker's track must not wipe another speaker's lines
-    the way delete_all_lines() would."""
+    """
+    The concrete requirement behind re-transcribing a single-speaker audio source:
+    overwriting one speaker's track must not wipe another speaker's lines the way
+    delete_all_lines() would.
+    """
     db_manager = DatabaseManager(tmp_path)
     try:
         session = await db_manager.get_project_session("chronicle-1")
@@ -194,8 +191,10 @@ async def test_list_audio_sources_lists_files_in_chronicle_sources_dir(tmp_path)
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             service = TranscriptService(db_manager, chronicle_repo)
             sources = await service.list_audio_sources(chronicle.id)
+            paths = await service.list_audio_source_paths(chronicle.id)
 
-        assert sources == [str(sources_dir / "alice.mp3"), str(sources_dir / "bob.mp3")]
+        assert [source.filename for source in sources] == ["alice.mp3", "bob.mp3"]
+        assert paths == [str(sources_dir / "alice.mp3"), str(sources_dir / "bob.mp3")]
     finally:
         await db_manager.close_all()
 

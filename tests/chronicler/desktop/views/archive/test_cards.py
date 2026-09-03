@@ -66,11 +66,10 @@ def test_card_opens_the_chronicle_when_the_body_is_clicked():
 
 
 def test_card_actions_bind_async_handlers_directly_and_carry_their_data():
-    """Regression test: a per-card on_click written as `lambda e: self.async_method(e)`
-    is never awaited by Flet (it only checks inspect.iscoroutinefunction on the handler
-    object itself, not on what it returns) - the coroutine is silently dropped. Every
-    per-card action must bind the async function directly and carry what it needs via
-    `data`, not via a lambda closure.
+    """
+    Regression test: a per-card on_click written as `lambda e: self.async_method(e)` is
+    never awaited by Flet (it only checks inspect.iscoroutinefunction on the handler object
+    itself, not on what it returns) - the coroutine is silently dropped.
     """
     chronicle = Chronicle(title="Some Chronicle")
     on_edit, on_delete = AsyncMock(), AsyncMock()
@@ -83,12 +82,8 @@ def test_card_actions_bind_async_handlers_directly_and_carry_their_data():
         for c in find_controls(card, lambda c: isinstance(c, (ft.PopupMenuItem, ft.IconButton)))
         if getattr(c, "on_click", None)
     ]
-    # Import Audio / Import Transcript menu items, plus Edit, Clean, Identify
-    # Speakers and Delete icon buttons.
     assert len(actions) == 6
 
-    # Edit and Delete need the full Chronicle (to pre-fill the edit form / name the
-    # chronicle in the delete confirmation); every other action only needs the id.
     needs_full_chronicle = {on_edit, on_delete}
     for action in actions:
         assert inspect.iscoroutinefunction(action.on_click), (
@@ -100,8 +95,10 @@ def test_card_actions_bind_async_handlers_directly_and_carry_their_data():
 
 @pytest.mark.parametrize("dark_mode", [True, False])
 def test_card_takes_its_colors_from_the_palette(dark_mode):
-    """Regression test: the card used to hardcode BLUE_GREY card colors regardless of
-    the dark_mode setting, so light mode left every card looking exactly as dark."""
+    """
+    Regression test: the card used to hardcode BLUE_GREY card colors regardless of the
+    dark_mode setting, so light mode left every card looking exactly as dark.
+    """
     colors = theme_colors(dark_mode)
 
     card = chronicle_card(Chronicle(title="T"), colors, _handlers())

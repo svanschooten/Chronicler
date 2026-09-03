@@ -1,10 +1,4 @@
-"""Chronicle import orchestration - the business half of ArchiveView's file picker.
-
-Deliberately Flet-free: picking a file and reporting the outcome are the view's job,
-but deciding what an "import audio" or "import transcript" actually *does* to the
-workspace is not. Keeping it here means it can be tested without a page attached,
-and the view is left with layout plus event plumbing.
-"""
+"""Chronicle import orchestration - the business half of ArchiveView's file picker."""
 
 import logging
 import os
@@ -21,8 +15,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class TranscriptImportOptions:
-    """How to parse a transcript file being imported - gathered from the import
-    dialog's fields. `regex` of None falls back to DefaultImporter server-side."""
+    """How to parse a transcript file being imported - gathered from the import dialog's fields."""
 
     regex: str | None = None
     speaker_group: int = 1
@@ -30,9 +23,6 @@ class TranscriptImportOptions:
     timestamp_group: int | None = None
 
 
-#: Resolves to "overwrite", "append" or "cancel". Injected rather than called
-#: directly so the coordinator stays free of Flet - the view supplies one backed by
-#: a real modal, tests supply a plain coroutine.
 AskOverwriteOrAppend = Callable[[], Awaitable[str]]
 
 
@@ -47,22 +37,14 @@ class ImportCoordinator:
         self.chronicle_service = chronicle_service
         self.task_service = task_service
         self.transcript_service = transcript_service
-        # Picked files can be anywhere on disk (e.g. ~/Downloads); handle_import
-        # requires file_path be inside the workspace's imports directory. stage_file
-        # copies (local mode) or uploads (thin client mode) the picked file there
-        # first and returns the path actually safe to queue.
         self.stage_file = stage_file
 
     async def import_audio(self, chronicle_id: UUID | None, file_path: str) -> str:
-        """Stores an audio file as one of a chronicle's sources, creating the
-        chronicle first if `chronicle_id` is None (the header menu's case - a card's
-        menu always carries an id). Queues no transcription: importing a source and
-        transcribing it are separate actions, so tracks can be gathered first and
-        transcribed - with a speaker assigned - later, from the transcript view's
-        Sources panel.
         """
-        # The original name is what the user recognizes; only the staged path is what
-        # is safe to hand onwards.
+        Stores an audio file as one of a chronicle's sources, creating the chronicle
+        first if `chronicle_id` is None (the header menu's case - a card's menu always
+        carries an id).
+        """
         original_name = os.path.basename(file_path)
         staged_path = await self.stage_file(file_path)
 
@@ -82,10 +64,9 @@ class ImportCoordinator:
         options: TranscriptImportOptions,
         ask_overwrite_or_append: AskOverwriteOrAppend,
     ) -> str | None:
-        """Queues a transcript import task, creating the chronicle first if
-        `chronicle_id` is None. Returns None if the user cancelled at the
-        overwrite/append prompt - which is only reached when the chronicle already
-        has a transcript that a plain import would silently destroy.
+        """
+        Queues a transcript import task, creating the chronicle first if `chronicle_id`
+        is None.
         """
         original_name = os.path.basename(file_path)
         staged_path = await self.stage_file(file_path)
@@ -124,13 +105,7 @@ class ImportCoordinator:
         )
 
     async def link_chronicle(self, file_path: str) -> str:
-        """Registers an existing project.db that lives outside the workspace. The
-        file is *not* staged or copied - a linked chronicle deliberately keeps its
-        data where the user put it (see ChronicleService.delete_chronicle).
-        """
-        # <somewhere>/<chronicle name>/project.db is the usual shape, so the parent
-        # directory is the best available title - unless that parent is the generic
-        # "chronicles" container, in which case fall back to the file's own name.
+        """Registers an existing project.db that lives outside the workspace."""
         title = os.path.basename(os.path.dirname(file_path))
         if title == "chronicles" or not title:
             title = os.path.basename(file_path).rsplit(".", 1)[0]

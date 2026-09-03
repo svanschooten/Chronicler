@@ -1,33 +1,11 @@
-"""Static rejection of regex patterns shaped for catastrophic backtracking (ReDoS).
-
-Import regexes arrive from RPC callers (TaskService.queue_import) and get compiled and
-matched against attacker-influenced content (uploaded file lines). RegexImporter matches
-line-by-line rather than against the whole file, so the realistic attack is a crafted
-pattern matched against a long adversarial line, which can blow up matching time
-exponentially in CPython's backtracking engine. Two shapes cause this in practice:
-
-  1. A quantified group whose own body is itself quantified, e.g. `(a+)+`.
-  2. A quantified group containing alternation whose branches can match overlapping
-     content, e.g. `(a|a)*` or `(a|aa)+` - the engine can attribute the same matched
-     text to different combinations of branch choices.
-
-This is a static, zero-cost pre-filter for both shapes. It is not a CPU-time bound -
-Python threads can't be force-killed and CPython's regex matcher doesn't release the
-GIL during backtracking, so a true hard bound needs a subprocess-based watchdog. That's
-deliberately deferred: it overlaps with the worker-loop rework already planned for
-atomic task claiming and retries, and building a regex-specific timeout now would just
-be redone there. See TODO.md, Phase 3.
-"""
+"""Static rejection of regex patterns shaped for catastrophic backtracking (ReDoS)."""
 
 import re
 from re import _parser as sre_parser  # type: ignore[attr-defined]
 
 MAX_PATTERN_LENGTH = 500
 
-# sre_parser op names for a repeat node: MAX_REPEAT covers `*`/`+`/`{m,n}`, MIN_REPEAT
-# covers the non-greedy forms `*?`/`+?`/`{m,n}?`.
 _REPEAT_OPS = {"MAX_REPEAT", "MIN_REPEAT"}
-# How wide a character RANGE we'll enumerate when comparing branches for overlap.
 _MAX_RANGE_SPAN = 64
 
 
@@ -40,12 +18,9 @@ def _op_name(op) -> str:
 
 
 def _leading_chars(subpattern) -> set[int] | None:
-    """Best-effort set of literal codepoints `subpattern` could start matching with.
-    Returns None when it can't be determined confidently - treated conservatively
-    (as "might overlap with anything") by callers.
-    """
+    """Best-effort set of literal codepoints `subpattern` could start matching with."""
     if not subpattern.data:
-        return None  # empty alternative - can't rule out overlap with anything
+        return None
     op, av = subpattern.data[0]
     name = _op_name(op)
     if name == "LITERAL":
@@ -62,7 +37,7 @@ def _leading_chars(subpattern) -> set[int] | None:
                     return None
                 chars.update(range(lo, hi + 1))
             else:
-                return None  # CATEGORY/NEGATE/etc - don't try to be precise
+                return None
         return chars
     if name == "SUBPATTERN":
         _group, _add_flags, _del_flags, body = av
@@ -81,10 +56,10 @@ def _branches_overlap(branches) -> bool:
 
 
 def _is_dangerous_body(subpattern) -> bool:
-    """True if `subpattern` (the body of some enclosing repeat) contains, anywhere
-    within it, another repeat or an alternation with overlapping branches - both let
-    the backtracking engine explore exponentially many equivalent ways to match the
-    same input.
+    """
+    True if `subpattern` (the body of some enclosing repeat) contains, anywhere within it,
+    another repeat or an alternation with overlapping branches - both let the backtracking
+    engine explore exponentially many equivalent ways to match the same input.
     """
     for op, av in subpattern.data:
         name = _op_name(op)
@@ -131,10 +106,9 @@ def _find_unsafe_repeat(subpattern) -> bool:
 
 
 def assert_safe_pattern(pattern: str) -> None:
-    """Raise UnsafePatternError if `pattern` is too long or structurally shaped for
-    catastrophic backtracking. Does not guarantee every ReDoS pattern is caught (see
-    module docstring) - it closes the realistic, textbook attack surface at zero
-    runtime cost.
+    """
+    Raise UnsafePatternError if `pattern` is too long or structurally shaped for
+    catastrophic backtracking.
     """
     if len(pattern) > MAX_PATTERN_LENGTH:
         raise UnsafePatternError(

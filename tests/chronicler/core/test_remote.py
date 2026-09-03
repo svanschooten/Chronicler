@@ -10,12 +10,12 @@ from chronicler.core.rpc import RpcServer, service
 
 @service
 class _UuidEchoService:
-    """Regression test target: a live smoke test against a real running server found
-    that RemoteServiceProxy failed to serialize UUID arguments at all (raised inside
-    httpx's JSON encoder, before the request was even sent) - the previous
-    `hasattr(v, "model_dump")` check only handled pydantic models, and a bare UUID
-    (the single most common argument shape in this codebase - every chronicle_id) has
-    no such method.
+    """
+    Regression test target: a live smoke test against a real running server found that
+    RemoteServiceProxy failed to serialize UUID arguments at all (raised inside httpx's JSON
+    encoder, before the request was even sent) - the previous `hasattr(v, "model_dump")`
+    check only handled pydantic models, and a bare UUID (the single most common argument
+    shape in this codebase - every chronicle_id) has no such method.
     """
 
     async def echo_id(self, chronicle_id: UUID) -> UUID:

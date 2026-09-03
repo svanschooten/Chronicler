@@ -30,10 +30,10 @@ async def test_worker_manager_process_task(async_session):
 
 @pytest.mark.asyncio
 async def test_worker_manager_logs_claim_progress_and_completion(async_session, caplog):
-    """Regression test: previously only a handler's own start-of-work log line was
-    visible - nothing logged the claim, progress updates, or successful completion
-    generically, so "did this task ever finish?" wasn't answerable from the logs
-    alone.
+    """
+    Regression test: previously only a handler's own start-of-work log line was visible -
+    nothing logged the claim, progress updates, or successful completion generically, so
+    "did this task ever finish?" wasn't answerable from the logs alone.
     """
     repo = SQLiteTaskRepository(async_session)
 
@@ -61,8 +61,6 @@ async def test_worker_manager_task_failure(async_session):
     manager = WorkerManager(repo)
     manager.register_handler(TaskType.IMPORT, handler)
 
-    # max_attempts=1: this test is about failure recording, not retry - see the
-    # dedicated retry tests below for that.
     task = await repo.create(Task(type=TaskType.IMPORT, max_attempts=1))
 
     await manager.process_tasks()
@@ -88,14 +86,11 @@ async def test_worker_manager_retries_before_succeeding(async_session):
 
     task = await repo.create(Task(type=TaskType.IMPORT))
 
-    # Each process_tasks() call claims and runs whatever is currently PENDING; a
-    # retried task only becomes PENDING again after mark_failed_or_retry, so it takes
-    # one process_tasks() call per attempt.
     await manager.process_tasks()
     fetched = await repo.get_by_id(task.id)
     assert fetched.status == TaskStatus.PENDING
     assert fetched.attempts == 1
-    assert fetched.claimed_by is None  # cleared on retry, eligible to be reclaimed
+    assert fetched.claimed_by is None
 
     await manager.process_tasks()
     fetched = await repo.get_by_id(task.id)
@@ -142,7 +137,7 @@ async def test_claim_next_is_atomic_under_contention(async_session):
     assert claimed_a is not None
     assert claimed_a.id == task.id
     assert claimed_a.claimed_by == "worker-a"
-    assert claimed_b is None  # nothing left to claim
+    assert claimed_b is None
 
 
 @pytest.mark.asyncio
@@ -202,8 +197,10 @@ async def test_failed_task_with_no_retries_left_publishes_event(async_session):
 
 @pytest.mark.asyncio
 async def test_task_retry_does_not_publish_event_yet(async_session):
-    """A task that still has retries left goes back to PENDING, not a terminal
-    state - nothing has "completed" from a listener's point of view yet."""
+    """
+    A task that still has retries left goes back to PENDING, not a terminal state - nothing
+    has "completed" from a listener's point of view yet.
+    """
     repo = SQLiteTaskRepository(async_session)
     event_bus = TaskEventBus()
     received = []
@@ -221,17 +218,15 @@ async def test_task_retry_does_not_publish_event_yet(async_session):
 @pytest.mark.asyncio
 async def test_no_event_bus_configured_does_not_raise(async_session):
     repo = SQLiteTaskRepository(async_session)
-    manager = WorkerManager(repo)  # no event_bus
+    manager = WorkerManager(repo)
     manager.register_handler(TaskType.IMPORT, AsyncMock())
 
     await repo.create(Task(type=TaskType.IMPORT))
-    await manager.process_tasks()  # must not raise
+    await manager.process_tasks()
 
 
 async def _progress_reporting_handler(task, update_progress):
-    """A stand-in for a real handler: sleeps, reports progress, sleeps, finishes. The
-    sleeps are what tests patch out - they exist so this exercises the same
-    await-in-the-middle shape a real handler has."""
+    """A stand-in for a real handler: sleeps, reports progress, sleeps, finishes."""
     await asyncio.sleep(1)
     await update_progress(50)
     await asyncio.sleep(1)
@@ -246,7 +241,6 @@ async def test_test_worker_execution(async_session):
 
     task = await repo.create(Task(type=TaskType.TEST))
 
-    # Mock asyncio.sleep to speed up test
     with patch("asyncio.sleep", return_value=None):
         await manager.process_tasks()
 
@@ -264,8 +258,6 @@ async def test_task_failure_recording(async_session):
         raise ValueError("Specific error")
 
     manager.register_handler(TaskType.TEST, failing_handler)
-    # max_attempts=1: this test is about failure recording, not retry - the
-    # retry-specific tests are above.
     task = await repo.create(Task(type=TaskType.TEST, max_attempts=1))
 
     await manager.process_tasks()
@@ -279,12 +271,10 @@ async def test_task_failure_recording(async_session):
 async def test_task_retry_logic(async_session):
     repo = SQLiteTaskRepository(async_session)
 
-    # Create a failed task with error and progress
     task = await repo.create(
         Task(type=TaskType.TEST, status=TaskStatus.FAILED, error="Previous error", progress=50)
     )
 
-    # Retry the task
     await repo.update_status(task.id, TaskStatus.PENDING)
 
     fetched = await repo.get_by_id(task.id)

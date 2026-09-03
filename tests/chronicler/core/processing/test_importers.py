@@ -91,14 +91,14 @@ def test_regex_importer_with_timestamp_group_derives_end_time_from_next_line():
 
     assert lines[0].end_time == 12.0
     assert lines[1].end_time == 20.0
-    # Last line has nothing to derive an end from - zero-length, not unknown.
     assert lines[2].end_time == lines[2].start_time == 20.0
 
 
 def test_regex_importer_without_timestamp_group_still_uses_synthetic_index():
-    """No timestamp_group given (the default) - behavior must be unchanged from
-    before timestamped import existed: sequential per-line indices, not real
-    timestamps."""
+    """
+    No timestamp_group given (the default) - behavior must be unchanged from before
+    timestamped import existed: sequential per-line indices, not real timestamps.
+    """
     content = "Alice: Hello\nBob: Hi Alice"
     regex = r"^([A-Za-z]+):\s*(.*)$"
     importer = RegexImporter(regex, speaker_group=1, text_group=2)
@@ -109,9 +109,7 @@ def test_regex_importer_without_timestamp_group_still_uses_synthetic_index():
 
 
 def test_regex_importer_applies_start_offset_to_synthetic_indices():
-    """Appending to an existing transcript needs the new lines ordered after it. The
-    offset is a parse-time input, not something the caller shifts onto the lines
-    afterwards - the importer already knows where the file starts."""
+    """Appending to an existing transcript needs the new lines ordered after it."""
     content = "Alice: Hello\nBob: Hi Alice"
     regex = r"^([A-Za-z]+):\s*(.*)$"
     importer = RegexImporter(regex, speaker_group=1, text_group=2)
@@ -128,8 +126,6 @@ def test_regex_importer_applies_start_offset_to_real_timestamps():
     lines = importer.parse(content, start_offset=100.0)
 
     assert [line.start_time for line in lines] == [105.0, 112.0]
-    # End times are still derived from the following line's start, which is already
-    # offset - the offset is never applied twice.
     assert [line.end_time for line in lines] == [112.0, 112.0]
 
 

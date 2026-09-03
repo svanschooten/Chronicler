@@ -1,12 +1,6 @@
-"""The archive view's form dialogs - create a chronicle, edit its metadata, and
-configure a transcript import.
-
-Unlike the one-shot question dialogs in `chronicler.desktop.dialogs`, these are
-long-lived: each owns input fields whose values are read back after the user clicks
-an action, so they're built once with the view and hosted in `page.overlay` for as
-long as it's mounted. Wrapping each in a small object keeps that field/dialog/parse
-grouping in one place instead of spreading a dozen loose attributes (and their
-int-parsing) across ArchiveView.
+"""
+The archive view's form dialogs - create a chronicle, edit its metadata, and configure a
+transcript import.
 """
 
 import flet as ft
@@ -16,14 +10,7 @@ from chronicler.desktop.views.archive.imports import TranscriptImportOptions
 
 
 class OverlayForm:
-    """Shared plumbing for a form dialog kept in `page.overlay`.
-
-    These use the `overlay` + `open` flag route rather than
-    `page.show_dialog()`/`pop_dialog()`, because they need to exist (and hold their
-    field values) before and after being shown, not just for the duration of one
-    await. `attach`/`detach` are idempotent so a view's mount/unmount can call them
-    without tracking whether it already did.
-    """
+    """Shared plumbing for a form dialog kept in `page.overlay`."""
 
     def __init__(self, dialog: ft.AlertDialog):
         self.dialog = dialog
@@ -95,15 +82,15 @@ class EditChronicleForm(OverlayForm):
     def fill_from(self, chronicle: Chronicle) -> None:
         self.title_field.value = chronicle.title
         self.description_field.value = chronicle.description or ""
-        # "Unknown" is the model default, not something the user typed - start blank
-        # rather than round-tripping the placeholder as if it were real data.
         self.kind_field.value = "" if chronicle.kind == "Unknown" else chronicle.kind
         self.duration_field.value = chronicle.duration or ""
 
     def apply_to(self, chronicle: Chronicle) -> Chronicle:
-        """Writes the field values back onto `chronicle`, keeping its existing title
-        if the field was blanked (a chronicle with no title at all isn't useful) and
-        restoring the "Unknown"/None defaults for the optional fields."""
+        """
+        Writes the field values back onto `chronicle`, keeping its existing title if the
+        field was blanked (a chronicle with no title at all isn't useful) and restoring
+        the "Unknown"/None defaults for the optional fields.
+        """
         chronicle.title = self.title_field.value or chronicle.title
         chronicle.description = self.description_field.value or None
         chronicle.kind = self.kind_field.value or "Unknown"
@@ -145,8 +132,7 @@ class TranscriptImportForm(OverlayForm):
         )
 
     def options(self) -> TranscriptImportOptions:
-        """The fields as the coordinator wants them. A blank timestamp field means
-        "no timestamps" rather than group 0, so it stays None."""
+        """The fields as the coordinator wants them."""
         timestamp_value = (self.timestamp_group_field.value or "").strip()
         return TranscriptImportOptions(
             regex=self.regex_field.value,
