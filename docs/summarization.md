@@ -1,0 +1,75 @@
+# Summarisation
+
+`chronicler/core/llm/`, `chronicler/core/processing/summarizer.py`,
+`chronicler/core/processing/handlers/summarizing.py`
+
+## One provider interface
+
+Everything reaches a model through `LlmClient`, which has two implementations:
+
+| Provider | Reaches | Needs |
+| -------- | ------- | ----- |
+| `openai_compatible` | llama.cpp-server, Ollama, LM Studio, vLLM, hosted gateways | nothing — `httpx` is already a dependency |
+| `llama_cpp` | an in-process `.gguf` file | the optional `llm` extra, imported lazily |
+
+The OpenAI chat-completions API is the one thing every local runner and every hosted
+gateway agrees on, so "local model" and "remote model" differ only by configuration.
+
+## Model discovery
+
+`ModelRegistry` fetches `GET /v1/models` and caches the result for five minutes.
+Discovery is a network round trip and the picker is opened far more often than the set of
+installed models changes, so the desktop app fetches once at startup
+(`DesktopApp.refresh_models`) and the dialog opens instantly.
+
+An unreachable listing endpoint is **not fatal**: the registry falls back to the
+explicitly configured model, records `last_error`, and the picker still works. Plenty of
+OpenAI-compatible servers do not implement `/models` at all.
+
+## Two stages
+
+Inherited from the prototype, which had the right shape:
+
+```text
+transcript → [chunk → bullet points] × n → recap
+```
+
+A transcript short enough to fit in one request skips the chunking entirely and goes
+straight to a recap — one round trip instead of several.
+
+`chunk_transcript` splits on **speaker turns**, never mid-turn. A single turn longer than
+the budget becomes its own oversized chunk rather than being cut in half: losing speaker
+attribution mid-sentence costs more than the overrun.
+
+`budget_characters` reserves room for the prompt and the answer inside the context window
+before deciding how much transcript fits. The prototype raised `OverflowError` when a
+prompt exceeded the window; budgeting and splitting is the same insight without the dead
+end.
+
+## Numbered, not overwritten
+
+Summaries accumulate. Each run adds a numbered row rather than replacing the last one, so
+the same transcript can be summarised with several models and the outputs compared side
+by side. Each row records the model, provider, the recap prompt used, chunk count and
+token usage — which is what makes a comparison interpretable rather than just two blobs
+of text.
+
+Deleting one is explicit and confirmed.
+
+## Prompts
+
+Three templates, all in `SummarySettings` and all overridable per task:
+
+* `system_prompt` — the standing instruction, plus a language request when one is set
+* `chunk_prompt` — what to extract from one section
+* `recap_prompt` — how to turn the notes into prose
+
+Defaults live in settings and are editable in the settings panel. A per-task override
+applies to that run only and is stored with the summary, so a summary always records the
+instruction that produced it.
+
+## State
+
+A chronicle whose status is still `Imported`, `Transcribed` or `Cleaned` becomes
+`Summarized`, and gains a `Summarized` tag. An explicitly-set status is never stomped —
+the same rule transcription follows.
