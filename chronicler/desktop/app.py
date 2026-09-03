@@ -46,6 +46,7 @@ class DesktopApp:
         self._unsubscribe_task_events: Callable[[], None] | None = None
 
         self.available_models: list[str] = []
+        self.capabilities: set[str] | None = None
         self._view_scope: Container | None = None
         logger.debug("DesktopApp constructed")
 
@@ -165,12 +166,26 @@ class DesktopApp:
         await self.update_view()
 
     async def refresh_models(self) -> None:
-        """Discovers the configured provider's models once, so pickers open instantly."""
+        """
+        Asks the service layer what it can do, once, at startup.
+
+        Both answers are the server's in thin-client mode - its extras and its model
+        configuration decide what the buttons here should offer. `capabilities` stays None
+        when the call fails, which every consumer reads as "assume it works" rather than
+        greying out half the interface over an unrelated network hiccup.
+        """
+        system = self.runtime.resolver.resolve(SystemService)
         try:
-            self.available_models = await self.runtime.resolver.resolve(SystemService).list_models()
+            self.available_models = await system.list_models()
         except Exception:
             logger.warning("Could not list language models at startup", exc_info=True)
             self.available_models = []
+
+        try:
+            self.capabilities = set((await system.get_server_info()).capabilities)
+        except Exception:
+            logger.warning("Could not read the service layer's capabilities", exc_info=True)
+            self.capabilities = None
 
     async def on_locale_change(self, _locale: str):
         if self.sidebar is not None:
@@ -262,6 +277,11 @@ class DesktopApp:
             chronicle_service=scope.resolve(ChronicleService),
             file_stager=self.runtime.file_stager,
             available_models=lambda: self.available_models,
+            capabilities=(
+                None if self.capabilities is None else (lambda: self.capabilities or set())
+            ),
+            settings=self.runtime.settings,
+            on_reload=self.update_view,
         )
 
 

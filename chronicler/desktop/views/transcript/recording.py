@@ -15,6 +15,7 @@ import flet as ft
 from chronicler.core.models import Chronicle
 from chronicler.core.recording import InputDevice, Recorder, RecordingError, list_input_devices
 from chronicler.desktop.dialogs import await_dialog
+from chronicler.desktop.extras_prompt import ExtraInstaller
 from chronicler.desktop.theme import ThemeColors
 from chronicler.i18n import t
 
@@ -29,24 +30,34 @@ class RecordingDialog:
         file_stager,
         show_snackbar: Callable[[str], None],
         colors: ThemeColors,
+        installer: ExtraInstaller | None = None,
     ):
         self.chronicle = chronicle
         self.chronicle_service = chronicle_service
         self.file_stager = file_stager
         self.show_snackbar = show_snackbar
         self.colors = colors
+        self.installer = installer
         self.recorder: Recorder | None = None
         self.temp_path: Path | None = None
 
     def devices(self) -> list[InputDevice]:
         try:
-            return list_input_devices()
+            devices = list_input_devices()
         except RecordingError as error:
-            logger.warning(f"No input devices available: {error}")
+            logger.warning(f"Recording is unavailable: {error}")
             self.show_snackbar(str(error))
             return []
 
+        if not devices:
+            logger.warning("The audio backend reported no capture devices")
+            self.show_snackbar(t("recording.no_devices"))
+        return devices
+
     async def run(self, page: ft.Page) -> None:
+        if self.installer is not None and not await self.installer.ensure(page, "recording"):
+            return
+
         devices = self.devices()
         if not devices:
             return

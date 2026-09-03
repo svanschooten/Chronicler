@@ -47,7 +47,10 @@ MESSAGES = {
             "full_stack": "Full Stack",
         },
         "transcription": {
-            "title": "Transcription",
+            "title": "Transcription defaults",
+            "subtitle": (
+                "The starting values for a transcribe task. Every one can be overridden per task."
+            ),
             "language": "Transcription language",
             "language_description": "Leave blank to detect the language of each track.",
             "model_size": "Whisper model",
@@ -60,6 +63,14 @@ MESSAGES = {
             "normalize_first": "Normalize audio before transcribing",
             "normalize_first_description": (
                 "Level each track first. Already-normalized tracks are skipped."
+            ),
+        },
+        "extras": {
+            "title": "Optional components",
+            "auto_install": "Install without asking",
+            "auto_install_description": (
+                "Download and install an optional component the moment a feature "
+                "needs it, instead of confirming first."
             ),
         },
         "cleaning": {
@@ -134,11 +145,37 @@ MESSAGES = {
         "speakers_identified": "{count} identified",
         "tags": "Tags",
     },
+    "actions": {
+        "import_audio": "Import audio",
+        "import_transcript": "Import transcript",
+        "clean": "Clean transcript",
+        "clean_queued": "Clean task queued",
+        "identify_speakers": "Identify speakers",
+        "speakers_found": "Found {count} speaker(s)",
+        "summarize": "Generate summary",
+        "summarize_unavailable": "Configure an AI model to enable summaries",
+        "edit": "Edit chronicle",
+        "updated": "Chronicle updated",
+        "gone": "This chronicle no longer exists.",
+        "delete": "Delete chronicle",
+        "delete_title": "Delete chronicle?",
+        "delete_message": (
+            "This permanently deletes '{title}', its transcript, and any queued tasks "
+            "for it. This cannot be undone."
+        ),
+        "deleted": "Deleted '{title}'",
+        "failed": "Error: {error}",
+        "transcript_exists_title": "Transcript already exists",
+        "transcript_exists_message": (
+            "This chronicle already has an imported transcript. Overwrite it with the "
+            "new file, or append the new file's lines to the end?"
+        ),
+        "append": "Append",
+        "overwrite": "Overwrite",
+    },
     "sources": {
         "title": "Sources",
         "empty": "No audio sources yet.",
-        "transcribe": "Transcribe this track",
-        "transcribe_action": "Transcribe",
         "no_speaker": "No speaker",
         "missing": "Missing",
         "missing_cannot_transcribe": "'{name}' is no longer on disk.",
@@ -148,16 +185,25 @@ MESSAGES = {
         "normalized": "Normalized",
         "failed": "Failed",
         "record": "Record a new source",
-        "assign_speaker": "Assign a speaker",
+        "speaker_saved": "Speaker set to {speaker}",
+    },
+    "transcribe": {
+        "title": "Transcribe {name}",
+        "message": "These values apply to this run only; the defaults live in Settings.",
         "speaker": "Speaker",
-        "new_speaker": "New speaker",
-        "ask_speaker_title": "Transcribe '{name}'",
-        "ask_speaker_message": (
-            "Which speaker is this track? An audio source is assumed to be a single "
-            "speaker - transcribing it replaces only that speaker's existing lines."
-        ),
+        "speaker_required": "Pick or type a speaker name",
+        "language": "Language",
+        "model": "Whisper model",
+        "threshold": "Silence threshold",
+        "threshold_invalid": "Enter a number between 0 and 1",
+        "normalize_first": "Normalize audio first",
+        "already_normalized": "A normalized copy already exists and will be used.",
+        "save_speaker": "Save speaker only",
+        "start": "Start transcription",
+        "start_again": "Transcribe again",
     },
     "recording": {
+        "no_devices": "No audio input devices were found. On WSL, audio input needs WSLg.",
         "title": "Record a source",
         "device": "Input device",
         "name": "File name",
@@ -205,5 +251,18 @@ MESSAGES = {
         "failed": "Error exporting transcript: {error}",
         "write_failed": "Error writing export file: {error}",
         "no_picker": "File picker not available.",
+    },
+    "extras": {
+        "title": "Extra component needed",
+        "message": (
+            "{purpose} needs a component that is not installed yet: {requirement} "
+            "({size} download). Install it now?"
+        ),
+        "remember": "Install optional components without asking",
+        "not_now": "Not now",
+        "install": "Install",
+        "installing": "Installing {name} ({size})...",
+        "installed": "{name} is ready to use",
+        "failed": "Could not install {name}: {error}",
     },
 }

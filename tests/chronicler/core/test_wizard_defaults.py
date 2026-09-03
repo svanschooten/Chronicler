@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from chronicler.core.config import CONFIG_FILE_ENV_VAR, Settings, get_settings
+from chronicler.core.config import CONFIG_FILE_ENV_VAR, Settings
 from chronicler.core.wizard import (
     LanguageStep,
     WorkspaceStep,
@@ -13,18 +13,8 @@ from chronicler.core.wizard import (
 
 
 @pytest.fixture(autouse=True)
-def isolated_config(monkeypatch, tmp_path_factory):
-    """
-    Keeps Settings() away from the developer's real configuration - without this a
-    machine that already has a language configured makes the defaults tests pass or
-    fail depending on whose laptop they run on.
-    """
-    home = tmp_path_factory.mktemp("home")
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(home / "settings.yaml"))
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
+def _isolate_every_test(isolated_config):
+    """Every test here builds a Settings(); see the shared fixture in tests/conftest.py."""
 
 
 class TestDefaultWorkspacePath:
@@ -147,8 +137,6 @@ class TestCleanInstallDefaults:
 
     def test_saving_a_fresh_install_writes_every_section(self, tmp_path, monkeypatch):
         import yaml
-
-        from chronicler.core.config import CONFIG_FILE_ENV_VAR
 
         target = tmp_path / "settings.yaml"
         monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(target))

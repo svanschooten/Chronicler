@@ -49,7 +49,10 @@ MESSAGES = {
             "full_stack": "Vollinstallation",
         },
         "transcription": {
-            "title": "Transkription",
+            "title": "Standardwerte für Transkription",
+            "subtitle": (
+                "Die Startwerte einer Transkriptionsaufgabe. Jeder Wert ist pro Aufgabe änderbar."
+            ),
             "language": "Sprache der Aufnahme",
             "language_description": "Leer lassen, um die Sprache je Aufnahme zu erkennen.",
             "model_size": "Whisper-Modell",
@@ -63,6 +66,14 @@ MESSAGES = {
             "normalize_first_description": (
                 "Jede Aufnahme zuerst angleichen. Bereits normalisierte Aufnahmen werden "
                 "übersprungen."
+            ),
+        },
+        "extras": {
+            "title": "Optionale Komponenten",
+            "auto_install": "Ohne Rückfrage installieren",
+            "auto_install_description": (
+                "Eine optionale Komponente herunterladen und installieren, sobald "
+                "eine Funktion sie braucht, statt vorher zu bestätigen."
             ),
         },
         "cleaning": {
@@ -139,30 +150,68 @@ MESSAGES = {
         "speakers_identified": "{count} erkannt",
         "tags": "Schlagwörter",
     },
+    "actions": {
+        "import_audio": "Audio importieren",
+        "import_transcript": "Transkript importieren",
+        "clean": "Transkript bereinigen",
+        "clean_queued": "Bereinigungsaufgabe eingereiht",
+        "identify_speakers": "Sprecher erkennen",
+        "speakers_found": "{count} Sprecher gefunden",
+        "summarize": "Zusammenfassung erstellen",
+        "summarize_unavailable": "KI-Modell einrichten, um Zusammenfassungen zu nutzen",
+        "edit": "Chronik bearbeiten",
+        "updated": "Chronik aktualisiert",
+        "gone": "Diese Chronik existiert nicht mehr.",
+        "delete": "Chronik loeschen",
+        "delete_title": "Chronik loeschen?",
+        "delete_message": (
+            "Damit werden '{title}', ihr Transkript und alle eingereihten Aufgaben "
+            "endgueltig geloescht. Das kann nicht rueckgaengig gemacht werden."
+        ),
+        "deleted": "'{title}' geloescht",
+        "failed": "Fehler: {error}",
+        "transcript_exists_title": "Es gibt schon ein Transkript",
+        "transcript_exists_message": (
+            "Diese Chronik hat bereits ein importiertes Transkript. Mit der neuen Datei "
+            "ueberschreiben oder deren Zeilen anhaengen?"
+        ),
+        "append": "Anhaengen",
+        "overwrite": "Ueberschreiben",
+    },
     "sources": {
         "title": "Quellen",
         "empty": "Noch keine Audioquellen.",
-        "transcribe": "Diese Aufnahme transkribieren",
-        "transcribe_action": "Transkribieren",
         "no_speaker": "Kein Sprecher",
         "missing": "Fehlt",
         "missing_cannot_transcribe": "'{name}' liegt nicht mehr auf der Festplatte.",
         "transcribed": "Transkribiert",
         "transcribing": "Wird transkribiert",
-        "normalize": "Diese Aufnahme normalisieren",
+        "normalize": "Diese Spur normalisieren",
         "normalized": "Normalisiert",
         "failed": "Fehlgeschlagen",
         "record": "Neue Quelle aufnehmen",
-        "assign_speaker": "Sprecher zuweisen",
-        "speaker": "Sprecher",
-        "new_speaker": "Neuer Sprecher",
-        "ask_speaker_title": "'{name}' transkribieren",
-        "ask_speaker_message": (
-            "Welcher Sprecher ist diese Aufnahme? Eine Audioquelle enthält genau einen Sprecher - "
-            "beim Transkribieren werden nur dessen Zeilen ersetzt."
+        "speaker_saved": "Sprecher auf {speaker} gesetzt",
+    },
+    "transcribe": {
+        "title": "{name} transkribieren",
+        "message": (
+            "Diese Werte gelten nur fuer diesen Lauf; die Standardwerte "
+            "stehen in den Einstellungen."
         ),
+        "speaker": "Sprecher",
+        "speaker_required": "Sprechernamen waehlen oder eingeben",
+        "language": "Sprache",
+        "model": "Whisper-Modell",
+        "threshold": "Stilleschwelle",
+        "threshold_invalid": "Zahl zwischen 0 und 1 eingeben",
+        "normalize_first": "Audio zuerst normalisieren",
+        "already_normalized": "Eine normalisierte Kopie ist vorhanden und wird verwendet.",
+        "save_speaker": "Nur Sprecher speichern",
+        "start": "Transkription starten",
+        "start_again": "Erneut transkribieren",
     },
     "recording": {
+        "no_devices": "Keine Audioeingabegeräte gefunden. Unter WSL wird dafür WSLg benötigt.",
         "title": "Quelle aufnehmen",
         "device": "Eingabegerät",
         "name": "Dateiname",
@@ -212,5 +261,18 @@ MESSAGES = {
         "failed": "Fehler beim Exportieren: {error}",
         "write_failed": "Fehler beim Schreiben der Datei: {error}",
         "no_picker": "Dateiauswahl nicht verfügbar.",
+    },
+    "extras": {
+        "title": "Zusatzkomponente erforderlich",
+        "message": (
+            "{purpose} benötigt eine noch nicht installierte Komponente: {requirement} "
+            "({size} Download). Jetzt installieren?"
+        ),
+        "remember": "Optionale Komponenten ohne Rückfrage installieren",
+        "not_now": "Jetzt nicht",
+        "install": "Installieren",
+        "installing": "{name} wird installiert ({size})...",
+        "installed": "{name} ist einsatzbereit",
+        "failed": "{name} konnte nicht installiert werden: {error}",
     },
 }

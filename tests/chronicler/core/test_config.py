@@ -268,6 +268,7 @@ class TestNestedSections:
         assert settings.normalization.target_lufs == -18.0
         assert settings.llm.provider == "none"
         assert settings.ui.locale == "en"
+        assert settings.extras.auto_install is False
 
     def test_a_config_file_predating_the_sections_still_loads(self, isolated_config):
         config_file = isolated_config / ".chronicler_config.yaml"

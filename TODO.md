@@ -29,9 +29,56 @@ client); the web client is a working reverse proxy over the server API.
 | 8 | Transcription parameters, editable settings, SRT export, speaker registry, thin-client handshake | 2026-09-03 |
 | 9 | Normalisation, LLM summarisation, recording, setup wizard, character designer extraction | 2026-09-03 |
 | 9.1 | Migration serialisation, the normalization extra, actionable desktop-integration errors | 2026-09-03 |
+| 10 | Install-on-demand extras, chronicle actions in the chronicle view, one transcribe dialog, capability gating, linking hydration | 2026-09-03 |
 
 Sprint 4's detailed history is in the git log; [ASSESSMENT.md](ASSESSMENT.md) is the
 Sprint-1-era audit that started the re-baselining and is kept as a historical record.
+
+
+### Sprint 10 — the round of UI feedback (2026-09-03)
+
+Nine pieces of feedback from running the app, grouped into what turned out to be seven
+changes. Full plan and rationale: `docs/optional-extras.md`, `docs/desktop.md`.
+
+* [x] **Optional components install on demand, after asking.** `core/extras.py` is one
+  registry for all four extras — module, requirement, size, and any system package pip
+  cannot supply — replacing four hand-written "install the extra" strings that had
+  drifted. `ExtraInstaller` confirms, installs off the UI thread, and re-checks. The
+  confirmation offers "install without asking", which writes `extras.auto_install`
+  (default `false`, also editable in Settings).
+* [x] **`is_available()` imports rather than looking.** `sounddevice` is a 32 kB binding
+  with no bundled PortAudio: `find_spec` finds it and the import then raises `OSError`.
+  The message tells the pip case and the apt case apart.
+* [x] **Chronicle actions live in the chronicle view too** — import audio, import
+  transcript, clean, identify speakers, generate summary, edit, delete. `ImportCoordinator`
+  and the forms moved to `desktop/` so both views share them.
+* [x] **One file-dialog flow.** `desktop/picking.py` replaces the archive view's
+  `picker_action` state machine rather than letting a second view copy it.
+* [x] **One transcribe button, one dialog.** Speaker, language, model, silence threshold
+  and normalize-first, all defaulting from Settings and applying to that run only.
+  *Save speaker only* is now a labelled secondary action instead of a confirm button
+  that said "Transcribe" while only assigning.
+* [x] **Settings stopped re-saving on every blur.** `SettingsEditor.would_change` compares
+  coerced values, so `0.60` over a stored `0.6`, or a trailing blank line in a list, is
+  correctly no edit. `set()` shares the coercion, so the two cannot disagree.
+* [x] **The chronicle panel is a share of the window** (floor 260, ceiling 520), applied
+  on `page.on_resize`, with full filenames on hover.
+* [x] **AI actions grey out with an explanation** when no model is configured.
+  `capabilities_for(settings)` reports `summarize`, `transcribe` and `normalize`; the
+  desktop reads them from the *server* at startup, since in thin-client mode those are
+  the server's extras and the server's model. An unreachable check leaves everything
+  enabled rather than disabling the interface over a network hiccup.
+* [x] **Linking an external chronicle reads it.** `link_external_chronicle` creates and
+  hydrates in one service call: speaker count, duration, status, transcript tag, and every
+  speaker name into the workspace registry.
+* [x] **Bug found on the way: a linked chronicle's audio was invisible.**
+  `sources_dir()` always pointed into the workspace while `chronicle_directory()`
+  resolved the external path. `DatabaseManager.sources_path_for` is now the one answer
+  for both.
+* [x] **`isolated_config` is a shared fixture.** It was duplicated, and its absence made
+  a transcribe-dialog default depend on the developer's own config file.
+
+1006 tests, 90% coverage; 976 + 2 skipped with the extras hidden; ruff and mypy clean.
 
 ### Sprint 5 — structure and hygiene (2026-08-17)
 

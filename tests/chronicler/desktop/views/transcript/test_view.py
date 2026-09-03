@@ -8,6 +8,11 @@ import pytest
 from chronicler.core.models import Chronicle, Tag, TranscriptLine
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.transcript import TranscriptView
+from chronicler.desktop.views.transcript.view import (
+    MAX_DETAIL_WIDTH,
+    MIN_DETAIL_WIDTH,
+    detail_panel_width,
+)
 from tests.chronicler.desktop.controls import find_controls, text_values
 
 
@@ -68,7 +73,12 @@ def test_panels_take_their_colors_from_the_palette(make_view, dark_mode):
     view = make_view(dark_mode=dark_mode)
     colors = theme_colors(dark_mode)
 
-    panels = [c for c in find_controls(view.controls[1], lambda c: isinstance(c, ft.Container))]
+    body = view.controls[-1]
+    panels = [
+        c
+        for c in find_controls(body, lambda c: isinstance(c, ft.Container))
+        if c.bgcolor is not None
+    ]
 
     assert panels
     assert all(panel.bgcolor == colors.card for panel in panels)
@@ -193,3 +203,68 @@ async def test_show_timestamps_reformats_without_refetching(make_view):
     await view.show_timestamps_changed(event)
 
     assert view.transcript_area.value == "Alice: Hi"
+
+
+class TestDetailPanelWidth:
+    def test_a_wide_window_gets_a_share_of_it(self):
+        width = detail_panel_width(2400)
+
+        assert MIN_DETAIL_WIDTH < width <= MAX_DETAIL_WIDTH
+
+    def test_a_narrow_window_keeps_the_readable_floor(self):
+        assert detail_panel_width(600) == MIN_DETAIL_WIDTH
+
+    def test_an_ultrawide_window_stops_at_the_ceiling(self):
+        assert detail_panel_width(7680) == MAX_DETAIL_WIDTH
+
+    def test_it_grows_with_the_window_in_between(self):
+        assert detail_panel_width(1200) < detail_panel_width(1800)
+
+    def test_an_unknown_width_falls_back_to_the_floor(self):
+        assert detail_panel_width(None) == MIN_DETAIL_WIDTH
+
+    def test_it_never_takes_more_than_a_third_of_the_window(self):
+        for page_width in (1000, 1440, 1920, 2560):
+            assert detail_panel_width(page_width) <= page_width / 3 or (
+                detail_panel_width(page_width) == MIN_DETAIL_WIDTH
+            )
+
+
+class TestResizing:
+    def test_a_resize_widens_the_detail_panel(self, make_view, attach_page):
+        view = make_view()
+        page = attach_page(TranscriptView)
+        page.width = 2400
+
+        view.page_resized(MagicMock())
+
+        assert view.detail_panel.width == detail_panel_width(2400)
+
+    def test_a_resize_before_the_panel_is_painted_is_harmless(self, make_view, attach_page):
+        view = make_view()
+        page = attach_page(TranscriptView)
+        page.width = None
+
+        view.page_resized(MagicMock())
+
+        assert view.detail_panel.width == MIN_DETAIL_WIDTH
+
+
+class TestChronicleActions:
+    def test_the_action_row_is_shown(self, make_view):
+        view = make_view()
+
+        assert view.actions is not None
+        assert view.actions.chronicle is view.chronicle
+
+    def test_summaries_are_gated_on_the_server_capability(self, make_view):
+        allowed = make_view(capabilities=lambda: {"summarize"})
+        blocked = make_view(capabilities=lambda: set())
+
+        assert allowed.actions.can_summarize() is True
+        assert blocked.actions.can_summarize() is False
+
+    def test_with_no_capability_information_the_action_stays_available(self, make_view):
+        view = make_view()
+
+        assert view.actions.can_summarize() is True

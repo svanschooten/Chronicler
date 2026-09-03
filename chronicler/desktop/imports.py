@@ -105,10 +105,11 @@ class ImportCoordinator:
         )
 
     async def link_chronicle(self, file_path: str) -> str:
-        """Registers an existing project.db that lives outside the workspace."""
-        title = os.path.basename(os.path.dirname(file_path))
-        if title == "chronicles" or not title:
-            title = os.path.basename(file_path).rsplit(".", 1)[0]
+        """
+        Registers an existing project.db that lives outside the workspace.
 
-        await self.chronicle_service.create_chronicle(title, project_path=file_path)
-        return f"Linked external chronicle '{title}'"
+        One service call, so the naming, the speaker registry and the metadata it can
+        read out of the file all happen server-side - see docs/storage.md.
+        """
+        chronicle = await self.chronicle_service.link_external_chronicle(file_path)
+        return f"Linked '{chronicle.title}' - {chronicle.speakers_count} speaker(s)"

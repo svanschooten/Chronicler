@@ -42,9 +42,20 @@ written before the file is closed.
 
 ## Optional extra
 
-`sounddevice` is the optional `recording` extra, imported lazily. A missing extra — or a
-machine with no working audio backend, which raises `OSError` rather than `ImportError` —
-produces one clear message naming the `pip install`, not a crash.
+`sounddevice` is the optional `recording` extra, imported lazily. Because recording runs
+on the machine with the microphone, it is the one extra the desktop offers to install:
+clicking *Record a source* without it asks first, then installs and carries on. See
+[optional-extras.md](optional-extras.md).
+
+Two failures are worth telling apart, and the message does:
+
+* **`ImportError`** — the package is not installed. pip can fix it.
+* **`OSError`** — the package is installed and PortAudio is not. `sounddevice` is a
+  32 kB binding with no bundled binaries, so on Linux this needs
+  `sudo apt install libportaudio2`, which pip cannot provide.
+
+A third case is neither: both libraries present and no capture device, which under WSL
+means WSLg's audio bridge. The dialog says so rather than opening an empty dropdown.
 
 Device enumeration filters on `max_input_channels > 0` and keeps the backend's own index,
 since that index is what selects the device when the stream opens.

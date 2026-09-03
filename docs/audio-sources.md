@@ -64,3 +64,19 @@ pre-selects it, and assigning a speaker is its own action, separate from transcr
 
 This is the flexible version of the prototype's `voice_mapping` config, which mapped
 filename fragments to names and could not cope with a name it had not been told about.
+
+## Where a chronicle's audio lives
+
+`DatabaseManager.sources_path_for(chronicle_id, project_path)` is the single answer:
+
+* **normal chronicle** — `<workspace>/chronicles/<id>/sources/`
+* **linked chronicle** — `sources/` beside its `project.db`, wherever the user put it
+
+A linked chronicle's files were never in the workspace, so looking there made every one
+of its sources read as missing while `chronicle_directory()` — used by *Open folder* —
+correctly resolved the external path. The two disagreed.
+
+`TranscriptService.sources_dir` and `HandlerBase.sources_root_for` both go through that
+one function, which is why they are async: the answer depends on the chronicle row.
+`ChronicleService.add_audio_source` uses it too, so an import into a linked chronicle
+lands beside its database rather than in a workspace directory nothing reads.

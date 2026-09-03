@@ -432,3 +432,51 @@ async def test_refresh_models_survives_an_unreachable_provider(tmp_path):
     await app.refresh_models()
 
     assert app.available_models == []
+
+
+@pytest.mark.asyncio
+async def test_refresh_models_also_learns_what_the_server_can_do(tmp_path):
+    """
+    Capabilities come from the server, not the client: in thin-client mode the extras and
+    the model configuration that matter are the server's.
+    """
+    from unittest.mock import AsyncMock
+
+    from chronicler.core.models import ServerInfo
+    from chronicler.core.services.system_service import SystemService
+
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    app = DesktopApp(runtime)
+
+    system = AsyncMock()
+    system.list_models.return_value = []
+    system.get_server_info.return_value = ServerInfo(
+        version="9.9.9", capabilities=["import", "summarize"]
+    )
+    original = runtime.resolver.resolve
+    runtime.resolver.resolve = lambda cls: system if cls is SystemService else original(cls)
+
+    await app.refresh_models()
+
+    assert app.capabilities == {"import", "summarize"}
+
+
+@pytest.mark.asyncio
+async def test_unreachable_capabilities_leave_every_action_offered(tmp_path):
+    """A failed handshake must not silently disable half the interface."""
+    from unittest.mock import AsyncMock
+
+    from chronicler.core.services.system_service import SystemService
+
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    app = DesktopApp(runtime)
+
+    system = AsyncMock()
+    system.list_models.return_value = []
+    system.get_server_info.side_effect = RuntimeError("connection refused")
+    original = runtime.resolver.resolve
+    runtime.resolver.resolve = lambda cls: system if cls is SystemService else original(cls)
+
+    await app.refresh_models()
+
+    assert app.capabilities is None

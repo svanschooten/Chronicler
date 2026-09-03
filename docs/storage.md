@@ -118,3 +118,21 @@ so it appears less often in the escaped output than a backslash would.
 A reserved key/value table for per-chronicle provenance. Nothing reads or writes it
 yet. It is kept in sync with the baseline migration that already creates the table
 rather than dropped, so the ORM metadata and the on-disk schema do not disagree.
+
+## Linking a project database from elsewhere
+
+`ChronicleService.link_external_chronicle(path)` registers a `project.db` that lives
+outside the workspace and then reads what it can out of it: speaker count, duration from
+the last line's end time, `Transcribed` status and the `Transcript` tag when there are
+lines. An empty database stays `Imported` and claims no duration.
+
+It is one service call, not a create-then-inspect sequence in the client. A thin client
+would otherwise make four round trips, and the state it replaces was worse than slow: a
+linked chronicle showed "Imported", zero speakers and no duration however full the
+database was.
+
+The title comes from the containing directory, falling back to the filename when that
+directory is the generic `chronicles`.
+
+`hydrate_from_project` is separate from the link so it can be re-run — the chronicle
+view's *Identify speakers* covers the speaker half of the same job.

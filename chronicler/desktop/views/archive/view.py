@@ -9,20 +9,22 @@ from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.dialogs import Choice, ask_choice, confirm
-from chronicler.desktop.reveal import describe_desktop_integration_error
-from chronicler.desktop.theme import theme_colors
-from chronicler.desktop.views.archive.cards import ChronicleCardHandlers, chronicle_card
-from chronicler.desktop.views.archive.forms import (
+from chronicler.desktop.forms import (
     CreateChronicleForm,
     EditChronicleForm,
     TranscriptImportForm,
 )
-from chronicler.desktop.views.archive.imports import ImportCoordinator
+from chronicler.desktop.imports import ImportCoordinator
+from chronicler.desktop.picking import FilePickerFlow
+from chronicler.desktop.theme import theme_colors
+from chronicler.desktop.views.archive.cards import ChronicleCardHandlers, chronicle_card
 from chronicler.desktop.widgets import amber_button
 
 logger = logging.getLogger(__name__)
 
-PickerAction = str
+AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "flac", "ogg"]
+TRANSCRIPT_EXTENSIONS = ["txt"]
+PROJECT_EXTENSIONS = ["db"]
 
 
 class ArchiveView(ft.Column):
@@ -47,8 +49,8 @@ class ArchiveView(ft.Column):
 
         self.query = ""
         self.file_picker: ft.FilePicker | None = None
-        self.picker_action: PickerAction | None = None
-        self.current_chronicle_id: UUID | None = None
+        self.picker = FilePickerFlow(lambda: self.file_picker, self.show_snackbar)
+        self.pending_chronicle_id: UUID | None = None
         self.editing_chronicle_id: UUID | None = None
 
         self.chronicle_list = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
@@ -260,12 +262,14 @@ class ArchiveView(ft.Column):
         await self.load_chronicles()
 
     async def import_audio_clicked(self, e):
-        self.picker_action = "AUDIO"
-        self.current_chronicle_id = e.control.data
-        await self.pick_file(allowed_extensions=["mp3", "wav", "m4a"])
+        chronicle_id = e.control.data
+        path = await self.picker.pick_file(AUDIO_EXTENSIONS)
+        if not path:
+            return
+        await self._run_import(self.imports.import_audio(chronicle_id, path))
 
     async def import_transcript_clicked(self, e):
-        self.current_chronicle_id = e.control.data
+        self.pending_chronicle_id = e.control.data
         self.transcript_form.open(self.page)
 
     async def close_transcript_dialog(self, e=None):
@@ -273,56 +277,35 @@ class ArchiveView(ft.Column):
 
     async def do_transcript_import(self, e):
         await self.close_transcript_dialog()
-        self.picker_action = "TRANSCRIPT"
-        await self.pick_file(allowed_extensions=["txt"])
+        path = await self.picker.pick_file(TRANSCRIPT_EXTENSIONS)
+        if not path:
+            return
+        await self._run_import(
+            self.imports.import_transcript(
+                self.pending_chronicle_id,
+                path,
+                self.transcript_form.options(),
+                self.ask_overwrite_or_append,
+            )
+        )
+        self.pending_chronicle_id = None
 
     async def link_chronicle_clicked(self, e):
-        self.picker_action = "LINK"
-        await self.pick_file(allowed_extensions=["db"])
-
-    async def pick_file(self, allowed_extensions=None):
-        if self.file_picker is None:
-            self.show_snackbar("File picker not available.")
+        path = await self.picker.pick_file(PROJECT_EXTENSIONS)
+        if not path:
             return
+        await self._run_import(self.imports.link_chronicle(path))
 
+    async def _run_import(self, work) -> None:
+        """Runs one import, reporting whatever it says and reloading the list after."""
         try:
-            result = await self.file_picker.pick_files(
-                allowed_extensions=allowed_extensions,
-                file_type=ft.FilePickerFileType.CUSTOM
-                if allowed_extensions
-                else ft.FilePickerFileType.ANY,
-            )
-            if result:
-                await self.handle_file_result(result[0].path)
-        except Exception as ex:
-            logger.error(f"Error during pick_files: {ex}")
-            self.show_snackbar(describe_desktop_integration_error(ex))
-
-    async def handle_file_result(self, file_path):
-        """Dispatches the picked file to whichever import the user asked for."""
-        try:
-            message: str | None = None
-            if self.picker_action == "AUDIO":
-                message = await self.imports.import_audio(self.current_chronicle_id, file_path)
-            elif self.picker_action == "TRANSCRIPT":
-                message = await self.imports.import_transcript(
-                    self.current_chronicle_id,
-                    file_path,
-                    self.transcript_form.options(),
-                    self.ask_overwrite_or_append,
-                )
-            elif self.picker_action == "LINK":
-                message = await self.imports.link_chronicle(file_path)
-
+            message = await work
             if message:
                 self.show_snackbar(message)
-            await self.load_chronicles()
-        except Exception as ex:
-            logger.error(f"Error handling file result: {ex}")
-            self.show_snackbar(f"Error: {ex}")
-        finally:
-            self.picker_action = None
-            self.current_chronicle_id = None
+        except Exception as error:
+            logger.exception("An import failed")
+            self.show_snackbar(f"Error: {error}")
+        await self.load_chronicles()
 
     async def ask_overwrite_or_append(self) -> str:
         """Asked before a second transcript import can silently destroy the first."""

@@ -41,6 +41,7 @@ class SettingsView(ft.Column):
                 *self._transcription(),
                 *self._cleaning(),
                 *self._llm(),
+                *self._extras(),
             ],
         )
 
@@ -115,6 +116,7 @@ class SettingsView(ft.Column):
     def _transcription(self) -> list[ft.Control]:
         return [
             self._heading("settings.transcription.title"),
+            ft.Text(t("settings.transcription.subtitle"), color=self.colors.muted),
             self.setting_card(
                 t("settings.transcription.language"),
                 t("settings.transcription.language_description"),
@@ -225,6 +227,20 @@ class SettingsView(ft.Column):
             ),
         ]
 
+    def _extras(self) -> list[ft.Control]:
+        return [
+            self._heading("settings.extras.title"),
+            self.setting_card(
+                t("settings.extras.auto_install"),
+                t("settings.extras.auto_install_description"),
+                ft.Switch(
+                    value=self.settings.extras.auto_install,
+                    data="extras.auto_install",
+                    on_change=self._switch_changed,
+                ),
+            ),
+        ]
+
     # -- controls -------------------------------------------------------------
 
     def _dropdown(
@@ -297,6 +313,12 @@ class SettingsView(ft.Column):
     # -- handlers -------------------------------------------------------------
 
     async def _value_changed(self, e):
+        """
+        A blur fires whether or not anything was typed, so an unchanged field would
+        otherwise re-save and re-confirm every time focus moved on.
+        """
+        if not self.editor.would_change(e.control.data, e.control.value):
+            return
         await self.apply(e.control.data, e.control.value)
 
     async def _switch_changed(self, e):

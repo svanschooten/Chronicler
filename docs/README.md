@@ -12,22 +12,23 @@ below and leave the code clean.
 | Page | Covers |
 | ---- | ------ |
 | [configuration.md](configuration.md) | Settings, config file resolution, `--config`, the setup wizard |
-| [configuration-sections.md](configuration-sections.md) | The nested `transcription` / `cleaning` / `normalization` / `llm` / `ui` groups |
+| [configuration-sections.md](configuration-sections.md) | The nested `transcription` / `cleaning` / `normalization` / `llm` / `summary` / `ui` / `extras` groups |
 | [dependency-injection.md](dependency-injection.md) | `Container`, scopes, why each unit of work gets its own session |
 | [deployment-and-rpc.md](deployment-and-rpc.md) | The four modes, generated HTTP API, remote proxies, the web client |
 | [storage.md](storage.md) | Archive and project databases, `DatabaseManager`, Alembic without an `alembic.ini` |
 | [tasks.md](tasks.md) | Task lifecycle, atomic claiming, retries, the worker loop, task events |
 | [processing.md](processing.md) | Import, clean and transcribe handlers; importers, cleaners, the transcriber |
 | [cleaning.md](cleaning.md) | The cleaning rule pipeline, hallucination handling, measured results |
-| [transcription.md](transcription.md) | Language, threshold and model resolution; SRT export |
+| [transcription.md](transcription.md) | Language, threshold and model resolution; the transcribe dialog; SRT export |
 | [speakers.md](speakers.md) | Per-chronicle speakers and the workspace-wide name registry |
 | [audio-sources.md](audio-sources.md) | Per-track state: transcription, normalisation, speaker memory, fingerprints |
 | [audio-normalization.md](audio-normalization.md) | The loudness pipeline, why the source is never touched, LUFS vs dBFS |
 | [summarization.md](summarization.md) | LLM providers, model discovery, two-stage summarisation, numbered outputs |
 | [recording.md](recording.md) | In-app capture, and why it needs no new RPC in thin-client mode |
+| [optional-extras.md](optional-extras.md) | The four extras, install-on-demand, and what pip cannot fix |
 | [i18n.md](i18n.md) | Message maps, `t()`, and the tests that keep translations honest |
 | [security.md](security.md) | Path confinement, filename sanitisation, regex safety, API-key auth, upload limits |
-| [desktop.md](desktop.md) | Flet views, theming, dialog patterns, the import coordinator |
+| [desktop.md](desktop.md) | Flet views, theming, dialog patterns, chronicle actions, the transcribe dialog |
 | [testing.md](testing.md) | Test layout, shared fixtures, how views are tested |
 | [troubleshooting.md](troubleshooting.md) | File dialogs, the session bus on WSL, and migration recovery |
 | [thin-client-testing.md](thin-client-testing.md) | Handshake, the two-process check, and LAN exposure from WSL2 |

@@ -73,3 +73,22 @@ instruction that produced it.
 A chronicle whose status is still `Imported`, `Transcribed` or `Cleaned` becomes
 `Summarized`, and gains a `Summarized` tag. An explicitly-set status is never stomped —
 the same rule transcription follows.
+
+## Buttons that know whether a model exists
+
+`SystemService.get_server_info()` reports `summarize` in its capabilities only when
+`LlmSettings.is_configured` — a base URL and a model for a gateway, or a `model_path` for
+a local `.gguf`. The desktop reads it once at startup, beside the model list, and the
+generate action is disabled with "Configure an AI model to enable summaries" on hover
+when it is absent.
+
+It has to come from the server. In thin-client mode the client's own config is empty and
+irrelevant; the model configuration that decides whether a summary can run is the
+server's. See [deployment-and-rpc.md](deployment-and-rpc.md).
+
+Unknown capabilities — the call failed — leaves the button enabled. A network hiccup
+during startup should not quietly disable half the interface, and the task's own error
+message is a better outcome than a button that refuses for the wrong reason.
+
+`SummariesPanel.generate()` re-checks before queueing, so the action row and the panel's
+own button behave identically and neither can queue a task that cannot run.

@@ -4,13 +4,21 @@ from pathlib import Path
 
 import flet as ft
 
+from chronicler.core.config import Settings, get_settings
 from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.dialogs import await_dialog
+from chronicler.desktop.extras_prompt import ExtraInstaller
+from chronicler.desktop.imports import ImportCoordinator
+from chronicler.desktop.picking import FilePickerFlow
 from chronicler.desktop.reveal import RevealError, open_in_file_manager
 from chronicler.desktop.theme import theme_colors
+from chronicler.desktop.views.transcript.actions import (
+    ChronicleActionCallbacks,
+    ChronicleActions,
+)
 from chronicler.desktop.views.transcript.export import TranscriptExporter
 from chronicler.desktop.views.transcript.recording import RecordingDialog
 from chronicler.desktop.views.transcript.sources import SourcesPanel
@@ -18,6 +26,26 @@ from chronicler.desktop.views.transcript.summaries import SummariesPanel
 from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
+
+MIN_DETAIL_WIDTH = 260
+MAX_DETAIL_WIDTH = 520
+DETAIL_WIDTH_SHARE = 0.24
+
+
+def detail_panel_width(page_width: float | None) -> float:
+    """
+    How wide the chronicle panel should be for a window of `page_width`.
+
+    A share of the window rather than a fixed 260px, so long filenames and speaker names
+    are readable on a big screen - clamped at both ends so a narrow window still leaves
+    room for the transcript and an ultrawide one does not strand the panel. See
+    docs/desktop.md.
+    """
+    try:
+        width = float(page_width)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return MIN_DETAIL_WIDTH
+    return min(max(width * DETAIL_WIDTH_SHARE, MIN_DETAIL_WIDTH), MAX_DETAIL_WIDTH)
 
 
 class TranscriptView(ft.Column):
@@ -31,6 +59,9 @@ class TranscriptView(ft.Column):
         chronicle_service=None,
         file_stager=None,
         available_models=None,
+        capabilities: Callable[[], set[str]] | None = None,
+        settings: Settings | None = None,
+        on_reload: Callable[[], Awaitable[None]] | None = None,
     ):
         super().__init__(expand=True, spacing=16)
         self.chronicle = chronicle
@@ -39,7 +70,11 @@ class TranscriptView(ft.Column):
         self.task_service = task_service
         self.chronicle_service = chronicle_service
         self.file_stager = file_stager
+        self.settings = settings or get_settings()
+        self.capabilities = capabilities
+        self.on_reload = on_reload
         self.file_picker: ft.FilePicker | None = None
+        self.picker = FilePickerFlow(lambda: self.file_picker, self.show_snackbar)
 
         self.colors = theme_colors(dark_mode)
         self.show_timestamps = False
@@ -61,7 +96,12 @@ class TranscriptView(ft.Column):
             lambda: self.file_picker,
         )
         self.sources = SourcesPanel(
-            chronicle, transcript_service, task_service, self.colors, self.show_snackbar
+            chronicle,
+            transcript_service,
+            task_service,
+            self.colors,
+            self.show_snackbar,
+            self.settings,
         )
         self.summaries = SummariesPanel(
             chronicle,
@@ -70,9 +110,39 @@ class TranscriptView(ft.Column):
             self.colors,
             self.show_snackbar,
             available_models,
+            self._can_summarize,
         )
+        self.actions = ChronicleActions(
+            chronicle,
+            ImportCoordinator(
+                chronicle_service,
+                task_service,
+                transcript_service,
+                file_stager.stage if file_stager is not None else _no_stager,
+            ),
+            task_service,
+            transcript_service,
+            chronicle_service,
+            self.picker,
+            self.colors,
+            self.show_snackbar,
+            ChronicleActionCallbacks(
+                on_changed=self.reload,
+                on_deleted=self.back_to_archive,
+                on_summarize=self.summaries.generate,
+            ),
+            self._can_summarize,
+        )
+        self.detail_panel = self._detail_panel()
 
-        self.controls = [self._header(), self._body()]
+        self.controls = [self._header(), self.actions, self._body()]
+
+    def _can_summarize(self) -> bool:
+        """
+        Unknown capabilities means "assume it works": the button explaining itself is
+        better than one that refuses because a handshake has not landed yet.
+        """
+        return self.capabilities is None or "summarize" in self.capabilities()
 
     def _header(self) -> ft.Row:
         return ft.Row(
@@ -117,11 +187,11 @@ class TranscriptView(ft.Column):
 
     def _body(self) -> ft.Row:
         return ft.Row(
-            controls=[self._transcript_panel(), self._detail_panel()],
+            controls=[self._transcript_panel(), self.detail_panel],
             expand=True,
         )
 
-    def _panel(self, content: ft.Control, width: int | None = None) -> ft.Container:
+    def _panel(self, content: ft.Control, width: float | None = None) -> ft.Container:
         return ft.Container(
             expand=width is None,
             width=width,
@@ -187,7 +257,7 @@ class TranscriptView(ft.Column):
                 ],
                 scroll=ft.ScrollMode.AUTO,
             ),
-            width=260,
+            width=MIN_DETAIL_WIDTH,
         )
 
     def did_mount(self):
@@ -196,14 +266,41 @@ class TranscriptView(ft.Column):
         if self.file_picker not in self.page.services:
             self.page.services.append(self.file_picker)
             self.page.update()
+        for form in self.actions.forms:
+            form.attach(self.page)
+        self.page.on_resize = self.page_resized
+        self.page_resized(None)
         self.page.run_task(self.load_transcript)
         self.page.run_task(self.sources.load)
         self.page.run_task(self.summaries.load)
 
     def will_unmount(self):
+        for form in self.actions.forms:
+            form.detach(self.page)
+        if self.page.on_resize is self.page_resized:
+            self.page.on_resize = None
         if self.file_picker and self.file_picker in self.page.services:
             self.page.services.remove(self.file_picker)
             self.page.update()
+
+    def page_resized(self, _event) -> None:
+        self.detail_panel.width = detail_panel_width(getattr(self.page, "width", None))
+        try:
+            self.detail_panel.update()
+        except (RuntimeError, AssertionError):
+            pass
+
+    async def reload(self) -> None:
+        """Rebuilds the whole view after something changed the chronicle."""
+        if self.on_reload is not None:
+            await self.on_reload()
+            return
+        await self.load_transcript()
+        await self.sources.load()
+        await self.summaries.load()
+
+    async def back_to_archive(self) -> None:
+        await self.on_back()
 
     def show_snackbar(self, message: str):
         self.page.show_dialog(ft.SnackBar(ft.Text(message)))
@@ -262,6 +359,7 @@ class TranscriptView(ft.Column):
             self.file_stager,
             self.show_snackbar,
             self.colors,
+            ExtraInstaller(self.settings, self.show_snackbar, self.colors),
         )
         await dialog.run(self.page)
         await self.sources.load()
@@ -294,3 +392,8 @@ class TranscriptView(ft.Column):
     async def show_timestamps_changed(self, e):
         self.show_timestamps = e.control.value
         self._render_transcript()
+
+
+async def _no_stager(path: str) -> str:
+    """Staging is unavailable, so an import can only report why - see docs/desktop.md."""
+    raise RuntimeError("File staging is not available in this view")

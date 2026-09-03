@@ -55,29 +55,48 @@ class SettingsEditor:
     def get_language(self) -> str:
         return self.settings.transcription.language or AUTO_LANGUAGE
 
-    def set(self, path: str, value: Any) -> None:
-        """Validates `value` against the whole section before keeping it."""
-        owner, field = self._resolve(path)
+    def would_change(self, path: str, value: Any) -> bool:
+        """
+        Whether writing `value` would actually alter the setting.
 
+        Compares coerced values rather than the raw text, so re-typing `0.60` over a
+        stored `0.6`, or leaving a trailing blank line in a list, is correctly seen as
+        no edit at all. A value that cannot be coerced counts as a change so that `set()`
+        still runs and reports why.
+        """
+        try:
+            owner, field = self._resolve(path)
+            return getattr(owner, field) != self._coerce(owner, field, value)
+        except (ValueError, KeyError, TypeError):
+            return True
+
+    def _coerce(self, owner: BaseModel, field: str, value: Any) -> Any:
+        """`value` as the section would store it, without storing it."""
+        prepared = self._prepare(owner, field, value)
+        candidate = owner.model_dump()
+        candidate[field] = prepared
+        try:
+            return getattr(type(owner)(**candidate), field)
+        except ValidationError as error:
+            raise ValueError(self._first_message(error)) from error
+
+    def _prepare(self, owner: BaseModel, field: str, value: Any) -> Any:
+        """Text from a form field turned into the shape the model expects."""
         if self._is_list_field(owner, field) and isinstance(value, str):
-            value = [item.strip() for item in value.split(LIST_SEPARATOR) if item.strip()]
-        elif isinstance(value, str):
+            return [item.strip() for item in value.split(LIST_SEPARATOR) if item.strip()]
+        if isinstance(value, str):
             cleaned = value.strip()
             if field == "language" and cleaned == AUTO_LANGUAGE:
                 cleaned = ""
             if not cleaned and self._allows_none(owner, field):
-                value = None
-            else:
-                value = cleaned
+                return None
+            return cleaned
+        return value
 
-        candidate = owner.model_dump()
-        candidate[field] = value
-        try:
-            validated = type(owner)(**candidate)
-        except ValidationError as error:
-            raise ValueError(self._first_message(error)) from error
-
-        setattr(owner, field, getattr(validated, field))
+    def set(self, path: str, value: Any) -> None:
+        """Validates `value` against the whole section before keeping it."""
+        owner, field = self._resolve(path)
+        setattr(owner, field, self._coerce(owner, field, value))
 
     def restore_defaults(self, section_name: str) -> None:
         if section_name not in SECTION_MODELS:

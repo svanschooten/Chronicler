@@ -57,3 +57,34 @@ block unrelated work.
 `faster-whisper` is deliberately **not** installed in CI. It is an optional extra,
 imported lazily, and ships no `py.typed` marker, so mypy has an `ignore_missing_imports`
 override for it.
+
+## Keeping the developer's own configuration out of the tests
+
+`isolated_config` in `tests/conftest.py` points `HOME` and `CHRONICLER_CONFIG_FILE` at a
+temporary directory and clears the `get_settings` cache. Any test that builds a
+`Settings()` needs it, or it reads whatever is on the machine running it and passes or
+fails accordingly — which is how a transcribe-dialog test asserting the default language
+is `auto` failed on a laptop with `en` configured.
+
+It started as two near-identical copies in `test_config.py` and `test_wizard_defaults.py`.
+`test_config.py` keeps its own override on purpose: it tests the default config-file
+*search*, so it must not have an explicit file forced on it.
+
+## Extras that may not be installed
+
+Tests that decode real audio call:
+
+```python
+pytest.importorskip("av", reason="requires the 'normalization' extra", exc_type=ImportError)
+```
+
+`exc_type=ImportError` matters for more than the pytest 9.1 deprecation: it makes the
+skip mean "cannot be imported" rather than "is absent", which is the same distinction
+`extras.is_available()` draws.
+
+CI installs no extras, so verifying that locally means hiding them. A directory of
+`av.py` / `faster_whisper.py` modules that raise `ImportError`, put first on
+`PYTHONPATH`, reproduces CI faithfully and is stricter than absence — it also covers the
+installed-but-unimportable case. That check is what caught a test asserting
+`is_available()` should agree with `find_spec()`, which contradicts the whole reason
+`is_available()` imports for real.

@@ -64,6 +64,12 @@ class HandlerBase:
             return Path(chronicle.project_path)
         return None
 
+    async def sources_root_for(self, chronicle_id: UUID) -> Path:
+        """Where this chronicle's audio lives, linked or not - see docs/audio-sources.md."""
+        return self.db_manager.sources_path_for(
+            str(chronicle_id), await self.project_path_for(chronicle_id)
+        )
+
     async def project_session(self, chronicle_id: UUID):
         return await self.db_manager.get_project_session(
             str(chronicle_id), custom_path=await self.project_path_for(chronicle_id)

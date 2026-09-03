@@ -68,3 +68,24 @@ answers "can this actually be used yet", and callers check it before trying.
 Pydantic's reserved `model_` prefix, so both models set
 `ConfigDict(protected_namespaces=())`. The names are the domain's own — Whisper model
 size, LLM model name — and renaming them to satisfy the framework would be worse.
+
+## `extras`
+
+| Field | Default | Meaning |
+| ----- | ------- | ------- |
+| `auto_install` | `false` | Install a missing optional component without confirming first |
+
+Off by default: a download that starts on its own, into the environment the app is
+running in, is not something to opt a user into silently. The confirmation dialog offers
+to set it, and the Settings page's *Optional components* section can turn it back off.
+See [optional-extras.md](optional-extras.md).
+
+## Defaults versus per-task overrides
+
+Everything under `transcription` and `summary` is a *default*. Both sections back a task
+type whose dialog can override any of them for a single run, which is why the Settings
+page labels the transcription group "Transcription defaults" and says so underneath.
+
+The config file remains the only place the defaults live; the dialogs never write back to
+it. So a one-off override stays a one-off, and changing what you usually want is an
+explicit visit to Settings.

@@ -3,6 +3,7 @@
 import logging
 
 from chronicler import __version__
+from chronicler.core import extras
 from chronicler.core.config import Settings, get_settings
 from chronicler.core.llm import ModelRegistry
 from chronicler.core.models import ServerInfo
@@ -41,20 +42,27 @@ class SystemService:
         return ServerInfo(
             version=__version__,
             chronicle_count=chronicle_count,
-            capabilities=sorted(_capabilities()),
+            capabilities=sorted(capabilities_for(self.settings)),
         )
 
     async def ping(self) -> str:
         return "ok"
 
 
-def _capabilities() -> set[str]:
-    """Optional extras this server can actually run, so a client can grey out the rest."""
-    found = {"import", "clean", "export"}
-    try:
-        import faster_whisper  # noqa: F401
+EXTRA_CAPABILITIES = {"transcribe": "transcription", "normalize": "normalization"}
 
-        found.add("transcribe")
-    except ImportError:
-        pass
+
+def capabilities_for(settings: Settings) -> set[str]:
+    """
+    What this server can actually do, so a client can grey out the rest.
+
+    A thin client has to ask, not check itself: the extras and the model configuration
+    that matter are the server's, not its own. See docs/deployment-and-rpc.md.
+    """
+    found = {"import", "clean", "export"}
+    found.update(
+        capability for capability, extra in EXTRA_CAPABILITIES.items() if extras.is_available(extra)
+    )
+    if settings.llm.is_configured:
+        found.add("summarize")
     return found

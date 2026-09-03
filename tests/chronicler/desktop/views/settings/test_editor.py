@@ -191,3 +191,48 @@ class TestReading:
 
         with pytest.raises(KeyError):
             settings_editor.restore_defaults("nonsense")
+
+
+@pytest.fixture
+def subject(editor):
+    """Just the editor, for the tests that do not touch the file."""
+    return editor[0]
+
+
+class TestWouldChange:
+    def test_the_same_text_is_not_a_change(self, subject):
+        assert subject.would_change("transcription.model_size", "base") is False
+
+    def test_a_different_value_is_a_change(self, subject):
+        assert subject.would_change("transcription.model_size", "small") is True
+
+    def test_a_float_typed_back_in_its_rendered_form_is_not_a_change(self, subject):
+        assert subject.would_change("transcription.no_speech_threshold", "0.6") is False
+
+    def test_a_float_with_trailing_zeroes_is_not_a_change(self, subject):
+        assert subject.would_change("transcription.no_speech_threshold", "0.60") is False
+
+    def test_a_real_float_edit_is_a_change(self, subject):
+        assert subject.would_change("transcription.no_speech_threshold", "0.35") is True
+
+    def test_a_list_differing_only_in_blank_lines_is_not_a_change(self, subject):
+        current = subject.as_text("cleaning.hallucination_phrases")
+
+        assert subject.would_change("cleaning.hallucination_phrases", f"{current}\n\n") is False
+
+    def test_a_list_gaining_an_entry_is_a_change(self, subject):
+        current = subject.as_text("cleaning.hallucination_phrases")
+
+        assert subject.would_change("cleaning.hallucination_phrases", f"{current}\nuhm") is True
+
+    def test_auto_and_a_blank_language_are_the_same_thing(self, subject):
+        assert subject.would_change("transcription.language", "auto") is False
+        assert subject.would_change("transcription.language", "") is False
+
+    def test_a_boolean_toggle_is_a_change(self, subject):
+        assert subject.would_change("transcription.normalize_first", True) is True
+        assert subject.would_change("transcription.normalize_first", False) is False
+
+    def test_a_value_that_cannot_be_coerced_counts_as_a_change_so_it_is_reported(self, subject):
+        """An invalid entry must reach `set()` to produce its error, not be swallowed."""
+        assert subject.would_change("transcription.no_speech_threshold", "banana") is True

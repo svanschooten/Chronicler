@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from chronicler.core import extras
 from chronicler.core.config_sections import NormalizationSettings
 
 logger = logging.getLogger(__name__)
@@ -23,11 +24,8 @@ def _av():
     """PyAV, or a NormalizationError naming the extra that provides it."""
     try:
         import av
-    except ImportError as error:
-        raise NormalizationError(
-            "Audio normalization requires the 'normalization' extra "
-            "(pip install 'chronicler[normalization]')"
-        ) from error
+    except (ImportError, OSError) as error:
+        raise NormalizationError(extras.missing_message("normalization", error)) from error
     return av
 
 

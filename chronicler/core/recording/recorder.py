@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from chronicler.core import extras
+
 logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
@@ -34,10 +36,7 @@ def _sounddevice() -> Any:
     try:
         import sounddevice
     except (ImportError, OSError) as error:
-        raise RecordingError(
-            "Recording requires the 'recording' extra (pip install 'chronicler[recording]') "
-            "and a working audio backend"
-        ) from error
+        raise RecordingError(extras.missing_message("recording", error)) from error
     return sounddevice
 
 

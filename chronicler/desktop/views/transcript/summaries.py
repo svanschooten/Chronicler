@@ -24,6 +24,7 @@ class SummariesPanel(ft.Column):
         colors: ThemeColors,
         show_snackbar: Callable[[str], None],
         available_models: Callable[[], list[str]] | None = None,
+        can_summarize: Callable[[], bool] | None = None,
     ):
         self.chronicle = chronicle
         self.transcript_service = transcript_service
@@ -31,8 +32,18 @@ class SummariesPanel(ft.Column):
         self.colors = colors
         self.show_snackbar = show_snackbar
         self.available_models = available_models or (lambda: [])
+        self.can_summarize = can_summarize or (lambda: True)
         self.summaries: list[Summary] = []
 
+        allowed = self.can_summarize()
+        self.generate_button = ft.IconButton(
+            icon=ft.Icons.AUTO_AWESOME,
+            icon_color=colors.muted if allowed else colors.border,
+            icon_size=16,
+            tooltip=t("summaries.generate") if allowed else t("actions.summarize_unavailable"),
+            disabled=not allowed,
+            on_click=self.generate_clicked,
+        )
         self.summary_list = ft.Column(spacing=4)
         super().__init__(
             tight=True,
@@ -40,13 +51,7 @@ class SummariesPanel(ft.Column):
                 ft.Row(
                     controls=[
                         ft.Text(t("summaries.title"), weight=ft.FontWeight.BOLD, color=colors.text),
-                        ft.IconButton(
-                            icon=ft.Icons.AUTO_AWESOME,
-                            icon_color=colors.muted,
-                            icon_size=16,
-                            tooltip=t("summaries.generate"),
-                            on_click=self.generate_clicked,
-                        ),
+                        self.generate_button,
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
@@ -126,6 +131,14 @@ class SummariesPanel(ft.Column):
         await self.load()
 
     async def generate_clicked(self, e):
+        await self.generate()
+
+    async def generate(self) -> None:
+        """Also the action row's entry point, so both places behave identically."""
+        if not self.can_summarize():
+            self.show_snackbar(t("actions.summarize_unavailable"))
+            return
+
         models = self.available_models()
         chosen = await self._ask_options(models)
         if chosen is None:

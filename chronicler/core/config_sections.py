@@ -207,6 +207,12 @@ class SummarySettings(BaseModel):
         return cleaned
 
 
+class ExtrasSettings(BaseModel):
+    """How Chronicler handles an optional dependency it needs but does not have."""
+
+    auto_install: bool = False
+
+
 class UiSettings(BaseModel):
     """Presentation preferences that are not tied to a workspace."""
 

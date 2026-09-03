@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from chronicler.core.config_sections import (
     DEFAULT_HALLUCINATION_PHRASES,
     CleaningSettings,
+    ExtrasSettings,
     LlmSettings,
     NormalizationSettings,
     TranscriptionSettings,
@@ -187,3 +188,11 @@ class TestUiSettings:
 
     def test_locale_is_normalized(self):
         assert UiSettings(locale="NL").locale == "nl"
+
+
+class TestExtrasSettings:
+    def test_downloads_are_confirmed_by_default(self):
+        assert ExtrasSettings().auto_install is False
+
+    def test_confirmation_can_be_waived(self):
+        assert ExtrasSettings(auto_install=True).auto_install is True

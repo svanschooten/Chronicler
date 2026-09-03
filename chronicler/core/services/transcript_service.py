@@ -44,11 +44,7 @@ class TranscriptService:
     async def _get_repository(
         self, chronicle_id: UUID
     ) -> tuple[AsyncSession, SQLiteTranscriptRepository]:
-        custom_path = None
-        chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
-        if chronicle and chronicle.project_path:
-            custom_path = Path(chronicle.project_path)
-
+        custom_path = await self._project_path(chronicle_id)
         session = await self.db_manager.get_project_session(
             str(chronicle_id), custom_path=custom_path
         )
@@ -94,16 +90,25 @@ class TranscriptService:
                 )
         return "\n".join(formatted)
 
-    def sources_dir(self, chronicle_id: UUID) -> Path:
-        return self.db_manager.get_chronicle_sources_path(str(chronicle_id))
+    async def _project_path(self, chronicle_id: UUID) -> Path | None:
+        chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
+        if chronicle and chronicle.project_path:
+            return Path(chronicle.project_path)
+        return None
 
-    def source_path(self, chronicle_id: UUID, filename: str) -> Path:
-        return self.sources_dir(chronicle_id) / filename
+    async def sources_dir(self, chronicle_id: UUID) -> Path:
+        """Beside a linked project.db, otherwise in the workspace - see docs/audio-sources.md."""
+        return self.db_manager.sources_path_for(
+            str(chronicle_id), await self._project_path(chronicle_id)
+        )
 
-    def _on_disk(self, chronicle_id: UUID) -> list[Path]:
+    async def source_path(self, chronicle_id: UUID, filename: str) -> Path:
+        return (await self.sources_dir(chronicle_id)) / filename
+
+    async def _on_disk(self, chronicle_id: UUID) -> list[Path]:
         return sorted(
             path
-            for path in self.sources_dir(chronicle_id).iterdir()
+            for path in (await self.sources_dir(chronicle_id)).iterdir()
             if path.is_file() and not path.name.endswith(NORMALIZED_SUFFIX)
         )
 
@@ -148,7 +153,7 @@ class TranscriptService:
         async with session:
             repo = SQLiteAudioSourceRepository(session)
             present = set()
-            for path in self._on_disk(chronicle_id):
+            for path in await self._on_disk(chronicle_id):
                 present.add(path.name)
                 await repo.register(
                     path.name,
@@ -160,7 +165,7 @@ class TranscriptService:
 
         for source in sources:
             source.missing = source.filename not in present
-            source.path = str(self.source_path(chronicle_id, source.filename))
+            source.path = str(await self.source_path(chronicle_id, source.filename))
         return sources
 
     async def assign_speaker(
@@ -208,7 +213,7 @@ class TranscriptService:
     async def mark_source_transcribed(
         self, chronicle_id: UUID, filename: str, language: str | None, model: str | None
     ) -> None:
-        path = self.source_path(chronicle_id, filename)
+        path = await self.source_path(chronicle_id, filename)
         content_hash = fingerprint_file(path) if path.exists() else None
         session = await self._project_session(chronicle_id)
         async with session:
@@ -218,7 +223,7 @@ class TranscriptService:
 
     async def list_audio_source_paths(self, chronicle_id: UUID) -> list[str]:
         """Full paths, for callers that only need somewhere to read the audio from."""
-        return [str(path) for path in self._on_disk(chronicle_id)]
+        return [str(path) for path in await self._on_disk(chronicle_id)]
 
     async def list_speaker_names(self, chronicle_id: UUID) -> list[str]:
         session, repo = await self._get_repository(chronicle_id)

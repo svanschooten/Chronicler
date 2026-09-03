@@ -5,18 +5,26 @@ from uuid import UUID
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.file_staging import confine_to_directory, safe_display_name
+from chronicler.core.formatting import format_duration
 from chronicler.core.models import Chronicle
 from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.rpc import service
+from chronicler.core.services.transcript_service import TranscriptService
 
 logger = logging.getLogger(__name__)
 
 
 @service
 class ChronicleService:
-    def __init__(self, repository: ChronicleRepository, db_manager: DatabaseManager):
+    def __init__(
+        self,
+        repository: ChronicleRepository,
+        db_manager: DatabaseManager,
+        transcripts: TranscriptService | None = None,
+    ):
         self.repository = repository
         self.db_manager = db_manager
+        self.transcripts = transcripts
 
     async def list_chronicles(self) -> list[Chronicle]:
         return await self.repository.get_all()
@@ -29,6 +37,41 @@ class ChronicleService:
     ) -> Chronicle:
         chronicle = Chronicle(title=title, project_path=project_path, source_file=source_file)
         return await self.repository.create(chronicle)
+
+    async def link_external_chronicle(self, project_path: str) -> Chronicle:
+        """
+        Registers a project.db that lives outside the workspace, and reads what it can
+        out of it.
+
+        One service call rather than create-then-inspect from the client: a thin client
+        would otherwise make four round trips, and a half-registered chronicle showing
+        "Imported" with no speakers is the state this replaces. See docs/storage.md.
+        """
+        path = Path(project_path)
+        chronicle = await self.create_chronicle(_title_for(path), project_path=str(path))
+        return await self.hydrate_from_project(chronicle.id)
+
+    async def hydrate_from_project(self, chronicle_id: UUID) -> Chronicle:
+        """Fills in speaker count, duration and status from what the project db holds."""
+        chronicle = await self.repository.get_by_id(chronicle_id)
+        if chronicle is None:
+            raise ValueError(f"No chronicle {chronicle_id}")
+        if self.transcripts is None:
+            return chronicle
+
+        speakers = await self.transcripts.refresh_speaker_count(chronicle_id)
+        lines = await self.transcripts.get_transcript(chronicle_id)
+
+        if lines:
+            await self.repository.add_tag(chronicle_id, "Transcript")
+
+        chronicle = await self.repository.get_by_id(chronicle_id) or chronicle
+        chronicle.speakers_count = speakers
+        if lines:
+            chronicle.duration = format_duration(max(line.end_time for line in lines))
+            chronicle.status = "Transcribed"
+        logger.info(f"Hydrated chronicle {chronicle_id}: {speakers} speakers, {len(lines)} lines")
+        return await self.repository.update(chronicle)
 
     async def update_chronicle(self, chronicle: Chronicle) -> Chronicle:
         return await self.repository.update(chronicle)
@@ -55,7 +98,11 @@ class ChronicleService:
         *original* name, so a later "which track is this?" listing (see
         TranscriptService.list_audio_sources) is actually readable.
         """
-        sources_dir = self.db_manager.get_chronicle_sources_path(str(chronicle_id))
+        chronicle = await self.repository.get_by_id(chronicle_id)
+        sources_dir = self.db_manager.sources_path_for(
+            str(chronicle_id),
+            Path(chronicle.project_path) if chronicle and chronicle.project_path else None,
+        )
         resolved_source = confine_to_directory(
             file_path, self.db_manager.get_imports_path(), "the imports directory"
         )
@@ -70,3 +117,11 @@ class ChronicleService:
         shutil.move(resolved_source, dest)
         logger.info(f"Added audio source '{dest.name}' for chronicle {chronicle_id}")
         return str(dest)
+
+
+def _title_for(project_path: Path) -> str:
+    """A linked chronicle is named after its own folder, not after "project.db"."""
+    title = project_path.parent.name
+    if title in ("", "chronicles"):
+        return project_path.stem
+    return title

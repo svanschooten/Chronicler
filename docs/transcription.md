@@ -69,3 +69,37 @@ synthetic — there is no pattern to detect.
 
 Cues with a zero or reversed duration are given a half-second minimum so players do not
 skip them.
+
+## Where a run's parameters come from
+
+Three layers, narrowest wins:
+
+| Layer | Holds | Set from |
+| ----- | ----- | -------- |
+| `TranscriptionSettings` | the defaults | the Settings page's *Transcription defaults* section, or the config file |
+| The task payload | this run's overrides | the transcribe dialog |
+| `TranscriptionParameters` | what actually runs | `TranscribeHandler.transcription_parameters()` |
+
+Language, Whisper model, silence threshold and normalize-first are all in both places on
+purpose: the Settings page is where you set what you almost always want, and the dialog
+is where you deviate for one track without changing it. `data.get(key, default)` means an
+absent key falls back rather than overriding with None.
+
+`auto` is the UI's word for "detect the language". It survives into the task payload as
+`"auto"` and becomes `None` in `transcription_parameters()`, which is what faster-whisper
+wants — so the stored task still records what was asked for.
+
+## Choosing a speaker is part of transcribing
+
+A track is assumed to be one speaker, so a transcribe run needs a name before it can
+start. That name is chosen in the transcribe dialog, not in a separate step: the row's
+one button says transcribe, and everything the run needs is in the form it opens.
+
+*Save speaker only* covers the case where assignment really is all that was wanted — an
+imported text transcript, or correcting a name on an already-transcribed track. It
+assigns and queues nothing, and its label says so. Previously the same dialog's confirm
+button said "Transcribe" in both cases, which meant picking a speaker silently started a
+transcription.
+
+The names offered are every speaker in the workspace, not just this chronicle's — see
+[speakers.md](speakers.md).

@@ -8,6 +8,7 @@ import logging
 from dataclasses import dataclass
 from uuid import UUID
 
+from chronicler.core import extras
 from chronicler.core.config_sections import AUTO_LANGUAGE
 from chronicler.core.formatting import format_duration
 from chronicler.core.models import Task
@@ -57,7 +58,7 @@ class TranscribeHandler(NormalizeHandler):
 
         resolved_path = self.confine_to(
             file_path,
-            self.db_manager.get_chronicle_sources_path(str(chronicle_id)),
+            await self.sources_root_for(chronicle_id),
             "the chronicle's sources directory",
         )
 
@@ -133,7 +134,7 @@ class TranscribeHandler(NormalizeHandler):
         )
 
     async def _register_source(self, chronicle_id: UUID, filename: str, speaker_name: str) -> None:
-        path = self.db_manager.get_chronicle_sources_path(str(chronicle_id)) / filename
+        path = (await self.sources_root_for(chronicle_id)) / filename
         session = await self.project_session(chronicle_id)
         async with session:
             sources = SQLiteAudioSourceRepository(session)
@@ -178,10 +179,7 @@ class TranscribeHandler(NormalizeHandler):
                 )
             )
         except ImportError as ex:
-            raise RuntimeError(
-                "Audio transcription requires the 'transcription' extra "
-                "(pip install 'chronicler[transcription]')"
-            ) from ex
+            raise RuntimeError(extras.missing_message("transcription", ex)) from ex
 
     async def _backfill_metadata(
         self, chronicle_id: UUID, speakers_count: int, duration_seconds: float

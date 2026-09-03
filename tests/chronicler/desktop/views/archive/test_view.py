@@ -294,16 +294,42 @@ async def test_delete_clicked_does_nothing_when_cancelled(make_view, attach_page
 
 
 @pytest.mark.asyncio
-async def test_import_audio_clicked_records_the_action_and_opens_the_picker(make_view):
+async def test_import_audio_imports_into_the_chosen_chronicle(make_view):
     view = make_view()
-    view.pick_file = AsyncMock()
+    view.picker = AsyncMock()
+    view.picker.pick_file.return_value = "/audio/a.mp3"
+    view.imports = MagicMock(import_audio=AsyncMock(return_value="Added a.mp3"))
+    view.show_snackbar = MagicMock()
     chronicle_id = uuid4()
 
     await view.import_audio_clicked(_event(chronicle_id))
 
-    assert view.picker_action == "AUDIO"
-    assert view.current_chronicle_id == chronicle_id
-    view.pick_file.assert_awaited_once()
+    view.imports.import_audio.assert_awaited_once_with(chronicle_id, "/audio/a.mp3")
+    view.show_snackbar.assert_called_once_with("Added a.mp3")
+    view.load_chronicles.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_import_audio_only_offers_audio_extensions(make_view):
+    view = make_view()
+    view.picker = AsyncMock()
+    view.picker.pick_file.return_value = None
+
+    await view.import_audio_clicked(_event(uuid4()))
+
+    assert "mp3" in view.picker.pick_file.await_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_cancelling_the_audio_picker_imports_nothing(make_view):
+    view = make_view()
+    view.picker = AsyncMock()
+    view.picker.pick_file.return_value = None
+    view.imports = MagicMock(import_audio=AsyncMock())
+
+    await view.import_audio_clicked(_event(uuid4()))
+
+    view.imports.import_audio.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -314,106 +340,77 @@ async def test_import_transcript_clicked_opens_the_options_form_first(make_view,
 
     await view.import_transcript_clicked(_event(chronicle_id))
 
-    assert view.current_chronicle_id == chronicle_id
+    assert view.pending_chronicle_id == chronicle_id
     assert view.transcript_form.dialog.open is True
-    assert view.picker_action is None
 
 
 @pytest.mark.asyncio
-async def test_do_transcript_import_closes_the_form_then_picks(make_view, attach_page):
+async def test_do_transcript_import_closes_the_form_then_picks_and_imports(make_view, attach_page):
     view = make_view()
     attach_page(ArchiveView)
-    view.pick_file = AsyncMock()
+    view.picker = AsyncMock()
+    view.picker.pick_file.return_value = "/t/session.txt"
+    view.imports = MagicMock(import_transcript=AsyncMock(return_value="Queued"))
+    view.pending_chronicle_id = uuid4()
 
     await view.do_transcript_import(MagicMock())
 
     assert view.transcript_form.dialog.open is False
-    assert view.picker_action == "TRANSCRIPT"
-    view.pick_file.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_pick_file_reports_when_there_is_no_picker(make_view):
-    view = make_view()
-    view.show_snackbar = MagicMock()
-
-    await view.pick_file()
-
-    view.show_snackbar.assert_called_once_with("File picker not available.")
-
-
-@pytest.mark.asyncio
-async def test_pick_file_forwards_the_first_picked_path(make_view):
-    view = make_view()
-    view.file_picker = AsyncMock()
-    view.file_picker.pick_files.return_value = [MagicMock(path="/tmp/a.txt")]
-    view.handle_file_result = AsyncMock()
-
-    await view.pick_file(allowed_extensions=["txt"])
-
-    view.handle_file_result.assert_awaited_once_with("/tmp/a.txt")
-
-
-@pytest.mark.asyncio
-async def test_pick_file_surfaces_a_picker_failure(make_view):
-    view = make_view()
-    view.file_picker = AsyncMock()
-    view.file_picker.pick_files.side_effect = RuntimeError("no picker on this platform")
-    view.show_snackbar = MagicMock()
-
-    await view.pick_file()
-
-    assert "no picker on this platform" in view.show_snackbar.call_args.args[0]
-
-
-@pytest.mark.parametrize(
-    ("action", "coordinator_method"),
-    [("AUDIO", "import_audio"), ("TRANSCRIPT", "import_transcript"), ("LINK", "link_chronicle")],
-)
-@pytest.mark.asyncio
-async def test_handle_file_result_dispatches_to_the_coordinator(
-    make_view, action, coordinator_method
-):
-    view = make_view()
-    view.show_snackbar = MagicMock()
-    view.imports = MagicMock()
-    setattr(view.imports, coordinator_method, AsyncMock(return_value="done"))
-
-    view.picker_action = action
-    await view.handle_file_result("/tmp/picked")
-
-    getattr(view.imports, coordinator_method).assert_awaited_once()
-    view.show_snackbar.assert_called_once_with("done")
+    assert view.imports.import_transcript.await_args[0][1] == "/t/session.txt"
     view.load_chronicles.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_handle_file_result_shows_nothing_when_the_import_was_cancelled(make_view):
+async def test_linking_a_project_database_only_offers_db_files(make_view):
     view = make_view()
-    view.show_snackbar = MagicMock()
-    view.imports = MagicMock()
-    view.imports.import_transcript = AsyncMock(return_value=None)
+    view.picker = AsyncMock()
+    view.picker.pick_file.return_value = None
 
-    view.picker_action = "TRANSCRIPT"
-    await view.handle_file_result("/tmp/picked")
+    await view.link_chronicle_clicked(MagicMock())
 
-    view.show_snackbar.assert_not_called()
+    assert view.picker.pick_file.await_args[0][0] == ["db"]
 
 
 @pytest.mark.asyncio
-async def test_handle_file_result_surfaces_errors_and_always_clears_picker_state(make_view):
+async def test_linking_a_project_database_registers_it(make_view):
     view = make_view()
+    view.picker = AsyncMock()
+    view.picker.pick_file.return_value = "/elsewhere/campaign/project.db"
+    view.imports = MagicMock(link_chronicle=AsyncMock(return_value="Linked 'campaign'"))
     view.show_snackbar = MagicMock()
-    view.imports = MagicMock()
-    view.imports.import_audio = AsyncMock(side_effect=RuntimeError("disk full"))
 
-    view.picker_action = "AUDIO"
-    view.current_chronicle_id = uuid4()
-    await view.handle_file_result("/tmp/picked")
+    await view.link_chronicle_clicked(MagicMock())
+
+    view.imports.link_chronicle.assert_awaited_once_with("/elsewhere/campaign/project.db")
+    view.show_snackbar.assert_called_once_with("Linked 'campaign'")
+
+
+@pytest.mark.asyncio
+async def test_a_failing_import_is_reported_and_the_list_still_reloads(make_view):
+    view = make_view()
+    view.picker = AsyncMock()
+    view.picker.pick_file.return_value = "/audio/a.mp3"
+    view.imports = MagicMock(import_audio=AsyncMock(side_effect=RuntimeError("disk full")))
+    view.show_snackbar = MagicMock()
+
+    await view.import_audio_clicked(_event(uuid4()))
 
     assert "disk full" in view.show_snackbar.call_args.args[0]
-    assert view.picker_action is None
-    assert view.current_chronicle_id is None
+    view.load_chronicles.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_transcript_import_says_nothing(make_view, attach_page):
+    view = make_view()
+    attach_page(ArchiveView)
+    view.picker = AsyncMock()
+    view.picker.pick_file.return_value = "/t/session.txt"
+    view.imports = MagicMock(import_transcript=AsyncMock(return_value=None))
+    view.show_snackbar = MagicMock()
+
+    await view.do_transcript_import(MagicMock())
+
+    view.show_snackbar.assert_not_called()
 
 
 @pytest.mark.asyncio

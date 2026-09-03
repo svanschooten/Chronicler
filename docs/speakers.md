@@ -38,3 +38,14 @@ block attributing a track.
 Answering "every speaker in this workspace" by opening every `project.db` is O(chronicles)
 database connections per picker open. The registry is a denormalised index maintained on
 write, which is the right trade for something read on every dialog.
+
+## Linking brings its speakers with it
+
+`ChronicleService.link_external_chronicle` runs `refresh_speaker_count`, which registers
+every name it finds in the linked project database into the workspace-wide registry as
+well as counting them. So a chronicle linked from elsewhere immediately contributes its
+cast to every transcribe dialog's suggestions, which is the point of a workspace-wide
+registry rather than a per-chronicle one.
+
+The same call is what the chronicle view's *Identify speakers* action triggers, so
+re-running it on any chronicle also tops up the registry.

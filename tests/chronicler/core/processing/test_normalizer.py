@@ -5,7 +5,7 @@ import pytest
 
 from chronicler.core.config_sections import NormalizationSettings
 
-pytest.importorskip("av", reason="requires the 'normalization' extra")
+pytest.importorskip("av", reason="requires the 'normalization' extra", exc_type=ImportError)
 
 from chronicler.core.processing.normalizer import (  # noqa: E402
     NORMALIZED_SUFFIX,

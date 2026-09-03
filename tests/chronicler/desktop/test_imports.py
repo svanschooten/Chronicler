@@ -8,7 +8,7 @@ import pytest
 
 from chronicler.core.file_staging import stage_local_file
 from chronicler.core.models import Chronicle
-from chronicler.desktop.views.archive.imports import ImportCoordinator, TranscriptImportOptions
+from chronicler.desktop.imports import ImportCoordinator, TranscriptImportOptions
 
 
 @pytest.fixture
@@ -203,37 +203,23 @@ async def test_link_chronicle_does_not_stage_the_external_file(
 
     await coordinator.link_chronicle(str(external_db))
 
-    kwargs = chronicle_service.create_chronicle.call_args.kwargs
-    assert kwargs["project_path"] == str(external_db)
+    chronicle_service.link_external_chronicle.assert_awaited_once_with(str(external_db))
     assert list(imports_dir.iterdir()) == []
 
 
 @pytest.mark.asyncio
-async def test_link_chronicle_names_it_after_the_containing_directory(make_coordinator, tmp_path):
+async def test_link_chronicle_reports_what_the_service_found(make_coordinator, tmp_path):
+    """Naming and hydration happen server-side, so a thin client gets them too."""
     external_db = tmp_path / "Emberfall session 14" / "project.db"
     external_db.parent.mkdir(parents=True)
     external_db.write_text("db")
     chronicle_service = AsyncMock()
+    chronicle_service.link_external_chronicle.return_value = Chronicle(
+        title="Emberfall session 14", speakers_count=4
+    )
     coordinator = make_coordinator(chronicle_service=chronicle_service)
 
-    await coordinator.link_chronicle(str(external_db))
+    message = await coordinator.link_chronicle(str(external_db))
 
-    (title,), _ = chronicle_service.create_chronicle.call_args
-    assert title == "Emberfall session 14"
-
-
-@pytest.mark.asyncio
-async def test_link_chronicle_falls_back_to_the_filename_inside_a_chronicles_dir(
-    make_coordinator, tmp_path
-):
-    """ "chronicles" is the generic container directory, not a name worth showing."""
-    external_db = tmp_path / "chronicles" / "session-14.db"
-    external_db.parent.mkdir(parents=True)
-    external_db.write_text("db")
-    chronicle_service = AsyncMock()
-    coordinator = make_coordinator(chronicle_service=chronicle_service)
-
-    await coordinator.link_chronicle(str(external_db))
-
-    (title,), _ = chronicle_service.create_chronicle.call_args
-    assert title == "session-14"
+    assert "Emberfall session 14" in message
+    assert "4" in message

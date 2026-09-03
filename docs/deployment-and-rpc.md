@@ -73,3 +73,26 @@ aiosqlite connections are bound to the event loop that created them.
 
 Before this, tasks queued against a server were never executed at all — `run_server()`
 never created a `WorkerManager`.
+
+## Capabilities: the server answers, the client asks
+
+`ServerInfo.capabilities` is how a client finds out what the service layer can actually
+do. `capabilities_for(settings)` builds it from two things the client cannot see:
+
+* which optional extras import on that machine — `transcribe`, `normalize`
+* whether a language model is configured there — `summarize`
+
+`import`, `clean` and `export` need nothing and are always present.
+
+A thin client must not decide this for itself. The worker that would run a transcribe or
+summarize task is on the server, so the server's extras and the server's model
+configuration are the ones that matter; a client with `faster-whisper` installed and a
+server without it would offer a button that always fails.
+
+`DesktopApp.refresh_models` fetches the capabilities once at startup, alongside the model
+list, because both are a round trip and neither changes while the app runs. A failed
+fetch leaves `capabilities` as `None`, which every consumer reads as "assume it works"
+rather than greying out actions over a network hiccup.
+
+Recording is deliberately absent from the list. It runs client-side in every mode, so a
+server capability would be answering the wrong question — see [recording.md](recording.md).

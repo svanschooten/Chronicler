@@ -74,8 +74,21 @@ class TestSections:
         built, _ = view
         text = " ".join(_all_text(ft.Column(controls=built.controls)))
 
-        for heading in ("Appearance", "Workspace", "Connection", "Transcription", "Cleaning"):
+        for heading in (
+            "Appearance",
+            "Workspace",
+            "Connection",
+            "Transcription defaults",
+            "Cleaning",
+            "Optional components",
+        ):
             assert heading in text
+
+    def test_the_transcription_section_says_its_values_are_only_defaults(self, view):
+        built, _ = view
+        text = " ".join(_all_text(ft.Column(controls=built.controls)))
+
+        assert "overridden per task" in text.lower()
 
     def test_shows_the_real_workspace_path(self, config_file, tmp_path):
         settings = Settings(workspace_path=tmp_path / "ws")
@@ -271,3 +284,110 @@ class TestWorkspacePicker:
         await built.pick_workspace_clicked(MagicMock())
 
         built.show_snackbar.assert_called_once()
+
+
+class TestTranscriptionDefaults:
+    def test_every_per_task_parameter_has_a_default_here(self, view):
+        built, _ = view
+
+        paths = set(_inputs(built))
+        assert {
+            "transcription.language",
+            "transcription.model_size",
+            "transcription.no_speech_threshold",
+            "transcription.normalize_first",
+        } <= paths
+
+    def test_normalize_first_reflects_the_setting(self, config_file):
+        settings = Settings()
+        settings.transcription.normalize_first = True
+
+        assert _inputs(SettingsView(settings))["transcription.normalize_first"].value is True
+
+    @pytest.mark.asyncio
+    async def test_normalize_first_persists(self, view):
+        built, config = view
+
+        await built.apply("transcription.normalize_first", True)
+
+        assert yaml.safe_load(config.read_text())["transcription"]["normalize_first"] is True
+
+
+class TestOptionalComponents:
+    def test_auto_install_is_off_by_default(self, view):
+        built, _ = view
+
+        assert _inputs(built)["extras.auto_install"].value is False
+
+    def test_auto_install_reflects_the_setting(self, config_file):
+        settings = Settings()
+        settings.extras.auto_install = True
+
+        assert _inputs(SettingsView(settings))["extras.auto_install"].value is True
+
+    @pytest.mark.asyncio
+    async def test_auto_install_persists(self, view):
+        built, config = view
+
+        await built.apply("extras.auto_install", True)
+
+        assert yaml.safe_load(config.read_text())["extras"]["auto_install"] is True
+
+
+class TestQuietSaves:
+    @pytest.mark.asyncio
+    async def test_blurring_an_untouched_field_saves_nothing(self, view):
+        built, config = view
+        before = config.read_text()
+        field = _inputs(built)["transcription.no_speech_threshold"]
+
+        await built._value_changed(MagicMock(control=field))
+
+        assert config.read_text() == before
+        built.show_snackbar.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_float_rendered_differently_is_not_a_change(self, view):
+        built, config = view
+        before = config.read_text()
+        field = _inputs(built)["transcription.no_speech_threshold"]
+        field.value = "0.60"
+
+        await built._value_changed(MagicMock(control=field))
+
+        assert config.read_text() == before
+        built.show_snackbar.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_list_differing_only_in_blank_lines_is_not_a_change(self, view):
+        built, config = view
+        before = config.read_text()
+        field = _inputs(built)["cleaning.hallucination_phrases"]
+        field.value = f"{field.value}\n\n"
+
+        await built._value_changed(MagicMock(control=field))
+
+        assert config.read_text() == before
+        built.show_snackbar.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_real_edit_still_saves_and_confirms(self, view):
+        built, config = view
+        field = _inputs(built)["transcription.no_speech_threshold"]
+        field.value = "0.35"
+
+        await built._value_changed(MagicMock(control=field))
+
+        assert yaml.safe_load(config.read_text())["transcription"]["no_speech_threshold"] == 0.35
+        built.show_snackbar.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_an_invalid_value_is_still_reported(self, view):
+        built, _ = view
+        field = _inputs(built)["transcription.no_speech_threshold"]
+        field.value = "17"
+
+        await built._value_changed(MagicMock(control=field))
+
+        built.show_snackbar.assert_called_once()
+        assert "less than or equal" in built.show_snackbar.call_args[0][0]

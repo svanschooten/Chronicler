@@ -20,7 +20,7 @@ class NormalizeHandler(HandlerBase):
         file_path = self.require_field(data, "file_path", "normalize")
         resolved = self.confine_to(
             file_path,
-            self.db_manager.get_chronicle_sources_path(str(chronicle_id)),
+            await self.sources_root_for(chronicle_id),
             "the chronicle's sources directory",
         )
 

@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from chronicler.core import extras
 from chronicler.core.config_sections import LlmSettings
 
 logger = logging.getLogger(__name__)
@@ -143,11 +144,8 @@ class LlamaCppClient:
 
         try:
             from llama_cpp import Llama
-        except ImportError as error:
-            raise LlmError(
-                "Running a local .gguf model requires the 'llm' extra "
-                "(pip install 'chronicler[llm]')"
-            ) from error
+        except (ImportError, OSError) as error:
+            raise LlmError(extras.missing_message("llm", error)) from error
 
         logger.info(f"Loading local model {self.settings.model_path} (downloads on first use)")
         self._model = Llama(

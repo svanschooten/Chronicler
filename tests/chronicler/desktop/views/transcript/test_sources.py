@@ -8,6 +8,20 @@ import pytest
 from chronicler.core.models import AudioSource, Chronicle, SourceState
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.transcript.sources import SourcesPanel
+from chronicler.desktop.views.transcript.transcribe_dialog import TranscribeChoice
+
+
+def _choice(**overrides):
+    values = {
+        "speaker": "Alice",
+        "language": "auto",
+        "model_size": "base",
+        "no_speech_threshold": 0.6,
+        "normalize_first": False,
+        "transcribe": True,
+    }
+    values.update(overrides)
+    return TranscribeChoice(**values)
 
 
 def source(filename="alice.mp3", **overrides):
@@ -153,154 +167,174 @@ class TestRowStatus:
         assert "Missing" in panel.source_list.controls[0].controls[0].controls[1].value
 
 
+class TestTheRowActions:
+    @pytest.mark.asyncio
+    async def test_a_row_offers_exactly_one_transcribe_action(self, panel_with):
+        panel, _ = panel_with([source(speaker_name="Alice")])
+
+        await panel.load()
+
+        actions = panel.source_list.controls[0].controls[1:]
+        assert [action.on_click for action in actions].count(panel.transcribe_source_clicked) == 1
+
+    @pytest.mark.asyncio
+    async def test_there_is_no_separate_assign_speaker_button(self, panel_with):
+        panel, _ = panel_with([source()])
+
+        await panel.load()
+
+        tooltips = [c.tooltip for c in panel.source_list.controls[0].controls[1:]]
+        assert not any("speaker" in (tooltip or "").lower() for tooltip in tooltips)
+
+    @pytest.mark.asyncio
+    async def test_an_untranscribed_track_says_transcribe(self, panel_with):
+        panel, _ = panel_with([source()])
+
+        await panel.load()
+
+        tooltips = [c.tooltip for c in panel.source_list.controls[0].controls[1:]]
+        assert "Start transcription" in tooltips
+
+    @pytest.mark.asyncio
+    async def test_a_transcribed_track_offers_to_redo_it(self, panel_with):
+        panel, _ = panel_with([source(transcription_state=SourceState.DONE, transcribed_hash="h")])
+
+        await panel.load()
+
+        tooltips = [c.tooltip for c in panel.source_list.controls[0].controls[1:]]
+        assert "Transcribe again" in tooltips
+
+    @pytest.mark.asyncio
+    async def test_the_full_filename_is_available_on_hover(self, panel_with):
+        panel, _ = panel_with([source("a-very-long-session-filename.mp3")])
+
+        await panel.load()
+
+        assert (
+            panel.source_list.controls[0].controls[0].tooltip == "a-very-long-session-filename.mp3"
+        )
+
+
 class TestTranscribing:
     @pytest.mark.asyncio
-    async def test_uses_the_remembered_speaker_without_prompting(self, make_panel):
+    async def test_it_always_opens_the_dialog_even_with_a_speaker_already_assigned(
+        self, make_panel
+    ):
+        """The button says transcribe, so language and normalization are still choosable."""
         transcript_service = AsyncMock()
         transcript_service.list_audio_sources.return_value = [source(speaker_name="Alice")]
-        task_service = AsyncMock()
-        panel = make_panel(transcript_service=transcript_service, task_service=task_service)
-        panel._ask_speaker = AsyncMock()
+        panel = make_panel(transcript_service=transcript_service)
+        panel._ask_transcribe = AsyncMock(return_value=None)
         await panel.load()
 
         await panel.transcribe_source_clicked(MagicMock(control=MagicMock(data="alice.mp3")))
 
-        panel._ask_speaker.assert_not_awaited()
-        task_service.queue_transcribe.assert_awaited_once()
-        assert task_service.queue_transcribe.await_args.args[2] == "Alice"
+        panel._ask_transcribe.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_prompts_when_the_source_has_no_speaker_yet(self, make_panel):
+    async def test_it_passes_every_chosen_parameter_to_the_task(self, make_panel):
         transcript_service = AsyncMock()
         transcript_service.list_audio_sources.return_value = [source()]
         task_service = AsyncMock()
         panel = make_panel(transcript_service=transcript_service, task_service=task_service)
-        panel._ask_speaker = AsyncMock(return_value="Carol")
-        await panel.load()
-
-        await panel.transcribe_source_clicked(MagicMock(control=MagicMock(data="alice.mp3")))
-
-        panel._ask_speaker.assert_awaited_once()
-        transcript_service.assign_speaker.assert_awaited_once_with(
-            panel.chronicle.id, "alice.mp3", "Carol"
+        panel._ask_transcribe = AsyncMock(
+            return_value=TranscribeChoice(
+                speaker="Carol",
+                language="de",
+                model_size="medium",
+                no_speech_threshold=0.4,
+                normalize_first=True,
+                transcribe=True,
+            )
         )
-        assert task_service.queue_transcribe.await_args.args[2] == "Carol"
-
-    @pytest.mark.asyncio
-    async def test_a_cancelled_prompt_queues_nothing(self, make_panel):
-        transcript_service = AsyncMock()
-        transcript_service.list_audio_sources.return_value = [source()]
-        task_service = AsyncMock()
-        panel = make_panel(transcript_service=transcript_service, task_service=task_service)
-        panel._ask_speaker = AsyncMock(return_value=None)
         await panel.load()
 
         await panel.transcribe_source_clicked(MagicMock(control=MagicMock(data="alice.mp3")))
 
-        task_service.queue_transcribe.assert_not_awaited()
+        call = task_service.queue_transcribe.await_args
+        assert call.args[1:] == ("/s/alice.mp3", "Carol")
+        assert call.kwargs == {
+            "language": "de",
+            "model_size": "medium",
+            "no_speech_threshold": 0.4,
+            "normalize_first": True,
+        }
 
     @pytest.mark.asyncio
-    async def test_a_missing_file_is_refused(self, make_panel):
-        transcript_service = AsyncMock()
-        transcript_service.list_audio_sources.return_value = [source(missing=True)]
-        task_service = AsyncMock()
-        panel = make_panel(transcript_service=transcript_service, task_service=task_service)
-        await panel.load()
-
-        await panel.transcribe_source_clicked(MagicMock(control=MagicMock(data="alice.mp3")))
-
-        task_service.queue_transcribe.assert_not_awaited()
-        panel.show_snackbar.assert_called_once()
-
-
-class TestSpeakerAssignment:
-    @pytest.mark.asyncio
-    async def test_assign_speaker_persists_and_reloads(self, make_panel):
+    async def test_it_assigns_the_speaker_before_queueing(self, make_panel):
         transcript_service = AsyncMock()
         transcript_service.list_audio_sources.return_value = [source()]
         panel = make_panel(transcript_service=transcript_service)
-        panel._ask_speaker = AsyncMock(return_value="Dave")
+        panel._ask_transcribe = AsyncMock(return_value=_choice(speaker="Carol"))
         await panel.load()
 
-        await panel.assign_speaker_clicked(MagicMock(control=MagicMock(data="alice.mp3")))
+        await panel.transcribe_source_clicked(MagicMock(control=MagicMock(data="alice.mp3")))
+
+        transcript_service.assign_speaker.assert_awaited_once_with(
+            panel.chronicle.id, "alice.mp3", "Carol"
+        )
+
+    @pytest.mark.asyncio
+    async def test_saving_the_speaker_alone_queues_nothing(self, make_panel):
+        transcript_service = AsyncMock()
+        transcript_service.list_audio_sources.return_value = [source()]
+        task_service = AsyncMock()
+        panel = make_panel(transcript_service=transcript_service, task_service=task_service)
+        panel._ask_transcribe = AsyncMock(return_value=_choice(speaker="Dave", transcribe=False))
+        await panel.load()
+
+        await panel.transcribe_source_clicked(MagicMock(control=MagicMock(data="alice.mp3")))
 
         transcript_service.assign_speaker.assert_awaited_once_with(
             panel.chronicle.id, "alice.mp3", "Dave"
         )
+        task_service.queue_transcribe.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_cancelling_assignment_changes_nothing(self, make_panel):
+    async def test_cancelling_changes_nothing(self, make_panel):
         transcript_service = AsyncMock()
         transcript_service.list_audio_sources.return_value = [source()]
-        panel = make_panel(transcript_service=transcript_service)
-        panel._ask_speaker = AsyncMock(return_value=None)
+        task_service = AsyncMock()
+        panel = make_panel(transcript_service=transcript_service, task_service=task_service)
+        panel._ask_transcribe = AsyncMock(return_value=None)
         await panel.load()
 
-        await panel.assign_speaker_clicked(MagicMock(control=MagicMock(data="alice.mp3")))
+        await panel.transcribe_source_clicked(MagicMock(control=MagicMock(data="alice.mp3")))
 
         transcript_service.assign_speaker.assert_not_awaited()
-
-
-class TestSpeakerPrompt:
-    @pytest.mark.asyncio
-    async def test_offers_known_speakers_as_selectable_options(self, panel_with, attach_page):
-        panel, _ = panel_with([], speakers=["Alice", "Bob"])
-        page = attach_page(SourcesPanel)
-
-        task = asyncio.ensure_future(panel._ask_speaker("alice.mp3", None))
-        await asyncio.sleep(0)
-
-        (dialog,), _ = page.show_dialog.call_args
-        dropdown = dialog.content.controls[1]
-        assert [option.key for option in dropdown.options] == ["Alice", "Bob"]
-        assert "alice.mp3" in dialog.title.value
-
-        dropdown.value = "Bob"
-        await dialog.actions[1].on_click(MagicMock())
-
-        assert await asyncio.wait_for(task, timeout=1) == "Bob"
+        task_service.queue_transcribe.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_preselects_the_current_speaker(self, panel_with, attach_page):
-        panel, _ = panel_with([], speakers=["Alice", "Bob"])
-        page = attach_page(SourcesPanel)
+    async def test_a_missing_file_is_refused_before_the_dialog_opens(self, make_panel):
+        transcript_service = AsyncMock()
+        transcript_service.list_audio_sources.return_value = [source(missing=True)]
+        task_service = AsyncMock()
+        panel = make_panel(transcript_service=transcript_service, task_service=task_service)
+        panel._ask_transcribe = AsyncMock()
+        await panel.load()
 
-        task = asyncio.ensure_future(panel._ask_speaker("alice.mp3", "Bob"))
-        await asyncio.sleep(0)
+        await panel.transcribe_source_clicked(MagicMock(control=MagicMock(data="alice.mp3")))
 
-        (dialog,), _ = page.show_dialog.call_args
-        assert dialog.content.controls[1].value == "Bob"
-
-        await dialog.actions[0].on_click(MagicMock())
-        await asyncio.wait_for(task, timeout=1)
-
-    @pytest.mark.asyncio
-    async def test_a_typed_new_name_wins_over_the_dropdown(self, panel_with, attach_page):
-        panel, _ = panel_with([], speakers=["Alice"])
-        page = attach_page(SourcesPanel)
-
-        task = asyncio.ensure_future(panel._ask_speaker("alice.mp3", None))
-        await asyncio.sleep(0)
-
-        (dialog,), _ = page.show_dialog.call_args
-        dialog.content.controls[1].value = "Alice"
-        dialog.content.controls[2].value = "Carol"
-        await dialog.actions[1].on_click(MagicMock())
-
-        assert await asyncio.wait_for(task, timeout=1) == "Carol"
+        panel._ask_transcribe.assert_not_awaited()
+        task_service.queue_transcribe.assert_not_awaited()
+        panel.show_snackbar.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_cancelling_resolves_to_none(self, panel_with, attach_page):
-        panel, _ = panel_with([], speakers=[])
-        page = attach_page(SourcesPanel)
+    async def test_the_dialog_is_offered_every_workspace_wide_speaker(
+        self, make_panel, attach_page
+    ):
+        transcript_service = AsyncMock()
+        transcript_service.list_audio_sources.return_value = [source()]
+        transcript_service.speaker_suggestions.return_value = ["Alice", "Zoe"]
+        panel = make_panel(transcript_service=transcript_service)
+        attach_page(SourcesPanel)
+        await panel.load()
 
-        task = asyncio.ensure_future(panel._ask_speaker("alice.mp3", None))
+        task = asyncio.ensure_future(panel._ask_transcribe(panel.sources["alice.mp3"]))
         await asyncio.sleep(0)
 
-        (dialog,), _ = page.show_dialog.call_args
-        await dialog.actions[0].on_click(MagicMock())
-
-        assert await asyncio.wait_for(task, timeout=1) is None
+        transcript_service.speaker_suggestions.assert_awaited_with(panel.chronicle.id)
+        task.cancel()
 
 
 class TestNormalizeAction:

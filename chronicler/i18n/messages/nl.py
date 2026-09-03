@@ -48,7 +48,10 @@ MESSAGES = {
             "full_stack": "Volledige installatie",
         },
         "transcription": {
-            "title": "Transcriptie",
+            "title": "Standaardwaarden transcriptie",
+            "subtitle": (
+                "De startwaarden voor een transcriptietaak. Elke waarde is per taak aan te passen."
+            ),
             "language": "Taal van de opname",
             "language_description": "Laat leeg om de taal per opname te laten detecteren.",
             "model_size": "Whisper-model",
@@ -61,6 +64,14 @@ MESSAGES = {
             "normalize_first": "Audio normaliseren voor transcriptie",
             "normalize_first_description": (
                 "Egaliseer elke opname eerst. Al genormaliseerde opnames worden overgeslagen."
+            ),
+        },
+        "extras": {
+            "title": "Optionele onderdelen",
+            "auto_install": "Installeren zonder te vragen",
+            "auto_install_description": (
+                "Download en installeer een optioneel onderdeel zodra een functie "
+                "het nodig heeft, in plaats van eerst te bevestigen."
             ),
         },
         "cleaning": {
@@ -135,30 +146,67 @@ MESSAGES = {
         "speakers_identified": "{count} herkend",
         "tags": "Labels",
     },
+    "actions": {
+        "import_audio": "Audio importeren",
+        "import_transcript": "Transcript importeren",
+        "clean": "Transcript opschonen",
+        "clean_queued": "Opschoontaak in de wachtrij",
+        "identify_speakers": "Sprekers herkennen",
+        "speakers_found": "{count} spreker(s) gevonden",
+        "summarize": "Samenvatting maken",
+        "summarize_unavailable": "Stel een AI-model in om samenvattingen te gebruiken",
+        "edit": "Kroniek bewerken",
+        "updated": "Kroniek bijgewerkt",
+        "gone": "Deze kroniek bestaat niet meer.",
+        "delete": "Kroniek verwijderen",
+        "delete_title": "Kroniek verwijderen?",
+        "delete_message": (
+            "Dit verwijdert '{title}', het transcript en alle taken in de wachtrij "
+            "definitief. Dit kan niet worden teruggedraaid."
+        ),
+        "deleted": "'{title}' verwijderd",
+        "failed": "Fout: {error}",
+        "transcript_exists_title": "Er is al een transcript",
+        "transcript_exists_message": (
+            "Deze kroniek heeft al een geimporteerd transcript. Overschrijven met het "
+            "nieuwe bestand, of de regels eraan toevoegen?"
+        ),
+        "append": "Toevoegen",
+        "overwrite": "Overschrijven",
+    },
     "sources": {
         "title": "Bronnen",
         "empty": "Nog geen audiobronnen.",
-        "transcribe": "Transcribeer deze opname",
-        "transcribe_action": "Transcriberen",
         "no_speaker": "Geen spreker",
         "missing": "Ontbreekt",
         "missing_cannot_transcribe": "'{name}' staat niet meer op schijf.",
         "transcribed": "Getranscribeerd",
-        "transcribing": "Bezig met transcriberen",
-        "normalize": "Normaliseer deze opname",
+        "transcribing": "Transcriberen",
+        "normalize": "Dit spoor normaliseren",
         "normalized": "Genormaliseerd",
         "failed": "Mislukt",
-        "record": "Neem een nieuwe bron op",
-        "assign_speaker": "Wijs een spreker toe",
-        "speaker": "Spreker",
-        "new_speaker": "Nieuwe spreker",
-        "ask_speaker_title": "'{name}' transcriberen",
-        "ask_speaker_message": (
-            "Welke spreker is deze opname? Een audiobron wordt verondersteld één spreker "
-            "te bevatten - transcriberen vervangt alleen de regels van die spreker."
+        "record": "Nieuwe bron opnemen",
+        "speaker_saved": "Spreker ingesteld op {speaker}",
+    },
+    "transcribe": {
+        "title": "{name} transcriberen",
+        "message": (
+            "Deze waarden gelden alleen voor deze run; de standaarden staan in Instellingen."
         ),
+        "speaker": "Spreker",
+        "speaker_required": "Kies of typ een sprekernaam",
+        "language": "Taal",
+        "model": "Whisper-model",
+        "threshold": "Stiltedrempel",
+        "threshold_invalid": "Voer een getal tussen 0 en 1 in",
+        "normalize_first": "Eerst audio normaliseren",
+        "already_normalized": "Er is al een genormaliseerde kopie; die wordt gebruikt.",
+        "save_speaker": "Alleen spreker opslaan",
+        "start": "Transcriptie starten",
+        "start_again": "Opnieuw transcriberen",
     },
     "recording": {
+        "no_devices": "Geen audio-invoerapparaten gevonden. Op WSL is WSLg nodig voor invoer.",
         "title": "Bron opnemen",
         "device": "Invoerapparaat",
         "name": "Bestandsnaam",
@@ -208,5 +256,18 @@ MESSAGES = {
         "failed": "Fout bij exporteren: {error}",
         "write_failed": "Fout bij schrijven van bestand: {error}",
         "no_picker": "Bestandskiezer niet beschikbaar.",
+    },
+    "extras": {
+        "title": "Extra onderdeel nodig",
+        "message": (
+            "{purpose} heeft een onderdeel nodig dat nog niet is geïnstalleerd: "
+            "{requirement} ({size} download). Nu installeren?"
+        ),
+        "remember": "Optionele onderdelen zonder vragen installeren",
+        "not_now": "Niet nu",
+        "install": "Installeren",
+        "installing": "{name} wordt geïnstalleerd ({size})...",
+        "installed": "{name} is klaar voor gebruik",
+        "failed": "Kan {name} niet installeren: {error}",
     },
 }

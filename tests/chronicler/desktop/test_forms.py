@@ -6,7 +6,7 @@ import flet as ft
 import pytest
 
 from chronicler.core.models import Chronicle
-from chronicler.desktop.views.archive.forms import (
+from chronicler.desktop.forms import (
     CreateChronicleForm,
     EditChronicleForm,
     TranscriptImportForm,

@@ -6,7 +6,7 @@ transcript import.
 import flet as ft
 
 from chronicler.core.models import Chronicle
-from chronicler.desktop.views.archive.imports import TranscriptImportOptions
+from chronicler.desktop.imports import TranscriptImportOptions
 
 
 class OverlayForm:

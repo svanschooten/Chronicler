@@ -59,7 +59,20 @@ class DatabaseManager:
         get_imports_path()'s shared scratch space, which a worker is free to
         overwrite/lose).
         """
-        path = self.workspace_path / "chronicles" / chronicle_id / "sources"
+        return self.sources_path_for(chronicle_id)
+
+    def sources_path_for(self, chronicle_id: str, project_path: Path | None = None) -> Path:
+        """
+        A chronicle's audio directory: beside a linked project.db, otherwise in the
+        workspace. A linked chronicle's files were never in the workspace, so looking
+        there made every one of its sources read as missing. See docs/storage.md.
+        """
+        root = (
+            project_path.parent
+            if project_path is not None
+            else self.workspace_path / "chronicles" / chronicle_id
+        )
+        path = root / "sources"
         path.mkdir(parents=True, exist_ok=True)
         return path
 

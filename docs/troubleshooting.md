@@ -68,3 +68,32 @@ once the runtime directory exists.
 A project database was migrated by a build that ran Alembic concurrently. See
 [storage.md](storage.md#migrations-are-serialised-process-wide) for why, and for how to
 recover the affected `project.db`.
+
+## Recording says the extra is missing after installing it
+
+`sounddevice` is a binding to PortAudio, not a bundle of it. The wheel is 32 kB of pure
+Python with no binaries inside, so pip installing it is only half the job on Linux:
+
+```bash
+sudo apt install libportaudio2
+```
+
+The message tells the two apart. "requires the 'recording' extra" means the Python
+package is missing; "needs the system library libportaudio2" means it is installed and
+the library it binds to is not.
+
+## Recording finds no input devices
+
+Both libraries present and the device list empty means PortAudio started and found
+nothing to capture with. Under WSL2, audio input arrives through WSLg's PulseAudio
+bridge; without it there is no microphone to enumerate, however well the libraries are
+installed.
+
+This is reported rather than fixed — Chronicler cannot conjure a capture device — but it
+is reported as itself instead of as an empty dropdown.
+
+## A missing optional component is not offered for install
+
+The install prompt only appears when `extras.can_install()` is true: inside a virtualenv,
+or when `site-packages` is writable. A read-only system Python gets the pip command to
+run by hand instead of a button that would fail. See [optional-extras.md](optional-extras.md).

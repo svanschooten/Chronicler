@@ -13,6 +13,7 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, Settings
 
 from chronicler.core.config_sections import (
     CleaningSettings,
+    ExtrasSettings,
     LlmSettings,
     NormalizationSettings,
     SummarySettings,
@@ -27,6 +28,7 @@ SECTION_MODELS: dict[str, type] = {
     "llm": LlmSettings,
     "summary": SummarySettings,
     "ui": UiSettings,
+    "extras": ExtrasSettings,
 }
 
 logger = logging.getLogger(__name__)
@@ -118,6 +120,7 @@ class Settings(BaseSettings):
     llm: LlmSettings = Field(default_factory=LlmSettings)
     summary: SummarySettings = Field(default_factory=SummarySettings)
     ui: UiSettings = Field(default_factory=UiSettings)
+    extras: ExtrasSettings = Field(default_factory=ExtrasSettings)
 
     @property
     def config_dir(self) -> Path:
