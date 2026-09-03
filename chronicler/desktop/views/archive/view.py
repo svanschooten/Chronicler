@@ -9,6 +9,7 @@ from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.dialogs import Choice, ask_choice, confirm
+from chronicler.desktop.reveal import describe_desktop_integration_error
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.archive.cards import ChronicleCardHandlers, chronicle_card
 from chronicler.desktop.views.archive.forms import (
@@ -295,7 +296,7 @@ class ArchiveView(ft.Column):
                 await self.handle_file_result(result[0].path)
         except Exception as ex:
             logger.error(f"Error during pick_files: {ex}")
-            self.show_snackbar(f"Error picking files: {ex}")
+            self.show_snackbar(describe_desktop_integration_error(ex))
 
     async def handle_file_result(self, file_path):
         """Dispatches the picked file to whichever import the user asked for."""

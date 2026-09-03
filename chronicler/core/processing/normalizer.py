@@ -19,6 +19,18 @@ class NormalizationError(RuntimeError):
     """The source could not be normalised."""
 
 
+def _av():
+    """PyAV, or a NormalizationError naming the extra that provides it."""
+    try:
+        import av
+    except ImportError as error:
+        raise NormalizationError(
+            "Audio normalization requires the 'normalization' extra "
+            "(pip install 'chronicler[normalization]')"
+        ) from error
+    return av
+
+
 @dataclass(frozen=True)
 class NormalizationResult:
     output_path: Path
@@ -53,7 +65,7 @@ def build_filter_description(settings: NormalizationSettings, measure_only: bool
 
 
 def _open_source(source: Path) -> tuple[Any, Any]:
-    import av
+    av = _av()
 
     if not source.exists():
         raise NormalizationError(f"{source} does not exist")
@@ -70,6 +82,7 @@ def _open_source(source: Path) -> tuple[Any, Any]:
 
 
 def _build_graph(stream: Any, description: str) -> Any:
+    _av()
     from av.filter import Graph
 
     graph = Graph()
@@ -130,7 +143,7 @@ def normalize_audio(
     output_path: Path | None = None,
 ) -> NormalizationResult:
     """Writes a levelled copy of `source`, leaving the original untouched."""
-    import av
+    av = _av()
 
     settings = settings or NormalizationSettings()
     destination = output_path or normalized_path_for(source)

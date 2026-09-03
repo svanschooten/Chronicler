@@ -1,13 +1,30 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from chronicler.core.config import Settings
+import pytest
+
+from chronicler.core.config import CONFIG_FILE_ENV_VAR, Settings, get_settings
 from chronicler.core.wizard import (
     LanguageStep,
     WorkspaceStep,
     default_workspace_path,
     supported_languages,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolated_config(monkeypatch, tmp_path_factory):
+    """
+    Keeps Settings() away from the developer's real configuration - without this a
+    machine that already has a language configured makes the defaults tests pass or
+    fail depending on whose laptop they run on.
+    """
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(home / "settings.yaml"))
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 class TestDefaultWorkspacePath:

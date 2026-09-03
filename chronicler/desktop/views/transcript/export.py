@@ -7,6 +7,7 @@ import flet as ft
 
 from chronicler.core.models import Chronicle
 from chronicler.core.services.transcript_service import TranscriptService
+from chronicler.desktop.reveal import describe_desktop_integration_error
 from chronicler.desktop.widgets import amber_button
 from chronicler.i18n import t
 
@@ -117,12 +118,17 @@ class TranscriptExporter:
             self.show_snackbar(t("export.no_picker"))
             return
 
-        destination = await picker.save_file(
-            dialog_title=t("export.tooltip"),
-            file_name=file_name,
-            file_type=ft.FilePickerFileType.CUSTOM,
-            allowed_extensions=[extension],
-        )
+        try:
+            destination = await picker.save_file(
+                dialog_title=t("export.tooltip"),
+                file_name=file_name,
+                file_type=ft.FilePickerFileType.CUSTOM,
+                allowed_extensions=[extension],
+            )
+        except Exception as ex:
+            logger.error(f"Error opening the save dialog: {ex}")
+            self.show_snackbar(describe_desktop_integration_error(ex))
+            return
         if not destination:
             return
 

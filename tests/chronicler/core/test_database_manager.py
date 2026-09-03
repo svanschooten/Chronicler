@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from sqlalchemy import select, text
 
@@ -108,3 +110,64 @@ async def test_project_session_opened_twice_is_a_noop_not_an_error(tmp_path):
         assert result.scalar_one() == 1
 
     await db_manager.close_all()
+
+
+class TestConcurrentProjectSessions:
+    """
+    The transcript view mounts three panels that each open a project session at once, so
+    engine creation has to be atomic - a check-then-populate across an await let all three
+    run Alembic on the same file, producing "table already exists" and "database is
+    locked".
+    """
+
+    @pytest.mark.asyncio
+    async def test_concurrent_first_access_runs_migrations_once(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        await db_manager.init_archive()
+        try:
+            sessions = await asyncio.gather(
+                *(db_manager.get_project_session("chronicle-1") for _ in range(6))
+            )
+            for session in sessions:
+                await session.close()
+
+            assert len(db_manager._project_engines) == 1
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_access_to_different_chronicles_is_not_serialised_wrongly(
+        self, tmp_path
+    ):
+        db_manager = DatabaseManager(tmp_path)
+        await db_manager.init_archive()
+        try:
+            sessions = await asyncio.gather(
+                *(db_manager.get_project_session(f"chronicle-{index}") for index in range(4))
+            )
+            for session in sessions:
+                await session.close()
+
+            assert len(db_manager._project_engines) == 4
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_the_schema_is_usable_after_a_concurrent_open(self, tmp_path):
+        from chronicler.core.sqlite import SQLiteAudioSourceRepository, SQLiteSummaryRepository
+
+        db_manager = DatabaseManager(tmp_path)
+        await db_manager.init_archive()
+        try:
+            sessions = await asyncio.gather(
+                *(db_manager.get_project_session("chronicle-1") for _ in range(4))
+            )
+            session = sessions[0]
+            async with session:
+                await SQLiteAudioSourceRepository(session).register("gm.wav", content_hash="h")
+                assert await SQLiteSummaryRepository(session).count() == 0
+                await session.commit()
+            for extra in sessions[1:]:
+                await extra.close()
+        finally:
+            await db_manager.close_all()

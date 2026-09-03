@@ -5,6 +5,7 @@ import flet as ft
 
 from chronicler.core.config import Settings
 from chronicler.core.config_sections import WHISPER_MODEL_SIZES, language_choices
+from chronicler.desktop.reveal import describe_desktop_integration_error
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.settings.editor import SettingsEditor
 from chronicler.desktop.widgets import amber_button
@@ -334,9 +335,14 @@ class SettingsView(ft.Column):
         if self.file_picker is None:
             self.show_snackbar(t("export.no_picker"))
             return
-        chosen = await self.file_picker.get_directory_path(
-            dialog_title=t("settings.workspace.choose")
-        )
+        try:
+            chosen = await self.file_picker.get_directory_path(
+                dialog_title=t("settings.workspace.choose")
+            )
+        except Exception as error:
+            logger.error(f"Error opening the folder picker: {error}")
+            self.show_snackbar(describe_desktop_integration_error(error))
+            return
         if not chosen:
             return
         if await self.apply("workspace_path", chosen):

@@ -14,6 +14,8 @@ from chronicler.core.processing.handlers import WorkerHandlers
 from chronicler.core.processing.normalizer import NORMALIZED_SUFFIX, NormalizationError
 from chronicler.core.sqlite import SQLiteAudioSourceRepository
 
+pytest.importorskip("av", reason="requires the 'normalization' extra")
+
 
 async def _noop_progress(_progress: int) -> None:
     pass

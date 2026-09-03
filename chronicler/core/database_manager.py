@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -38,12 +39,14 @@ class DatabaseManager:
             self.archive_engine, expire_on_commit=False
         )
         self._project_engines: dict[str, AsyncEngine] = {}
+        self._migration_lock = asyncio.Lock()
 
     async def init_archive(self):
         self.workspace_path.mkdir(parents=True, exist_ok=True)
         (self.workspace_path / "imports").mkdir(parents=True, exist_ok=True)
-        async with self.archive_engine.begin() as conn:
-            await conn.run_sync(_run_alembic_upgrade, "archive")
+        async with self._migration_lock:
+            async with self.archive_engine.begin() as conn:
+                await conn.run_sync(_run_alembic_upgrade, "archive")
 
     def get_imports_path(self) -> Path:
         path = self.workspace_path / "imports"
@@ -66,22 +69,44 @@ class DatabaseManager:
     async def get_project_session(
         self, chronicle_id: str, custom_path: Path | None = None
     ) -> AsyncSession:
-        if chronicle_id not in self._project_engines:
+        engine = await self._project_engine(chronicle_id, custom_path)
+        return async_sessionmaker(engine, expire_on_commit=False)()
+
+    async def _project_engine(
+        self, chronicle_id: str, custom_path: Path | None = None
+    ) -> AsyncEngine:
+        """
+        The engine for one chronicle, creating and migrating it at most once.
+
+        One lock for every chronicle, not one per chronicle: Alembic drives migrations
+        through a process-global proxy, so two chains running concurrently corrupt each
+        other's context even when they target different files. See docs/storage.md.
+        """
+        engine = self._project_engines.get(chronicle_id)
+        if engine is not None:
+            return engine
+
+        async with self._migration_lock:
+            engine = self._project_engines.get(chronicle_id)
+            if engine is not None:
+                return engine
+
             if custom_path:
                 project_db_path = custom_path
             else:
                 project_db_path = self.workspace_path / "chronicles" / chronicle_id / "project.db"
-
             project_db_path.parent.mkdir(parents=True, exist_ok=True)
 
             engine = create_async_engine(f"sqlite+aiosqlite:///{project_db_path}")
-            async with engine.begin() as conn:
-                await conn.run_sync(_run_alembic_upgrade, "project")
-            self._project_engines[chronicle_id] = engine
+            try:
+                async with engine.begin() as conn:
+                    await conn.run_sync(_run_alembic_upgrade, "project")
+            except Exception:
+                await engine.dispose()
+                raise
 
-        engine = self._project_engines[chronicle_id]
-        session_factory = async_sessionmaker(engine, expire_on_commit=False)
-        return session_factory()
+            self._project_engines[chronicle_id] = engine
+            return engine
 
     async def close_all(self):
         await self.archive_engine.dispose()

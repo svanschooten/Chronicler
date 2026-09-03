@@ -29,6 +29,7 @@ below and leave the code clean.
 | [security.md](security.md) | Path confinement, filename sanitisation, regex safety, API-key auth, upload limits |
 | [desktop.md](desktop.md) | Flet views, theming, dialog patterns, the import coordinator |
 | [testing.md](testing.md) | Test layout, shared fixtures, how views are tested |
+| [troubleshooting.md](troubleshooting.md) | File dialogs, the session bus on WSL, and migration recovery |
 | [thin-client-testing.md](thin-client-testing.md) | Handshake, the two-process check, and LAN exposure from WSL2 |
 
 ## Design notes

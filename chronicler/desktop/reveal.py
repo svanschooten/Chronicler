@@ -59,3 +59,34 @@ def open_in_file_manager(path: Path) -> None:
         )
     except (OSError, subprocess.SubprocessError) as error:
         raise RevealError(f"Could not open {path}: {error}") from error
+
+
+_SESSION_BUS_HINTS = ("/run/user/", "dbus", "d-bus", "session bus")
+_PORTAL_HINTS = ("org.freedesktop.portal", "xdg-desktop-portal")
+
+
+def describe_desktop_integration_error(error: BaseException) -> str:
+    """
+    A message a user can act on when a native dialog cannot reach the desktop.
+
+    File dialogs go through the XDG desktop portal over the session D-Bus. On WSL, and on
+    any login that never registers a systemd session, `$XDG_RUNTIME_DIR` is exported but
+    never created, so the socket behind it does not exist and the raw error is an errno
+    against a path that means nothing to the person reading it.
+    """
+    text = str(error)
+    lowered = text.lower()
+
+    if any(hint in lowered for hint in _SESSION_BUS_HINTS):
+        return (
+            "Could not open the system file dialog: no desktop session bus is running. "
+            "On WSL or a headless login, run 'sudo loginctl enable-linger $USER' and "
+            "restart the session."
+        )
+    if any(hint in lowered for hint in _PORTAL_HINTS):
+        return (
+            "Could not open the system file dialog: the XDG desktop portal is not "
+            "available. Install xdg-desktop-portal and a backend such as "
+            "xdg-desktop-portal-gtk."
+        )
+    return text

@@ -7,11 +7,23 @@ Levels a track so a quiet participant and a loud one transcribe equally well. Wh
 noticeably worse on under-gained audio, which is exactly what a Discord recording of six
 people produces.
 
-## Zero new dependencies
+## The dependency
 
-PyAV ships as a dependency of faster-whisper and exposes libavfilter, so `loudnorm`,
-`speechnorm`, `afftdn`, `highpass` and `ebur128` are all already available. No librosa,
-no soundfile, no ffmpeg binary on `PATH`.
+PyAV exposes libavfilter, so `loudnorm`, `speechnorm`, `afftdn`, `highpass` and
+`ebur128` are all available without librosa, soundfile, or an ffmpeg binary on `PATH`.
+
+It arrives for free **if you already have the `transcription` extra**, since
+faster-whisper depends on it. It is not free otherwise, so it is declared as its own
+`normalization` extra rather than assumed:
+
+```bash
+pip install 'chronicler[normalization]'
+```
+
+CI installs neither extra, so the tests that decode real audio skip there via
+`pytest.importorskip("av")` — the same treatment the faster-whisper tests get. A missing
+extra at runtime raises a `NormalizationError` naming the `pip install`, not an
+`ImportError`.
 
 ## The source is never touched
 

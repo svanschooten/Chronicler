@@ -348,11 +348,18 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Optional extras: `server` (FastAPI/Uvicorn, needed to run as a server or web client) and
-`transcription` (faster-whisper, needed for `TRANSCRIBE` tasks). Install both with:
+Optional extras, each absent by default and imported lazily:
+
+| Extra | Provides | Needed for |
+| ----- | -------- | ---------- |
+| `server` | FastAPI, Uvicorn | Running as a server or web client |
+| `transcription` | faster-whisper | `TRANSCRIBE` tasks |
+| `normalization` | PyAV | `NORMALIZE` tasks (already present with `transcription`) |
+| `llm` | llama-cpp-python | Running a local `.gguf`; not needed for a model server |
+| `recording` | sounddevice | Recording a source in the app |
 
 ```bash
-pip install -e ".[dev,server,transcription]"
+pip install -e ".[dev,server,transcription,normalization]"
 ```
 
 The faster-whisper model is downloaded lazily on the first real transcription, not at

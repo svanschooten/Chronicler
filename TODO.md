@@ -28,6 +28,7 @@ client); the web client is a working reverse proxy over the server API.
 | 7 | Configurability foundation — settings sections, i18n, cleaning pipeline, audio source records | 2026-09-03 |
 | 8 | Transcription parameters, editable settings, SRT export, speaker registry, thin-client handshake | 2026-09-03 |
 | 9 | Normalisation, LLM summarisation, recording, setup wizard, character designer extraction | 2026-09-03 |
+| 9.1 | Migration serialisation, the normalization extra, actionable desktop-integration errors | 2026-09-03 |
 
 Sprint 4's detailed history is in the git log; [ASSESSMENT.md](ASSESSMENT.md) is the
 Sprint-1-era audit that started the re-baselining and is kept as a historical record.
@@ -67,6 +68,32 @@ Sprint-1-era audit that started the re-baselining and is kept as a historical re
   entirely. The Chronicler-specific parts have all been applied — see
   [Theme mockup: what was and wasn't applied](#theme-mockup-what-was-and-wasnt-applied)
   for the remaining gaps, which are now tracked as real items.
+
+### Sprint 9.1 — fixes from first real run (2026-09-03)
+
+* [x] **Alembic migrations are serialised process-wide.** `TranscriptView.did_mount`
+  fires three concurrent panel loads, each opening a project session, and
+  `_project_engine`'s cache check was separated from the migration by awaits - so all
+  three missed the cache and all ran Alembic on the same file
+  (`table audio_sources already exists`, `database is locked`). One lock covers *every*
+  chain rather than one per database, because Alembic drives migrations through a
+  process-global proxy and concurrent chains corrupt each other's context even on
+  different files - which is the `KeyError: 'config'` in the same trace. Reproduced by a
+  test that hung before the fix.
+    * A database left half-migrated by the broken build needs recovery; see
+      [docs/storage.md](docs/storage.md#migrations-are-serialised-process-wide).
+* [x] **PyAV is an explicit `normalization` extra.** It arrives free with
+  `transcription`, but CI installs neither, so "zero new dependencies" was only true
+  locally. Tests that decode real audio now skip via `pytest.importorskip("av")`, the
+  same treatment faster-whisper gets, and a missing extra raises a `NormalizationError`
+  naming the `pip install`. Verified green both with and without `av` present.
+* [x] **File dialogs report an actionable error.** A missing session bus surfaced as a
+  raw `SocketException` against `/run/user/1000/bus`. Chronicler now recognises the
+  missing-bus and missing-portal cases and names the fix. See
+  [docs/troubleshooting.md](docs/troubleshooting.md).
+* [x] **Wizard defaults tests isolate config.** They read the developer's real
+  `~/.config/Chronicler/settings.yaml`, so they passed or failed depending on the
+  machine - the same class of bug Sprint 6 fixed for the config tests.
 
 ### Sprint 9 — normalisation, summarisation, recording, wizard (2026-09-03)
 

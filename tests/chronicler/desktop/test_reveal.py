@@ -2,7 +2,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chronicler.desktop.reveal import RevealError, file_manager_command, open_in_file_manager
+from chronicler.desktop.reveal import (
+    RevealError,
+    describe_desktop_integration_error,
+    file_manager_command,
+    open_in_file_manager,
+)
 
 
 class TestFileManagerCommand:
@@ -74,3 +79,39 @@ class TestOpenInFileManager:
             open_in_file_manager(tmp_path)
 
         assert popen.call_args.args[0] == ["explorer.exe", str(tmp_path)]
+
+
+class TestDescribeDesktopIntegrationError:
+    def test_a_missing_session_bus_names_the_fix(self):
+        error = Exception(
+            "SocketException: Connection failed (OS Error: No such file or directory, "
+            "errno = 2), address = /run/user/1000/bus, port = 0"
+        )
+
+        message = describe_desktop_integration_error(error)
+
+        assert "loginctl enable-linger" in message
+        assert "/run/user/1000/bus" not in message
+
+    def test_a_missing_portal_is_recognised(self):
+        message = describe_desktop_integration_error(
+            Exception("org.freedesktop.portal.Desktop was not provided by any .service files")
+        )
+
+        assert "portal" in message.lower()
+
+    def test_a_dbus_failure_is_recognised(self):
+        message = describe_desktop_integration_error(Exception("Failed to connect to DBus"))
+
+        assert "loginctl enable-linger" in message
+
+    def test_an_unrelated_error_is_passed_through(self):
+        message = describe_desktop_integration_error(Exception("disk on fire"))
+
+        assert "disk on fire" in message
+        assert "loginctl" not in message
+
+    def test_the_message_is_one_line_for_a_snackbar(self):
+        message = describe_desktop_integration_error(Exception("address = /run/user/1000/bus"))
+
+        assert "\n" not in message

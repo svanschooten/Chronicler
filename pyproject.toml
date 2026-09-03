@@ -52,6 +52,9 @@ server = [
 transcription = [
     "faster-whisper>=1.1,<2",
 ]
+normalization = [
+    "av>=12,<19",
+]
 llm = [
     "llama-cpp-python>=0.3,<1",
 ]

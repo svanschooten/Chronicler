@@ -41,6 +41,31 @@ Migration files under `migrations/*/versions/` are excluded from ruff. Alembic's
 `script.py.mako` boilerplate style (`Union`/`Sequence`, unsorted imports) is what every
 future autogenerate produces, so excluding beats hand-fixing each one.
 
+## Migrations are serialised process-wide
+
+`DatabaseManager` holds one `asyncio.Lock` guarding **every** migration it runs — the
+archive chain and every project chain alike.
+
+One lock for all of them, not one per database, because **Alembic drives migrations
+through a process-global proxy**. Two chains running concurrently corrupt each other's
+`EnvironmentContext` even when they target different files, which surfaces as
+`KeyError: 'config'` from Alembic's own teardown.
+
+The lock also closes a check-then-populate race in `_project_engine`: the cache lookup
+and the migration are separated by awaits, so concurrent first-time callers all missed
+the cache and all ran Alembic against the same file. That surfaced as
+`table audio_sources already exists` and `database is locked`.
+
+Both are easy to trigger: `TranscriptView.did_mount` fires three panel loads at once
+(transcript, sources, summaries), and each opens a project session.
+
+If a workspace was opened by a build without the lock, a project database can be left
+with the new tables created but the Alembic version never stamped, and it will fail on
+every subsequent open. Recover by stamping it to the revision whose tables already
+exist, or — since the affected tables are new and empty — by deleting that chronicle's
+`project.db`, which is rebuilt on next open. The transcript is regenerated from the
+sources; only speaker assignments and summaries are lost.
+
 ## Sessions
 
 `get_archive_session()` returns a new session each call. Project engines are cached per
