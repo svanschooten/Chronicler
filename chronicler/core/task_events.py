@@ -29,7 +29,7 @@ class TaskEventBus:
     manual navigation/refresh click.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._listeners: list[TaskEventListener] = []
 
     def subscribe(self, listener: TaskEventListener) -> Callable[[], None]:

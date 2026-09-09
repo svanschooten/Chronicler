@@ -7,7 +7,7 @@ T = TypeVar("T")
 
 
 class Container:
-    def __init__(self):
+    def __init__(self) -> None:
         self._explicit_instances: dict[type, Any] = {}
         self._resolved_cache: dict[type, Any] = {}
         self._factories: dict[type, Callable] = {}

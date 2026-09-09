@@ -45,11 +45,20 @@ def _offences(path: pathlib.Path) -> list[str]:
 
         callee = node.func
         name = callee.attr if isinstance(callee, ast.Attribute) else getattr(callee, "id", "")
-        if name in USER_FACING_CALLS and node.args and not _is_translated(node.args[0]):
+        if (
+            name in USER_FACING_CALLS
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and not _is_translated(node.args[0])
+        ):
             found.append(f"{path}:{node.lineno} ft.{name}({node.args[0].value!r})")
 
         for keyword in node.keywords:
-            if keyword.arg in USER_FACING_KEYWORDS and not _is_translated(keyword.value):
+            if (
+                keyword.arg in USER_FACING_KEYWORDS
+                and isinstance(keyword.value, ast.Constant)
+                and not _is_translated(keyword.value)
+            ):
                 found.append(f"{path}:{keyword.value.lineno} {keyword.arg}={keyword.value.value!r}")
     return found
 

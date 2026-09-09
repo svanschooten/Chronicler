@@ -85,7 +85,6 @@ class RecordingDialog:
             async def finish(_event):
                 await self._finish(name_field.value)
                 on_choice(lambda: None)
-                page.pop_dialog()
 
             return ft.AlertDialog(
                 title=ft.Text(t("recording.title")),
@@ -93,7 +92,7 @@ class RecordingDialog:
                     [device_field, name_field, record_button, status], tight=True, width=420
                 ),
                 actions=[
-                    ft.TextButton(t("common.cancel"), on_click=on_choice(lambda: None)),
+                    ft.TextButton(t("common.close"), on_click=on_choice(lambda: None)),
                     ft.FilledButton(t("recording.save"), on_click=finish),
                 ],
             )
@@ -112,7 +111,7 @@ class RecordingDialog:
             return
 
         status.value = t("recording.recording")
-        button.text = t("recording.stop")
+        button.content = t("recording.stop")
         device_field.disabled = True
         _refresh(status, button, device_field)
 
@@ -125,7 +124,7 @@ class RecordingDialog:
             self.show_snackbar(str(error))
             return
         status.value = t("recording.recorded", seconds=int(self.recorder.seconds_recorded))
-        button.text = t("recording.start")
+        button.content = t("recording.start")
         _refresh(status, button)
 
     async def _finish(self, name: str) -> None:

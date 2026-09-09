@@ -1,6 +1,7 @@
 """Tests for the CLEAN task handler."""
 
 import json
+from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -151,7 +152,7 @@ async def test_handle_clean_reuses_the_speaker_ids_already_on_the_lines(tmp_path
         looked_up: list[str] = []
         real_get_or_create = SQLiteTranscriptRepository.get_or_create_speaker
 
-        async def _spy(self, name):
+        async def _spy(self: Any, name: str) -> Any:
             looked_up.append(name)
             return await real_get_or_create(self, name)
 

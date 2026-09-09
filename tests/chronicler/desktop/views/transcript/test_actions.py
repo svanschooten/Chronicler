@@ -33,7 +33,7 @@ def make_actions():
 def _tooltips(row) -> str:
     return " ".join(
         control.tooltip or ""
-        for control in find_controls(row, lambda c: getattr(c, "tooltip", None))
+        for control in find_controls(row, lambda c: bool(getattr(c, "tooltip", None)))
     )
 
 

@@ -1,6 +1,7 @@
 """Tests for the IMPORT task handler."""
 
 import json
+from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -343,7 +344,7 @@ async def test_handle_import_append_hands_the_offset_to_the_importer(tmp_path):
         seen: dict[str, float] = {}
         real_parse = RegexImporter.parse
 
-        def _spy(self, content, start_offset=0.0):
+        def _spy(self: Any, content: Any, start_offset: float = 0.0) -> Any:
             seen["start_offset"] = start_offset
             return real_parse(self, content, start_offset=start_offset)
 

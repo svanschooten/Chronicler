@@ -111,7 +111,11 @@ jobs:
               echo "\`ruff format\` would reformat the files below. **This does not fail CI.**"
               echo
               echo '```'
-              grep '^Would reformat:' ruff-format.txt || cat ruff-format.txt
+              if [ -f ruff-format.txt ]; then
+                grep '^Would reformat:' ruff-format.txt || cat ruff-format.txt
+              else
+                echo "No formatting report available (check was skipped)."
+              fi
               echo '```'
               echo
               echo "Run \`ruff format chronicler tests\` to clear it."
@@ -152,7 +156,11 @@ jobs:
               echo "Advisory only - this does not fail CI."
               echo
               echo '```'
-              grep '^Would reformat:' ruff-format.txt || true
+              if [ -f ruff-format.txt ]; then
+                grep '^Would reformat:' ruff-format.txt || true
+              else
+                echo "No formatting report available (check was skipped)."
+              fi
               echo '```'
               echo
               echo "Run \`ruff format chronicler tests\` to clear it."

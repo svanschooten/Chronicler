@@ -109,5 +109,5 @@ ignore_missing_imports = true
 # Optional extras, imported lazily and deliberately not installed in CI. Neither ships a
 # py.typed marker, so ignore_missing_imports covers both the absent and present cases.
 [[tool.mypy.overrides]]
-module = ["llama_cpp", "sounddevice"]
+module = ["llama_cpp", "sounddevice", "av", "av.filter", "numpy"]
 ignore_missing_imports = true
