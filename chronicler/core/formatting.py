@@ -3,6 +3,7 @@ Shared time formatting - used by chronicle duration display, the transcript view
 timestamp toggle, timestamped export, and timestamped import, so a timestamp reads the same
 everywhere in the app instead of each call site inventing its own convention.
 """
+from chronicler.core.models import TranscriptLine
 
 
 def format_duration(seconds: float) -> str:
@@ -17,7 +18,7 @@ def format_duration(seconds: float) -> str:
     return f"{secs}s"
 
 
-def format_timestamp(seconds: float) -> str:
+def format_timestamp(seconds: float, include_millis: bool = True) -> str:
     """
     A fixed-width "HH:MM:SS" clock timestamp for a single transcript line - unlike
     format_duration, always zero-padded so a column of these lines up.
@@ -25,7 +26,7 @@ def format_timestamp(seconds: float) -> str:
     total = max(0, int(round(seconds)))
     hours, remainder = divmod(total, 3600)
     minutes, secs = divmod(remainder, 60)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}" if include_millis else f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
 def parse_timestamp(text: str) -> float:
@@ -55,3 +56,20 @@ def parse_timestamp(text: str) -> float:
         raise ValueError(f"Unrecognized timestamp format: {text!r}")
 
     return hours * 3600 + minutes * 60 + secs + frac
+
+
+class NoRealTimestampsError(ValueError):
+    """Raised when a transcript's timings are synthetic line indices rather than seconds."""
+
+
+def looks_synthetic(lines: list[TranscriptLine]) -> bool:
+    """
+    True when every line starts one second after the last, which is what the text importer
+    writes when a source carries no timings of its own.
+    """
+    if len(lines) < 2:
+        return False
+    return all(
+        line.start_time == float(index) and line.end_time == float(index + 1)
+        for index, line in enumerate(lines)
+    )

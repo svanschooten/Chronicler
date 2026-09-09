@@ -1,7 +1,7 @@
 import pytest
 
 from chronicler.core.models import TranscriptLine
-from chronicler.core.services.srt import NoRealTimestampsError, format_srt, srt_timestamp
+from chronicler.core.services.srt import NoRealTimestampsError, format_srt, format_timestamp
 
 
 def line(text, start, end, speaker="GM"):
@@ -20,13 +20,13 @@ class TestSrtTimestamp:
         ],
     )
     def test_formats_as_hours_minutes_seconds_milliseconds(self, seconds, expected):
-        assert srt_timestamp(seconds) == expected
+        assert format_timestamp(seconds) == expected
 
     def test_milliseconds_are_truncated_not_rounded_up_past_a_second(self):
-        assert srt_timestamp(0.9999) == "00:00:00,999"
+        assert format_timestamp(0.9999) == "00:00:00,999"
 
     def test_negative_times_clamp_to_zero(self):
-        assert srt_timestamp(-5.0) == "00:00:00,000"
+        assert format_timestamp(-5.0) == "00:00:00,000"
 
 
 class TestFormatSrt:

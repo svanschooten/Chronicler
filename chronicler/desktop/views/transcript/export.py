@@ -50,12 +50,14 @@ class TranscriptExporter:
                     on_click=self.export_srt_clicked,
                 ),
                 ft.PopupMenuItem(
-                    content=ft.Text(t("export.html")), icon=ft.Icons.HTML, disabled=True
+                    content=ft.Text(t("export.html")),
+                    icon=ft.Icons.HTML,
+                    on_click=self.export_html_clicked,
                 ),
                 ft.PopupMenuItem(
                     content=ft.Text(t("export.pdf")),
                     icon=ft.Icons.PICTURE_AS_PDF,
-                    disabled=True,
+                    on_click=self.export_pdf_clicked,
                 ),
                 ft.PopupMenuItem(
                     content=ft.Text(t("export.zip")),
@@ -112,7 +114,27 @@ class TranscriptExporter:
 
         await self._save(content, f"{self.default_file_stem()}.srt", "srt")
 
-    async def _save(self, content: str, file_name: str, extension: str) -> None:
+    async def export_html_clicked(self, e):
+        try:
+            content = await self.transcript_service.export_html(self.chronicle.id, self.chronicle.title)
+        except Exception as ex:
+            logger.error(f"Error exporting html: {ex}")
+            self.show_snackbar(t("export.failed", error=ex))
+            return
+
+        await self._save(content, f"{self.default_file_stem()}.html", "html")
+
+    async def export_pdf_clicked(self, e):
+        try:
+            content = await self.transcript_service.export_pdf(self.chronicle.id, self.chronicle.title)
+        except Exception as ex:
+            logger.error(f"Error exporting pdf: {ex}")
+            self.show_snackbar(t("export.failed", error=ex))
+            return
+
+        await self._save(content, f"{self.default_file_stem()}.pdf", "pdf", True)
+
+    async def _save(self, content: str|bytearray, file_name: str, extension: str, write_bytes: bool = False) -> None:
         picker = self._file_picker()
         if picker is None:
             self.show_snackbar(t("export.no_picker"))
@@ -133,8 +155,12 @@ class TranscriptExporter:
             return
 
         try:
-            with open(destination, "w", encoding="utf-8") as handle:
-                handle.write(content)
+            if write_bytes:
+                with open(destination, "wb") as handle:
+                    handle.write(content)
+            else:
+                with open(destination, "w", encoding="utf-8") as handle:
+                    handle.write(content)
         except OSError as ex:
             logger.error(f"Error writing export file: {ex}")
             self.show_snackbar(t("export.write_failed", error=ex))

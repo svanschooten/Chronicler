@@ -11,7 +11,9 @@ from chronicler.core.models import AudioSource, Summary, TranscriptLine
 from chronicler.core.processing.fingerprint import fingerprint_file
 from chronicler.core.repositories import ChronicleRepository, KnownSpeakerRepository
 from chronicler.core.rpc import service
+from chronicler.core.services.pdf import format_pdf
 from chronicler.core.services.srt import format_srt
+from chronicler.core.services.html import format_html
 from chronicler.core.sqlite import (
     SQLiteAudioSourceRepository,
     SQLiteSummaryRepository,
@@ -170,6 +172,16 @@ class TranscriptService:
         """Subtitles for a transcribed chronicle, refusing text imports that have no timings."""
         lines = await self.get_transcript(chronicle_id)
         return format_srt(lines, include_speaker=include_speaker, require_real_timestamps=True)
+
+    async def export_html(self, chronicle_id: UUID, chronicle_title: str) -> str:
+        """HTML for a transcribed chronicle."""
+        lines = await self.get_transcript(chronicle_id)
+        return format_html(lines, chronicle_title)
+
+    async def export_pdf(self, chronicle_id: UUID, chronicle_title: str) -> bytearray:
+        """PDF for a transcribed chronicle."""
+        lines = await self.get_transcript(chronicle_id)
+        return format_pdf(lines, chronicle_title)
 
     async def list_summaries(self, chronicle_id: UUID) -> list[Summary]:
         """Every generated summary, numbered in the order they were produced."""
