@@ -56,7 +56,8 @@ jobs:
             --add-data "assets${{ matrix.sep }}assets" \
             --add-data "chronicler/migrations${{ matrix.sep }}chronicler/migrations" \
             --add-data "chronicler/webclient/src${{ matrix.sep }}chronicler/webclient/src" \
-            --hidden-import aiosqlite
+            --hidden-import aiosqlite \
+            --hidden-import re._parser
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
