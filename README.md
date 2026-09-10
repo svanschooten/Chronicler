@@ -8,7 +8,7 @@
 
 > Preserve conversations. Discover knowledge.
 
-Chronicler is a local-first transcript management application for importing, generating, processing, editing, searching and exporting transcripts.
+Chronicler is a local-first transcript management application for importing, generating, processing, editing, searching, and exporting transcripts.
 
 A single recorded conversation is called a **Chronicle**.
 
@@ -21,7 +21,7 @@ Chronicler is designed for:
 * Personal recordings
 * Any situation where spoken conversations need to become searchable knowledge
 
-A Chronicle is a portable project containing everything related to a conversation, including transcripts, recordings, metadata, exports and future analysis.
+A Chronicle is a portable project containing everything related to a conversation, including transcripts, recordings, metadata, exports, and future analysis.
 
 ## Concepts
 
@@ -46,11 +46,11 @@ A Chronicle can contain:
 * Generated exports
 * AI-generated content and analysis
 
-Every Chronicle is stored independently, making it easy to archive, copy, back up or share without requiring the rest of the workspace.
+Every Chronicle is stored independently, making it easy to archive, copy, back up, or share without requiring the rest of the workspace.
 
 ### Chronicler
 
-Chronicler is the application used to create, manage and process Chronicles.
+Chronicler is the application used to create, manage, and process Chronicles.
 
 The application is built around a shared service layer. Whether running locally or remotely, the same application services perform the work.
 
@@ -91,7 +91,7 @@ A lightweight client containing:
 * Flet user interface
 * Remote service access
 
-All processing, storage and AI models remain on the server.
+All processing, storage, and AI models remain on the server.
 
 ### Web Client (Server)
 
@@ -219,7 +219,7 @@ Examples:
 
 * Store an entire workspace inside Dropbox to synchronize between machines.
 * Archive a workspace to an external drive.
-* Share a single Chronicle with someone else using FTP, Nextcloud or any other file sharing solution.
+* Share a single Chronicle with someone else using FTP, Nextcloud, or any other file sharing solution.
 
 Because every Chronicle is self-contained, projects can be shared independently without exposing the rest of the workspace.
 
@@ -307,8 +307,8 @@ The README provides a general overview.
 
 More detailed documentation is available in:
 
-* **[ARCHITECTURE.md](ARCHITECTURE.md)** – service architecture, storage model, task system, deployment modes and extension points.
-* **[HOWTO.md](HOWTO.md)** – practical guides for configuring providers, remote servers, GPU support, backups and future integrations.
+* **[ARCHITECTURE.md](ARCHITECTURE.md)** – service architecture, storage model, task system, deployment modes, and extension points.
+* **[HOWTO.md](HOWTO.md)** – practical guides for configuring providers, remote servers, GPU support, backups, and future integrations.
 
 ## Technology stack
 
