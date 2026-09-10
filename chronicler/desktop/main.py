@@ -2,34 +2,55 @@ import asyncio
 import logging
 import sys
 
-from chronicler.core.config import get_settings
+import flet as ft
+
+from chronicler.core.config import get_settings, reload_settings
 from chronicler.core.handshake import HandshakeError, perform_handshake
-from chronicler.desktop.app import run_app
+from chronicler.desktop.app import DesktopApp
 from chronicler.desktop.runtime import build_runtime
+from chronicler.desktop.views.wizard import SetupWizard
+
+logger = logging.getLogger(__name__)
 
 
 def run_desktop():
-    logger = logging.getLogger(__name__)
     logger.info("Chronicler Desktop starting...")
-    settings = get_settings()
 
-    if not settings.workspace_path and not settings.server_url:
-        logger.error("No workspace or server URL configured. Running configuration wizard...")
-        from chronicler.core.wizard import run_wizard
+    async def main(page: ft.Page):
+        page.title = "Chronicler"
 
-        run_wizard(mode="client:desktop")
+        # Check if wizard needed
         settings = get_settings()
+        needs_setup = not settings.workspace_path and not settings.server_url
 
-    runtime = build_runtime(settings)
+        if needs_setup:
 
-    if runtime.db_manager is not None:
-        asyncio.run(runtime.db_manager.init_archive())
-    else:
-        logger.info(f"Thin client starting against {settings.server_url}")
-        try:
-            asyncio.run(perform_handshake(runtime.resolver))
-        except HandshakeError as error:
-            logger.error(str(error))
-            sys.exit(1)
+            def on_wizard_complete():
+                # Reload settings after wizard saves
+                reload_settings()
+                # Continue with main app
+                page.run_task(start_main_app, page)
 
-    run_app(runtime)
+            wizard = SetupWizard(page, settings, on_wizard_complete)
+            wizard.open()
+        else:
+            await start_main_app(page)
+
+    async def start_main_app(page: ft.Page):
+        settings = get_settings()
+        runtime = build_runtime(settings)
+
+        if runtime.db_manager is not None:
+            await runtime.db_manager.init_archive()
+        else:
+            logger.info(f"Thin client starting against {settings.server_url}")
+            try:
+                await perform_handshake(runtime.resolver)
+            except HandshakeError as error:
+                logger.error(str(error))
+                sys.exit(1)
+
+        app = DesktopApp(runtime)
+        await app.main(page)
+
+    ft.run(main)

@@ -39,7 +39,6 @@ def main():
     )
 
     from chronicler.core.config import get_settings, is_config_initialized, set_config_file_override
-    from chronicler.core.wizard import run_wizard
 
     if args.config:
         set_config_file_override(args.config)
@@ -53,12 +52,16 @@ def main():
     }
     mode = mode_map.get(args.mode, args.mode)
 
-    if not is_config_initialized():
-        run_wizard(mode=mode)
-    else:
-        settings = get_settings()
-        if not settings.validate_for_mode(mode):
+    # Only run console wizard for non-desktop modes
+    if mode != "client:desktop":
+        from chronicler.core.wizard import run_wizard
+
+        if not is_config_initialized():
             run_wizard(mode=mode)
+        else:
+            settings = get_settings()
+            if not settings.validate_for_mode(mode):
+                run_wizard(mode=mode)
 
     if mode == "server":
         server_main(host=args.host, port=args.port)
@@ -69,7 +72,6 @@ def main():
         return
 
     from chronicler.desktop.main import run_desktop
-
     run_desktop()
 
 

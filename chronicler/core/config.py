@@ -197,6 +197,12 @@ def get_settings() -> Settings:
     return Settings()
 
 
+def reload_settings() -> Settings:
+    """Reload settings from disk after wizard saves them."""
+    get_settings.cache_clear()
+    return get_settings()
+
+
 def is_config_initialized() -> bool:
     config_file = resolve_config_file()
     if config_file is None:
