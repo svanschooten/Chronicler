@@ -1,0 +1,83 @@
+name: Chronicler Release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag
+        required: true
+        type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    name: Pack on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: # we could add macos-latest later
+          - os: ubuntu-latest
+            platform: linux
+            sep: ":"
+            executable_path: dist/Chronicler
+            asset_name: Chronicler
+          - os: windows-latest
+            platform: windows
+            sep: ";"
+            executable_path: dist/Chronicler.exe
+            asset_name: Chronicler.exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+          pip install flet pyinstaller
+
+      - name: Pack app
+        shell: bash
+        run: |
+          flet pack chronicler/__main__.py \
+            --name Chronicler \
+            --icon assets/icon.png \
+            --add-data "assets${{ matrix.sep }}assets" \
+            --add-data "chronicler/migrations${{ matrix.sep }}chronicler/migrations" \
+            --add-data "chronicler/webclient/src${{ matrix.sep }}chronicler/webclient/src" \
+            --hidden-import aiosqlite
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.executable_path }}
+
+  release:
+    needs: pack
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: ./artifacts
+          merge-multiple: true
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ./artifacts/*
+          tag_name: ${{ github.event.release.tag_name || inputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
