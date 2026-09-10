@@ -30,3 +30,4 @@ env/
 # this line only after the token is revoked and the binaries are stripped.
 ChroniclerProto/
 
+.claude
