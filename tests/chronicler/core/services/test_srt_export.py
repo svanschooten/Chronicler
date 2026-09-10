@@ -20,13 +20,13 @@ class TestSrtTimestamp:
         ],
     )
     def test_formats_as_hours_minutes_seconds_milliseconds(self, seconds, expected):
-        assert format_timestamp(seconds) == expected
+        assert format_timestamp(seconds, True) == expected
 
     def test_milliseconds_are_truncated_not_rounded_up_past_a_second(self):
-        assert format_timestamp(0.9999) == "00:00:00,999"
+        assert format_timestamp(0.9999, True) == "00:00:00,999"
 
     def test_negative_times_clamp_to_zero(self):
-        assert format_timestamp(-5.0) == "00:00:00,000"
+        assert format_timestamp(-5.0, True) == "00:00:00,000"
 
 
 class TestFormatSrt:

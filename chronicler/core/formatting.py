@@ -18,15 +18,16 @@ def format_duration(seconds: float) -> str:
     return f"{secs}s"
 
 
-def format_timestamp(seconds: float, include_millis: bool = True) -> str:
+def format_timestamp(seconds: float, include_millis: bool = False) -> str:
     """
     A fixed-width "HH:MM:SS" clock timestamp for a single transcript line - unlike
     format_duration, always zero-padded so a column of these lines up.
     """
-    total = max(0, int(round(seconds)))
-    hours, remainder = divmod(total, 3600)
-    minutes, secs = divmod(remainder, 60)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}" if include_millis else f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    total_ms = max(0, int(seconds * 1000))
+    hours, remainder = divmod(total_ms, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    secs, millis = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}" if include_millis else f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
 def parse_timestamp(text: str) -> float:

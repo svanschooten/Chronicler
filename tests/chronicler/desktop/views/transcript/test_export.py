@@ -28,16 +28,16 @@ def _event(data=False):
     return MagicMock(control=MagicMock(data=data))
 
 
-def test_menu_offers_plain_text_now_and_signposts_the_rest():
+def test_menu_offers_available_exports_now_and_signposts_the_rest():
     exporter = TranscriptExporter(Chronicle(title="T"), AsyncMock(), MagicMock(), lambda: None)
 
     menu = exporter.menu()
 
     enabled = [item for item in menu.items if not item.disabled]
     disabled = [item for item in menu.items if item.disabled]
-    assert len(enabled) == 3
+    assert len(enabled) == 5
     assert [item.data for item in enabled[:2]] == [False, True]
-    assert len(disabled) == 3
+    assert len(disabled) == 1 # TODO remove once zip export is implemented
 
 
 @pytest.mark.asyncio
