@@ -17,12 +17,12 @@ def format_html(
         if not text:
             continue
 
-        safe_text = html.escape(text).replace('\n', '<br>')
-        speaker = line.speaker_name or 'Unknown'
+        safe_text = html.escape(text).replace("\n", "<br>")
+        speaker = line.speaker_name or "Unknown"
         safe_speaker = html.escape(speaker)
 
-        speaker_class = ' gm' if speaker.strip().upper() == 'GM' else ''
-        ts = getattr(line, 'timestamp', None) or getattr(line, 'start_time', None)
+        speaker_class = " gm" if speaker.strip().upper() == "GM" else ""
+        ts = getattr(line, "timestamp", None) or getattr(line, "start_time", None)
         timestamp_str = format_timestamp(float(str(ts)))
 
         entry = (
@@ -30,15 +30,16 @@ def format_html(
             f'            <span class="timestamp">[{timestamp_str}]</span>\n'
             f'            <span class="speaker{speaker_class}">{safe_speaker}</span>\n'
             f'            <span class="dialogue">{safe_text}</span>\n'
-            f'        </div>'
+            f"        </div>"
         )
         entries.append(entry)
 
     return HTML_TEMPLATE.format(
         title=html.escape(title),
         date=datetime.datetime.now().strftime("%Y-%m-%d"),
-        entries="\n".join(entries)
+        entries="\n".join(entries),
     )
+
 
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">

@@ -37,7 +37,7 @@ def test_menu_offers_available_exports_now_and_signposts_the_rest():
     disabled = [item for item in menu.items if item.disabled]
     assert len(enabled) == 5
     assert [item.data for item in enabled[:2]] == [False, True]
-    assert len(disabled) == 1 # TODO remove once zip export is implemented
+    assert len(disabled) == 1  # TODO remove once zip export is implemented
 
 
 @pytest.mark.asyncio

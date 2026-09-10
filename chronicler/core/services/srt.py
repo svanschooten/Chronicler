@@ -1,8 +1,10 @@
 """SubRip (.srt) rendering for a transcript."""
+
 from chronicler.core.formatting import NoRealTimestampsError, format_timestamp, looks_synthetic
 from chronicler.core.models import TranscriptLine
 
 MINIMUM_CUE_SECONDS = 0.5
+
 
 def format_srt(
     lines: list[TranscriptLine],
@@ -27,8 +29,8 @@ def format_srt(
 
         body = f"{line.speaker_name or 'Unknown'}: {text}" if include_speaker else text
         cues.append(
-            f"{len(cues) + 1}\n{format_timestamp(line.start_time, True)} " +
-            f"--> {format_timestamp(end, True)}\n{body}\n"
+            f"{len(cues) + 1}\n{format_timestamp(line.start_time, True)} "
+            + f"--> {format_timestamp(end, True)}\n{body}\n"
         )
 
     return "\n".join(cues)

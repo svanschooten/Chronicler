@@ -18,11 +18,11 @@ def format_pdf(
         if not text:
             continue
 
-        ts = getattr(line, 'timestamp', None) or getattr(line, 'start_time', None)
+        ts = getattr(line, "timestamp", None) or getattr(line, "start_time", None)
         timestamp_str = format_timestamp(float(str(ts)))
 
-        speaker = line.speaker_name or 'Unknown'
-        clean_text = text.replace('\r', '').replace('\n', ' ')
+        speaker = line.speaker_name or "Unknown"
+        clean_text = text.replace("\r", "").replace("\n", " ")
 
         pdf.add_line(
             timestamp=timestamp_str,
@@ -36,7 +36,7 @@ def format_pdf(
 def clean_for_pdf(text: str) -> str:
     """Remove Unicode chars that Helvetica doesn't support (Latin-1 only)."""
     # Replace CJK, emoji, and other Unicode with '?', keep basic Latin-1
-    return text.encode('latin-1', 'replace').decode('latin-1').replace('?', '')
+    return text.encode("latin-1", "replace").decode("latin-1").replace("?", "")
 
 
 class TranscriptPDF(FPDF):
@@ -94,7 +94,7 @@ class TranscriptPDF(FPDF):
         self.set_font("Helvetica", "", 10)
         self.set_text_color(50)
 
-        text_clean = clean_for_pdf(text.replace('\n', ' '))
+        text_clean = clean_for_pdf(text.replace("\n", " "))
         self.multi_cell(self.text_width, 5, text_clean)
 
         # Small gap between entries

@@ -117,8 +117,7 @@ class TranscriptExporter:
     async def export_html_clicked(self, e):
         try:
             content = await self.transcript_service.export_html(
-                self.chronicle.id,
-                self.chronicle.title
+                self.chronicle.id, self.chronicle.title
             )
         except Exception as ex:
             logger.error(f"Error exporting html: {ex}")
@@ -130,8 +129,7 @@ class TranscriptExporter:
     async def export_pdf_clicked(self, e):
         try:
             content = await self.transcript_service.export_pdf(
-                self.chronicle.id,
-                self.chronicle.title
+                self.chronicle.id, self.chronicle.title
             )
         except Exception as ex:
             logger.error(f"Error exporting pdf: {ex}")
@@ -140,10 +138,7 @@ class TranscriptExporter:
 
         await self._save(content, f"{self.default_file_stem()}.pdf", "pdf")
 
-    async def _save(self, content: str | bytearray,
-                    file_name: str,
-                    extension: str
-    ) -> None:
+    async def _save(self, content: str | bytearray, file_name: str, extension: str) -> None:
         picker = self._file_picker()
         if picker is None:
             self.show_snackbar(t("export.no_picker"))

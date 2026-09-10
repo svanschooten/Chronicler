@@ -3,6 +3,7 @@ Shared time formatting - used by chronicle duration display, the transcript view
 timestamp toggle, timestamped export, and timestamped import, so a timestamp reads the same
 everywhere in the app instead of each call site inventing its own convention.
 """
+
 from chronicler.core.models import TranscriptLine
 
 
@@ -27,8 +28,11 @@ def format_timestamp(seconds: float, include_millis: bool = False) -> str:
     hours, remainder = divmod(total_ms, 3_600_000)
     minutes, remainder = divmod(remainder, 60_000)
     secs, millis = divmod(remainder, 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}" if include_millis \
+    return (
+        f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+        if include_millis
         else f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    )
 
 
 def parse_timestamp(text: str) -> float:
