@@ -50,18 +50,6 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller Chronicler.spec
 
-#      - name: Pack app
-#        shell: bash
-#        run: |
-#          flet pack chronicler/__main__.py \
-#            --name Chronicler \
-#            --icon assets/icon.png \
-#            --add-data "assets${{ matrix.sep }}assets" \
-#            --add-data "chronicler/migrations${{ matrix.sep }}chronicler/migrations" \
-#            --add-data "chronicler/webclient/src${{ matrix.sep }}chronicler/webclient/src" \
-#            --hidden-import aiosqlite \
-#            --hidden-import re._parser
-
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
