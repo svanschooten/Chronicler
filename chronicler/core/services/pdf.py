@@ -1,9 +1,9 @@
 """PDF (.pdf) rendering for a transcript."""
 
-import datetime
-from chronicler.core.models import TranscriptLine
-from chronicler.core.formatting import format_timestamp
 from fpdf import FPDF
+
+from chronicler.core.formatting import format_timestamp
+from chronicler.core.models import TranscriptLine
 
 
 def format_pdf(
@@ -19,7 +19,7 @@ def format_pdf(
             continue
 
         ts = getattr(line, 'timestamp', None) or getattr(line, 'start_time', None)
-        timestamp_str = format_timestamp(ts)
+        timestamp_str = format_timestamp(float(str(ts)))
 
         speaker = line.speaker_name or 'Unknown'
         clean_text = text.replace('\r', '').replace('\n', ' ')
@@ -80,14 +80,14 @@ class TranscriptPDF(FPDF):
         self.set_xy(20, start_y)
         self.set_font("Helvetica", "", 8)
         self.set_text_color(100)
-        self.cell(self.ts_width, 5, timestamp, ln=0)
+        self.cell(self.ts_width, 5, timestamp)
 
         # Speaker (bold)
         self.set_xy(40, start_y)
         self.set_font("Helvetica", "B", 10)
         self.set_text_color(0)
         speaker_clean = clean_for_pdf(speaker[:12])
-        self.cell(self.speaker_width, 5, speaker_clean, ln=0)
+        self.cell(self.speaker_width, 5, speaker_clean)
 
         # Text (normal, wrapped)
         self.set_xy(65, start_y)
@@ -95,7 +95,7 @@ class TranscriptPDF(FPDF):
         self.set_text_color(50)
 
         text_clean = clean_for_pdf(text.replace('\n', ' '))
-        self.multi_cell(self.text_width, 5, text_clean, ln=1)
+        self.multi_cell(self.text_width, 5, text_clean)
 
         # Small gap between entries
         self.ln(2)

@@ -1,8 +1,11 @@
 """HTML (.html) rendering for a transcript."""
 
-import html, datetime
-from chronicler.core.models import TranscriptLine
+import datetime
+import html
+
 from chronicler.core.formatting import format_timestamp
+from chronicler.core.models import TranscriptLine
+
 
 def format_html(
     lines: list[TranscriptLine],
@@ -20,7 +23,7 @@ def format_html(
 
         speaker_class = ' gm' if speaker.strip().upper() == 'GM' else ''
         ts = getattr(line, 'timestamp', None) or getattr(line, 'start_time', None)
-        timestamp_str = format_timestamp(ts)
+        timestamp_str = format_timestamp(float(str(ts)))
 
         entry = (
             f'        <div class="entry">\n'

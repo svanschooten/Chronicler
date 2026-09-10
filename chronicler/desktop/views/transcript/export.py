@@ -116,7 +116,10 @@ class TranscriptExporter:
 
     async def export_html_clicked(self, e):
         try:
-            content = await self.transcript_service.export_html(self.chronicle.id, self.chronicle.title)
+            content = await self.transcript_service.export_html(
+                self.chronicle.id,
+                self.chronicle.title
+            )
         except Exception as ex:
             logger.error(f"Error exporting html: {ex}")
             self.show_snackbar(t("export.failed", error=ex))
@@ -126,15 +129,21 @@ class TranscriptExporter:
 
     async def export_pdf_clicked(self, e):
         try:
-            content = await self.transcript_service.export_pdf(self.chronicle.id, self.chronicle.title)
+            content = await self.transcript_service.export_pdf(
+                self.chronicle.id,
+                self.chronicle.title
+            )
         except Exception as ex:
             logger.error(f"Error exporting pdf: {ex}")
             self.show_snackbar(t("export.failed", error=ex))
             return
 
-        await self._save(content, f"{self.default_file_stem()}.pdf", "pdf", True)
+        await self._save(content, f"{self.default_file_stem()}.pdf", "pdf")
 
-    async def _save(self, content: str|bytearray, file_name: str, extension: str, write_bytes: bool = False) -> None:
+    async def _save(self, content: str | bytearray,
+                    file_name: str,
+                    extension: str
+    ) -> None:
         picker = self._file_picker()
         if picker is None:
             self.show_snackbar(t("export.no_picker"))
@@ -155,7 +164,7 @@ class TranscriptExporter:
             return
 
         try:
-            if write_bytes:
+            if isinstance(content, bytearray):
                 with open(destination, "wb") as handle:
                     handle.write(content)
             else:

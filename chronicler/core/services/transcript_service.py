@@ -11,9 +11,9 @@ from chronicler.core.models import AudioSource, Summary, TranscriptLine
 from chronicler.core.processing.fingerprint import fingerprint_file
 from chronicler.core.repositories import ChronicleRepository, KnownSpeakerRepository
 from chronicler.core.rpc import service
+from chronicler.core.services.html import format_html
 from chronicler.core.services.pdf import format_pdf
 from chronicler.core.services.srt import format_srt
-from chronicler.core.services.html import format_html
 from chronicler.core.sqlite import (
     SQLiteAudioSourceRepository,
     SQLiteSummaryRepository,
