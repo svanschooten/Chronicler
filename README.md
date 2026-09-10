@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/github/license/svanschooten/Chronicler)
 ![Version](https://img.shields.io/github/v/tag/svanschooten/Chronicler?label=version)
-![Status](https://img.shields.io/badge/status-pre--alpha-orange)
+![Status](https://img.shields.io/badge/status-alpha-blue)
 
 > Preserve conversations. Discover knowledge.
 
