@@ -10,26 +10,13 @@ htmlcov/
 build/
 dist/
 .venv/
-# A second, stale virtualenv (mypy only) was committed in full - 2064 files, ~59MB of
-# git objects, 93% of everything tracked. Untracked in the same change that added this
-# line; the pattern covers both spellings so it cannot come back.
 venv/
 env/
 
-# IDE project settings are local to a developer.
 .idea/
 
-# Windows "downloaded from the internet" markers, created per-file next to whatever was
-# copied in. A batch of these got committed alongside a mockup imported from a browser
-# download.
 *:Zone.Identifier
 
-# The v0 prototype, dropped in for reference rather than as part of the package. It
-# carries a live Discord bot token (bot/config.yml) and ~424MB of vendored ffmpeg
-# binaries, so committing it as-is would leak a credential and bloat the repo. Remove
-# this line only after the token is revoked and the binaries are stripped.
-ChroniclerProto/
-Chronicler.spec
 Chronicler
 Chronicler.exe
 .claude
