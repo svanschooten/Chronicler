@@ -44,4 +44,3 @@ Longer-form proposals that are not yet built live in [design/](design/).
 * [ARCHITECTURE.md](../ARCHITECTURE.md) — the service architecture at a high level
 * [HOWTO.md](../HOWTO.md) — practical operator guides
 * [TODO.md](../TODO.md) — roadmap and current state of each feature
-* [ASSESSMENT.md](../ASSESSMENT.md) — the Sprint-1-era audit, kept as a historical record

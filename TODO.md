@@ -32,9 +32,6 @@ client); the web client is a working reverse proxy over the server API.
 | 10 | Install-on-demand extras, chronicle actions in the chronicle view, one transcribe dialog, capability gating, linking hydration | 2026-09-03 |
 | 11 | Audit cleanup — explicit RPC exposure, full i18n with a guard, shared chronicle operations — then an editable transcript | 2026-09-03 |
 
-Sprint 4's detailed history is in the git log; [ASSESSMENT.md](ASSESSMENT.md) is the
-Sprint-1-era audit that started the re-baselining and is kept as a historical record.
-
 
 
 ### Sprint 11 — the audit's cleanup, then editing (2026-09-03)
