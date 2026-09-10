@@ -1,8 +1,57 @@
 import argparse
 import logging
+import sys
+
+logger = logging.getLogger(__name__)
+
+
+def attach_windows_console() -> bool:
+    """
+    Reconnects a windowless Windows build to the terminal it was launched from.
+
+    The packaged executable is built for the GUI subsystem so double-clicking it does not
+    flash up a console (see Chronicler.spec). The cost is that it gets no console at all,
+    not even the one it was started from, leaving `--help`, `chronicler server` and the
+    console wizard with nowhere to write or read.
+
+    AttachConsole borrows the parent's console when there is one. When there isn't - a
+    double-click, or a detached service - it fails, and the caller carries on as a pure GUI
+    app. Running from source is unaffected: the process already owns a console, so the
+    call fails with ERROR_ACCESS_DENIED and the working streams are left alone.
+    """
+    if sys.platform != "win32":
+        return False
+
+    import ctypes
+
+    attach_parent_process = -1
+    if not ctypes.windll.kernel32.AttachConsole(attach_parent_process):
+        return False
+
+    for stream, device, mode in (
+        ("stdin", "CONIN$", "r"),
+        ("stdout", "CONOUT$", "w"),
+        ("stderr", "CONOUT$", "w"),
+    ):
+        try:
+            setattr(sys, stream, open(device, mode, buffering=1))
+        except OSError:
+            logger.debug(f"Could not reopen {stream} on the parent console", exc_info=True)
+    return True
 
 
 def main():
+    """
+    Parses the command line and starts the requested mode.
+
+    Setup is split by where each mode can actually ask a question. Desktop collects its
+    configuration on screen, in `desktop.views.wizard`, because the packaged build is
+    windowless and has nothing for `input()` to read from. Server and web client keep the
+    console wizard in `core.wizard`, since a terminal is where they are started anyway.
+    See docs/configuration.md.
+    """
+    attach_windows_console()
+
     parser = argparse.ArgumentParser(prog="chronicler")
     parser.add_argument(
         "mode",
@@ -39,7 +88,6 @@ def main():
     )
 
     from chronicler.core.config import get_settings, is_config_initialized, set_config_file_override
-    from chronicler.core.wizard import run_wizard
 
     if args.config:
         set_config_file_override(args.config)
@@ -53,11 +101,10 @@ def main():
     }
     mode = mode_map.get(args.mode, args.mode)
 
-    if not is_config_initialized():
-        run_wizard(mode=mode)
-    else:
-        settings = get_settings()
-        if not settings.validate_for_mode(mode):
+    if mode != "client:desktop":
+        from chronicler.core.wizard import run_wizard
+
+        if not is_config_initialized() or not get_settings().validate_for_mode(mode):
             run_wizard(mode=mode)
 
     if mode == "server":

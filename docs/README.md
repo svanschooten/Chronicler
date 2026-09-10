@@ -30,6 +30,7 @@ below and leave the code clean.
 | [i18n.md](i18n.md) | Message maps, `t()`, and the tests that keep translations honest |
 | [security.md](security.md) | Path confinement, filename sanitisation, regex safety, API-key auth, upload limits |
 | [desktop.md](desktop.md) | Flet views, theming, dialog patterns, chronicle actions, the transcribe dialog |
+| [packaging.md](packaging.md) | PyInstaller spec, why the build is windowed, the two setup wizards, hidden imports |
 | [testing.md](testing.md) | Test layout, shared fixtures, how views are tested |
 | [troubleshooting.md](troubleshooting.md) | File dialogs, the session bus on WSL, and migration recovery |
 | [thin-client-testing.md](thin-client-testing.md) | Handshake, the two-process check, and LAN exposure from WSL2 |

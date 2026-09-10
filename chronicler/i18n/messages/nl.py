@@ -297,4 +297,74 @@ MESSAGES = {
         "installed": "{name} is klaar voor gebruik",
         "failed": "Kan {name} niet installeren: {error}",
     },
+    "wizard": {
+        "title": "Welkom bij Chronicler",
+        "subtitle": "Een paar vragen en je archief staat klaar.",
+        "back": "Terug",
+        "next": "Doorgaan",
+        "finish": "Voltooien",
+        "step": "Stap {number} van {total}",
+        "language": {
+            "title": "Kies je taal",
+            "description": (
+                "Wordt gebruikt voor Chroniclers eigen labels en als standaard voor nieuwe "
+                "transcripties."
+            ),
+            "label": "Taal",
+        },
+        "mode": {
+            "title": "Hoe moet Chronicler draaien?",
+            "description": "Je kunt dit later aanpassen bij Instellingen.",
+            "full_stack": "Volledig lokaal",
+            "full_stack_description": "Alles op deze machine opslaan en verwerken.",
+            "thin_client": "Thin client",
+            "thin_client_description": "Verbinden met een Chronicler Server die het werk doet.",
+            "server_note": (
+                "Chronicler als server of webclient draaien stel je in vanaf een terminal: "
+                "start met het argument 'server' of 'web'."
+            ),
+        },
+        "workspace": {
+            "title": "Kies een werkmap",
+            "description": "Je chronicles, opnames en databases worden hier bewaard.",
+            "label": "Werkmap",
+            "browse": "Bladeren",
+            "picker_title": "Kies een werkmap",
+            "required": "Kies een map om door te gaan.",
+        },
+        "api_key": {
+            "title": "API-sleutel",
+            "description": (
+                "Alleen nodig om deze machine vanaf een andere Chronicler-client te bereiken. "
+                "Sla dit over als je dit archief alleen gebruikt."
+            ),
+            "label": "API-sleutel",
+            "generate": "Nieuwe sleutel genereren",
+            "skip": "Overslaan",
+        },
+        "server": {
+            "title": "Verbind met je server",
+            "description": "Chronicler gebruikt deze server voor opslag en verwerking.",
+            "url_label": "Serveradres",
+            "url_hint": "http://localhost:8000",
+            "url_required": "Een serveradres is verplicht.",
+            "key_label": "API-sleutel",
+            "key_description": (
+                "Vraag de beheerder om de sleutel van de server - die moet overeenkomen en "
+                "kan hier dus niet gegenereerd worden."
+            ),
+            "key_required": "Een API-sleutel is verplicht.",
+        },
+        "saving": {
+            "title": "Je werkmap wordt ingericht",
+            "saved": "Configuratie opgeslagen in {path}",
+        },
+    },
+    "startup": {
+        "failed": "Chronicler kon niet starten",
+        "hint": (
+            "Controleer de verbindingsinstellingen in je configuratiebestand en start "
+            "Chronicler opnieuw."
+        ),
+    },
 }

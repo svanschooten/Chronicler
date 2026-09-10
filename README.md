@@ -329,8 +329,10 @@ More detailed documentation is available in:
 | Tests      | pytest, pytest-asyncio, pytest-cov |
 | CI/CD      | GitHub Actions                |
 
-Standalone desktop packaging (PyInstaller or Nuitka) is planned but not set up yet — see
-Phase 9 in [TODO.md](TODO.md).
+Standalone builds for Linux and Windows are produced by PyInstaller from
+[`Chronicler.spec`](Chronicler.spec) and published by the release workflow. See
+[docs/packaging.md](docs/packaging.md) for how to build one locally and what the spec's
+settings are there for.
 
 ## Development
 

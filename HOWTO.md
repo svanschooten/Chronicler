@@ -4,43 +4,41 @@ This document provides practical guides for configuring and running Chronicler i
 
 ## Setting Up Chronicler
 
-When you run Chronicler for the first time without a configuration file, the configuration wizard will start automatically.
+When you run Chronicler for the first time without a configuration file, a configuration wizard will start automatically. Which one you get depends on how you started it:
 
-```bash
-python -m chronicler
-```
+- **Desktop** (`python -m chronicler`, or double-clicking the packaged app) shows the setup wizard **in the window**. It covers the two modes a desktop window runs in — Full Stack and Thin Client — and asks for your language first, so the rest of the wizard is in it.
+- **Server and Web Client** (`python -m chronicler server` / `web`) use the **console wizard**, since those are started from a terminal anyway.
 
-The wizard will ask you how you would like to run Chronicler.
+The packaged desktop build is windowless and has no console to read from, which is why desktop setup happens on screen. The packaged app still accepts `Chronicler server` from a terminal — it borrows that terminal's console on Windows.
 
 ### Running as Full Stack (Local)
 
-1. Select option **1. Full Stack**.
-2. Enter the path where you want to store your workspace (default: `~/ChroniclerWorkspace`).
-3. Choose to generate or enter an API key. If you choose to enter one but leave it blank, a new key will be automatically generated for you.
-4. Start the application: `python -m chronicler`.
+1. Choose your language, then pick **Full Stack**.
+2. Choose the folder where you want to store your workspace (default: `~/Documents/Chronicler`). **Browse** opens a native folder picker.
+3. Accept the generated API key, replace it with your own, or **Skip** it if nothing else needs to reach this machine.
+4. Chronicler opens straight into the app.
 
 ### Running as a Server
 
-1. Select option **3. Server**.
+Server setup runs in the terminal you start it from.
+
+1. Run `python -m chronicler server`. The console wizard starts if nothing is configured.
 2. Enter the workspace path.
 3. Generate or enter an API key. This key will be required by any Thin Clients or Web Clients connecting to this server.
-4. Start the server: `python -m chronicler server`.
 
 ### Running as a Thin Client
 
 1. Ensure you have a Chronicler Server running and you have its URL and API key.
-2. Select option **2. Thin Client**.
+2. Start Chronicler and pick **Thin Client** in the wizard.
 3. Enter the Server URL (e.g., `http://192.168.1.10:8000`).
-4. Enter the API key provided by the server (if you leave this blank, a new key will be generated, but it must match the server's key to work).
-5. Start the application: `python -m chronicler`.
+4. Enter the API key from the server. It must match the server's key, so it cannot be generated here — both fields are required.
 
 ### Running the Web Client (Server)
 
 1. Ensure you have a Chronicler Server running.
-2. Select option **4. Web Client (Server)**.
+2. Run `python -m chronicler web`. The console wizard starts if nothing is configured.
 3. Enter the Server URL and API key.
-4. Start the web client server: `python -m chronicler web`.
-5. Open your browser at `http://localhost:8080`.
+4. Open your browser at `http://localhost:8080`.
 
 The Web Client allows you to:
 - Browse your Chronicles.
