@@ -94,11 +94,44 @@ values, before and after being shown rather than for the duration of one await.
   lambda swallows the coroutine, which is what used to make card buttons silently do
   nothing.
 * **`Dropdown` fires `on_select`, not `on_change`** in 0.86.
+* **`Dropdown.text` is reported by the client, not written to it.** Assigning it
+  server-side changes nothing on screen — clearing the field has to go through `value`,
+  which is the selection and does repaint. See the searchable dropdown below.
 * **Validation messages are spelled differently per control.** A `TextField` carries
   `error` (from `FormFieldControl`); a `Dropdown` carries `error_text`. Setting the wrong
   one appears to work at runtime and fails `mypy`.
 * **`Control.disabled`** is what greys a button out, and `tooltip` still shows while
   disabled — which is what makes "explain why this is unavailable" possible.
+
+## Dropdowns for lists nobody wants to scroll
+
+`searchable_dropdown()` in `desktop/widgets.py` backs every open-ended picker: the
+summary model, the transcribe dialog's speaker, and the per-line speaker in the
+transcript editor. Fixed sets — locale, Whisper model size, provider — stay plain.
+
+`editable` and `enable_filter` were already set on some of them and were not enough. Two
+things had to be added.
+
+**`menu_height`.** Without it the menu grows to fit every option. A provider offering
+seventy models produced a menu taller than the window, covering the text field you would
+have typed a filter into — so the list could not be narrowed at all, which is the state
+"this is not searchable" described. Capped, the menu scrolls and the field stays put.
+
+**Emptying the field on focus.** It arrives holding the current selection, so typing
+inserts into the middle of it (`venice/llama-3b` + `qwen`) and matches nothing. The clear
+goes through `value`, not `text`: `text` is client-reported and writing it back does not
+repaint. Leaving without choosing restores the selection.
+
+`chosen_value()` is the other half. An editable Dropdown keeps `text` (what is in the
+field) and `value` (the option last *selected*) apart, so reading `value` alone ignores a
+name typed over it — that is how a transcription could run as the wrong speaker. Typed
+text wins where there is any; otherwise the selection does, which is what makes the
+focus-clear safe: a field emptied for filtering and left alone still reports what the
+user can see.
+
+One consequence worth knowing: a speaker dropdown can no longer be *emptied*, because
+blurring an untouched field puts the name back. The dialog requires a speaker anyway, and
+the TextField shown when no speakers are known yet still validates normally.
 
 ## Separation of concerns
 

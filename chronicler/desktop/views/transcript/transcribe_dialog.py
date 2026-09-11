@@ -16,6 +16,7 @@ import flet as ft
 from chronicler.core.config import Settings
 from chronicler.core.config_sections import AUTO_LANGUAGE, WHISPER_MODEL_SIZES, language_choices
 from chronicler.core.models import AudioSource
+from chronicler.desktop.widgets import chosen_value, searchable_dropdown
 from chronicler.i18n import available_locales, t
 
 logger = logging.getLogger(__name__)
@@ -41,13 +42,11 @@ class TranscribeDialog:
         defaults = settings.transcription
 
         self.speaker: ft.Dropdown | ft.TextField = (
-            ft.Dropdown(
+            searchable_dropdown(
+                self.speakers,
+                value=source.speaker_name,
                 label=t("transcribe.speaker"),
                 data="speaker",
-                value=source.speaker_name,
-                options=[ft.DropdownOption(key=name, text=name) for name in self.speakers],
-                editable=True,
-                enable_filter=True,
             )
             if self.speakers
             else ft.TextField(
@@ -165,26 +164,9 @@ class TranscribeDialog:
 
     def _speaker_name(self) -> str:
         """
-        The name the user typed or picked.
-
-        An editable Dropdown keeps the two apart, and `text` is the one that tracks the
-        field. `value` holds the option that was last *selected*, so typing over a speaker
-        the track already remembers leaves `value` on the old name - reading it would
-        quietly transcribe as the wrong person.
-
-        `value` is still needed as the fallback, because `text` starts out unset: the
-        client fills it in from the selected option only once the dialog has mounted, so
-        between opening and that arriving `text` is None while `value` already holds the
-        remembered name. Hence None (never reported) and "" (cleared on purpose) mean
-        different things here and only the first one falls back.
-
-        A TextField, used when there are no known speakers to pick from, has `value` alone
-        and no such split.
+        The name the user typed or picked - see `chosen_value` for why both are consulted.
         """
-        typed = getattr(self.speaker, "text", None)
-        if typed is not None:
-            return typed.strip()
-        return (self.speaker.value or "").strip()
+        return chosen_value(self.speaker)
 
     def _mark_speaker(self, message: str | None) -> None:
         """

@@ -10,6 +10,7 @@ from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.dialogs import await_dialog, confirm
 from chronicler.desktop.theme import ThemeColors
+from chronicler.desktop.widgets import chosen_value, searchable_dropdown
 from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
@@ -198,14 +199,8 @@ class SummariesPanel(ft.Column):
         never shown, so an unreachable gateway looked identical to one with no models.
         """
         offered, selected = self._model_options(models)
-        model_field = ft.Dropdown(
-            label=t("summaries.model"),
-            value=selected,
-            options=[ft.DropdownOption(key=name, text=name) for name in offered],
-            editable=True,
-            enable_filter=True,
-            error_text=None if offered else self.model_error(),
-        )
+        model_field = searchable_dropdown(offered, value=selected, label=t("summaries.model"))
+        model_field.error_text = None if offered else self.model_error()
         title_field = ft.TextField(label=t("summaries.name"))
         prompt_field = ft.TextField(
             label=t("summaries.prompt"),
@@ -233,7 +228,7 @@ class SummariesPanel(ft.Column):
                         t("summaries.generate_action"),
                         on_click=on_choice(
                             lambda: {
-                                "model": model_field.value,
+                                "model": chosen_value(model_field),
                                 "title": title_field.value,
                                 "prompt": prompt_field.value,
                             }

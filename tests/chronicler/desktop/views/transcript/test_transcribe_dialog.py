@@ -233,13 +233,27 @@ class TestStartingATranscription:
         assert choice.speaker == "Bob"
 
     @pytest.mark.asyncio
-    async def test_clearing_the_field_is_not_undone_by_the_remembered_name(self, ask):
+    async def test_the_field_emptied_for_filtering_falls_back_to_the_remembered_name(self, ask):
         """
-        An emptied field and one that has never reported itself are both falsy but mean
-        opposite things: the first is a deliberate clear, and falling back there would put
-        the name the user just deleted back on the task.
+        The picker empties itself on focus so typing filters from scratch, so an empty
+        field no longer means "no speaker" - it usually means the user looked at the list
+        and changed nothing. The name they can see is the one that gets used.
         """
         task, dialog, _ = await ask(source=_source(speaker_name="Bob"))
+        speaker = _fields(dialog)["speaker"]
+        speaker.on_focus(MagicMock(control=speaker))
+        speaker.text = ""
+        speaker.on_blur(MagicMock(control=speaker))
+
+        await dialog.actions[2].on_click(MagicMock())
+        choice = await asyncio.wait_for(task, timeout=1)
+
+        assert choice.speaker == "Bob"
+
+    @pytest.mark.asyncio
+    async def test_a_track_with_no_speaker_yet_is_still_refused(self, ask):
+        """The fallback only reaches for a name that exists; nothing is still nothing."""
+        task, dialog, _ = await ask(source=_source())
         speaker = _fields(dialog)["speaker"]
         speaker.text = ""
 

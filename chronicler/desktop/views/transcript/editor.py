@@ -17,6 +17,7 @@ from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.dialogs import confirm
 from chronicler.desktop.theme import ThemeColors
+from chronicler.desktop.widgets import chosen_value, searchable_dropdown
 from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
@@ -86,13 +87,11 @@ class TranscriptEditor(ft.Column):
                     color=self.colors.muted,
                     font_family="monospace",
                 ),
-                ft.Dropdown(
-                    data=f"speaker:{key}",
-                    width=150,
+                searchable_dropdown(
+                    speakers,
                     value=line.speaker_name,
-                    options=[ft.DropdownOption(key=name, text=name) for name in speakers],
-                    editable=True,
-                    enable_filter=True,
+                    width=150,
+                    data=f"speaker:{key}",
                     on_select=self.speaker_changed,
                 ),
                 ft.TextField(
@@ -145,7 +144,7 @@ class TranscriptEditor(ft.Column):
         if line is None:
             return
 
-        chosen = (control.value or "").strip()
+        chosen = chosen_value(control)
         if not chosen or chosen == line.speaker_name:
             return
 
