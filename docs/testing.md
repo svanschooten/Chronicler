@@ -70,6 +70,13 @@ It started as two near-identical copies in `test_config.py` and `test_wizard_def
 `test_config.py` keeps its own override on purpose: it tests the default config-file
 *search*, so it must not have an explicit file forced on it.
 
+**Any test that constructs a bare `Settings()` needs it**, not just the ones about
+configuration. The task-handler tests build one to get the shipped defaults, and without
+isolation they got the developer's instead — on a machine with a real language model
+configured, `test_an_unconfigured_provider_fails_clearly` stopped testing anything and
+sent a live request to that provider. Those modules now request `isolated_config` from an
+autouse fixture so no individual test can forget.
+
 ## Extras that may not be installed
 
 Tests that decode real audio call:

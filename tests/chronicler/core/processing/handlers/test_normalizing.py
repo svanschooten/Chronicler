@@ -17,6 +17,17 @@ from chronicler.core.sqlite import SQLiteAudioSourceRepository
 pytest.importorskip("av", reason="requires the 'normalization' extra", exc_type=ImportError)
 
 
+@pytest.fixture(autouse=True)
+def _defaults_not_the_developers_config(isolated_config):
+    """
+    `Settings()` here has to mean the shipped defaults.
+
+    Without this it reads whatever is in ~/.config/Chronicler, so a machine with a real
+    language model configured ran these against it - one of them over the network. See
+    docs/testing.md.
+    """
+
+
 async def _noop_progress(_progress: int) -> None:
     pass
 
