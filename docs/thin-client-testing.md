@@ -28,14 +28,14 @@ touched and no workspace of yours is written to.
 Expected output:
 
 ```text
-Chronicler 1.0.5 thin-client check
+Chronicler 1.0.8 thin-client check
   server:  127.0.0.1:46095
 
 Starting server...
   ok    server is listening
 
 Connecting thin client...
-  ok    server version 1.0.5 matches client 1.0.5
+  ok    server version 1.0.8 matches client 1.0.8
   ok    capabilities: clean, export, import, transcribe
   ok    pulled chronicle list (0 chronicles)
   ok    round-tripped a chronicle over RPC (Thin client check)
@@ -126,7 +126,7 @@ is established, and an empty archive is a normal state.
 The success line is deliberately greppable for log monitoring:
 
 ```text
-Connected to Chronicler server (version 1.0.5, chronicles: 3, capabilities: clean, export, import, transcribe)
+Connected to Chronicler server (version 1.0.8, chronicles: 3, capabilities: clean, export, import, transcribe)
 ```
 
 ## Capabilities
