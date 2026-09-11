@@ -292,4 +292,72 @@ MESSAGES = {
         "installed": "{name} is ready to use",
         "failed": "Could not install {name}: {error}",
     },
+    "wizard": {
+        "title": "Welcome to Chronicler",
+        "subtitle": "A few questions and your archive is ready.",
+        "back": "Back",
+        "next": "Continue",
+        "finish": "Finish",
+        "step": "Step {number} of {total}",
+        "language": {
+            "title": "Choose your language",
+            "description": (
+                "Used for Chronicler's own labels and as the default for new transcriptions."
+            ),
+            "label": "Language",
+        },
+        "mode": {
+            "title": "How should Chronicler run?",
+            "description": "You can change this later under Settings.",
+            "full_stack": "Full Stack",
+            "full_stack_description": "Store and process everything on this machine.",
+            "thin_client": "Thin Client",
+            "thin_client_description": "Connect to a Chronicler Server that does the work.",
+            "server_note": (
+                "Running Chronicler as a server or web client is set up from a terminal: "
+                "start it with the 'server' or 'web' argument."
+            ),
+        },
+        "workspace": {
+            "title": "Pick a workspace folder",
+            "description": "Your chronicles, recordings and databases are kept here.",
+            "label": "Workspace folder",
+            "browse": "Browse",
+            "picker_title": "Choose a workspace folder",
+            "required": "Choose a folder to continue.",
+        },
+        "api_key": {
+            "title": "API key",
+            "description": (
+                "Needed only to reach this machine from another Chronicler client. "
+                "Skip it if you are the only one using this archive."
+            ),
+            "label": "API key",
+            "generate": "Generate a new key",
+            "skip": "Skip",
+        },
+        "server": {
+            "title": "Connect to your server",
+            "description": "Chronicler will use this server for storage and processing.",
+            "url_label": "Server address",
+            "url_hint": "http://localhost:8000",
+            "url_required": "A server address is required.",
+            "key_label": "API key",
+            "key_description": (
+                "Ask the server operator for its key - it has to match, so it cannot be "
+                "generated here."
+            ),
+            "key_required": "An API key is required.",
+        },
+        "saving": {
+            "title": "Setting up your workspace",
+            "saved": "Configuration saved to {path}",
+        },
+    },
+    "startup": {
+        "failed": "Chronicler could not start",
+        "hint": (
+            "Check the connection settings in your configuration file, then start Chronicler again."
+        ),
+    },
 }

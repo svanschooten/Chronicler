@@ -40,14 +40,21 @@ class TranscribeDialog:
         self.settings = settings
         defaults = settings.transcription
 
-        self.speaker = ft.Dropdown(
-            label=t("transcribe.speaker"),
-            data="speaker",
-            value=source.speaker_name,
-            options=[ft.DropdownOption(key=name, text=name) for name in speakers],
-            editable=True,
-            enable_filter=True,
-        )
+        if len(self.speakers) > 0:
+            self.speaker = ft.Dropdown(
+                label=t("transcribe.speaker"),
+                data="speaker",
+                value=source.speaker_name,
+                options=[ft.DropdownOption(key=name, text=name) for name in self.speakers],
+                editable=True,
+                enable_filter=True,
+            )
+        else:
+            self.speaker = self.threshold = ft.TextField(
+                label=t("transcribe.speaker"),
+                data="speaker",
+                width=140,
+            )
         self.language = ft.Dropdown(
             label=t("transcribe.language"),
             data="language",
@@ -138,10 +145,13 @@ class TranscribeDialog:
 
     def _collect(self, transcribe: bool) -> TranscribeChoice | None:
         """The filled-in values, or None when something is missing or unusable."""
-        speaker = (self.speaker.value or "").strip()
+        self.speaker.error_text = None
+        speaker = (self.speaker.text or "").strip()
+        if speaker is None:
+            self.speaker.error_text = t("transcribe.speaker_required")
         threshold = self._threshold()
+        logger.info("speaker: %s", speaker)
 
-        self.speaker.error_text = None if speaker else t("transcribe.speaker_required")
         self._refresh(self.speaker, self.threshold)
         if not speaker or threshold is None:
             return None

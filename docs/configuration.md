@@ -70,7 +70,27 @@ before this field existed, rather than forcing a re-run of the wizard.
 `save()` round-trips through JSON before dumping YAML, so pydantic serialises `Path`
 and enum values into plain YAML scalars rather than Python object tags.
 
-## The wizard
+## The two wizards
+
+There are two, and which one runs depends on whether the mode being started has a
+console to ask questions through.
+
+| Mode | Wizard | Where |
+| ---- | ------ | ----- |
+| `client:desktop` | `FletSetupWizard` | `desktop/views/wizard.py`, on screen |
+| `server`, `client:web` | `ConfigWizard` | `core/wizard.py`, on stdin |
+
+The split exists because the packaged desktop build is windowless and has no stdin at
+all — see [packaging.md](packaging.md). `__main__.main()` simply does not call
+`run_wizard` for `client:desktop`; `desktop.main.start()` gates the Flet one on the same
+`validate_for_mode()` check, inside the Flet session so it can draw.
+
+Both write the same `Settings` fields, so a config produced by either is
+indistinguishable. The Flet one covers only full stack and thin client — the two modes a
+desktop window can actually run in — and asks for the language first, rebuilding every
+step from `t()` so the rest of the wizard is in the language just chosen.
+
+### The console wizard
 
 `ConfigWizard` runs when no config exists, or when `validate_for_mode()` says the
 existing one is incomplete for the mode being started. Each `WizardStep` reports
@@ -79,4 +99,22 @@ existing one is incomplete for the mode being started. Each `WizardStep` reports
 `RemoteServerStep` will not generate an API key, unlike `ApiKeyStep`. When setting up a
 new server, generating a fresh key is correct. When connecting to someone else's
 server, the key must match one the operator already configured — generating a random
-one there would silently guarantee every request 403s.
+one there would silently guarantee every request 403s. `FletSetupWizard.show_server()`
+enforces the same rule by requiring both fields.
+
+### The desktop wizard
+
+It renders as page content rather than a dialog: until setup finishes it *is* the whole
+screen, and a dialog would only add sizing and scroll constraints to work around.
+
+`run()` returns an `asyncio.Future` that the final step resolves, so `desktop.main.start()`
+can `await` it and treat the return as "config now exists" before building the runtime —
+the same await-a-choice pattern `desktop/dialogs.py` uses.
+
+Every step is rebuilt from `t()` rather than having its labels updated in place. That is
+what lets the language step relabel the wizard around it the moment it is answered.
+
+`apply_theme()` sets `page.theme_mode`. Material paints the dropdown, text fields and
+buttons from that, not from the colours the wizard applies to its own containers — left
+at its default the page follows the OS, so a dark workspace on a light desktop drew dark
+text on the dark card.

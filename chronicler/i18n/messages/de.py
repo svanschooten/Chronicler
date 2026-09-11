@@ -303,4 +303,76 @@ MESSAGES = {
         "installed": "{name} ist einsatzbereit",
         "failed": "{name} konnte nicht installiert werden: {error}",
     },
+    "wizard": {
+        "title": "Willkommen bei Chronicler",
+        "subtitle": "Ein paar Fragen und dein Archiv ist bereit.",
+        "back": "Zurück",
+        "next": "Weiter",
+        "finish": "Fertigstellen",
+        "step": "Schritt {number} von {total}",
+        "language": {
+            "title": "Sprache wählen",
+            "description": (
+                "Wird für Chroniclers eigene Beschriftungen und als Standard für neue "
+                "Transkriptionen verwendet."
+            ),
+            "label": "Sprache",
+        },
+        "mode": {
+            "title": "Wie soll Chronicler laufen?",
+            "description": "Das lässt sich später in den Einstellungen ändern.",
+            "full_stack": "Vollständig lokal",
+            "full_stack_description": "Alles auf diesem Rechner speichern und verarbeiten.",
+            "thin_client": "Thin Client",
+            "thin_client_description": (
+                "Mit einem Chronicler-Server verbinden, der die Arbeit übernimmt."
+            ),
+            "server_note": (
+                "Chronicler als Server oder Web-Client wird im Terminal eingerichtet: "
+                "mit dem Argument 'server' oder 'web' starten."
+            ),
+        },
+        "workspace": {
+            "title": "Arbeitsordner wählen",
+            "description": "Deine Chronicles, Aufnahmen und Datenbanken liegen hier.",
+            "label": "Arbeitsordner",
+            "browse": "Durchsuchen",
+            "picker_title": "Arbeitsordner wählen",
+            "required": "Wähle einen Ordner, um fortzufahren.",
+        },
+        "api_key": {
+            "title": "API-Schlüssel",
+            "description": (
+                "Nur nötig, um diesen Rechner von einem anderen Chronicler-Client zu "
+                "erreichen. Überspringe ihn, wenn du dieses Archiv allein nutzt."
+            ),
+            "label": "API-Schlüssel",
+            "generate": "Neuen Schlüssel erzeugen",
+            "skip": "Überspringen",
+        },
+        "server": {
+            "title": "Mit deinem Server verbinden",
+            "description": "Chronicler nutzt diesen Server für Speicherung und Verarbeitung.",
+            "url_label": "Serveradresse",
+            "url_hint": "http://localhost:8000",
+            "url_required": "Eine Serveradresse ist erforderlich.",
+            "key_label": "API-Schlüssel",
+            "key_description": (
+                "Frage den Serverbetreiber nach dem Schlüssel - er muss übereinstimmen und "
+                "kann hier nicht erzeugt werden."
+            ),
+            "key_required": "Ein API-Schlüssel ist erforderlich.",
+        },
+        "saving": {
+            "title": "Arbeitsordner wird eingerichtet",
+            "saved": "Konfiguration gespeichert unter {path}",
+        },
+    },
+    "startup": {
+        "failed": "Chronicler konnte nicht starten",
+        "hint": (
+            "Prüfe die Verbindungseinstellungen in deiner Konfigurationsdatei und starte "
+            "Chronicler erneut."
+        ),
+    },
 }
