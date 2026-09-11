@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chronicler"
-version = "1.0.8"
+dynamic = ["version"]
 description = "A local-first archive for searchable conversation transcripts."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -70,6 +70,9 @@ chronicler-server = "chronicler.__main__:server_main"
 Homepage = "https://github.com/svanschooten/Chronicler"
 Repository = "https://github.com/svanschooten/Chronicler"
 Issues = "https://github.com/svanschooten/Chronicler/issues"
+
+[tool.hatch.version]
+path = "chronicler/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["chronicler"]

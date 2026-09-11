@@ -331,8 +331,11 @@ More detailed documentation is available in:
 
 Standalone builds for Linux and Windows are produced by PyInstaller from
 [`Chronicler.spec`](Chronicler.spec) and published by the release workflow. See
-[docs/packaging.md](docs/packaging.md) for how to build one locally and what the spec's
-settings are there for.
+[docs/packaging.md](docs/packaging.md) for how to build one locally, how to cut a release,
+and what the spec's settings are there for.
+
+The release number lives in `chronicler/__init__.py` and nowhere else — Hatchling reads it
+from there, so a version bump is that one line.
 
 ## Development
 

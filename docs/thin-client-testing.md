@@ -25,17 +25,17 @@ handshake and round-trips a chronicle over RPC. Both sides get their own isolate
 through `CHRONICLER_CONFIG_FILE`, so your own `~/.chronicler_config.yaml` is never
 touched and no workspace of yours is written to.
 
-Expected output:
+Expected output, where `<version>` is whatever release you are running:
 
 ```text
-Chronicler 1.0.8 thin-client check
+Chronicler <version> thin-client check
   server:  127.0.0.1:46095
 
 Starting server...
   ok    server is listening
 
 Connecting thin client...
-  ok    server version 1.0.8 matches client 1.0.8
+  ok    server version <version> matches client <version>
   ok    capabilities: clean, export, import, transcribe
   ok    pulled chronicle list (0 chronicles)
   ok    round-tripped a chronicle over RPC (Thin client check)
@@ -126,7 +126,7 @@ is established, and an empty archive is a normal state.
 The success line is deliberately greppable for log monitoring:
 
 ```text
-Connected to Chronicler server (version 1.0.8, chronicles: 3, capabilities: clean, export, import, transcribe)
+Connected to Chronicler server (version <version>, chronicles: 3, capabilities: clean, export, import, transcribe)
 ```
 
 ## Capabilities
