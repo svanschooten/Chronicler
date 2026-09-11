@@ -40,8 +40,8 @@ class TranscribeDialog:
         self.settings = settings
         defaults = settings.transcription
 
-        if len(self.speakers) > 0:
-            self.speaker = ft.Dropdown(
+        self.speaker: ft.Dropdown | ft.TextField = (
+            ft.Dropdown(
                 label=t("transcribe.speaker"),
                 data="speaker",
                 value=source.speaker_name,
@@ -49,12 +49,13 @@ class TranscribeDialog:
                 editable=True,
                 enable_filter=True,
             )
-        else:
-            self.speaker = self.threshold = ft.TextField(
+            if self.speakers
+            else ft.TextField(
                 label=t("transcribe.speaker"),
                 data="speaker",
-                width=140,
+                value=source.speaker_name or "",
             )
+        )
         self.language = ft.Dropdown(
             label=t("transcribe.language"),
             data="language",
@@ -145,13 +146,10 @@ class TranscribeDialog:
 
     def _collect(self, transcribe: bool) -> TranscribeChoice | None:
         """The filled-in values, or None when something is missing or unusable."""
-        self.speaker.error_text = None
-        speaker = (self.speaker.text or "").strip()
-        if speaker is None:
-            self.speaker.error_text = t("transcribe.speaker_required")
+        speaker = self._speaker_name()
         threshold = self._threshold()
-        logger.info("speaker: %s", speaker)
 
+        self._mark_speaker(None if speaker else t("transcribe.speaker_required"))
         self._refresh(self.speaker, self.threshold)
         if not speaker or threshold is None:
             return None
@@ -165,13 +163,44 @@ class TranscribeDialog:
             transcribe=transcribe,
         )
 
-    def _threshold(self) -> float | None:
+    def _speaker_name(self) -> str:
         """
-        The typed threshold, or None with the field marked.
+        The name the user typed or picked.
 
-        Flet 0.86 spells the two fields' validation messages differently: a TextField
-        carries `error`, a Dropdown carries `error_text`. See docs/desktop.md.
+        An editable Dropdown keeps the two apart, and `text` is the one that tracks the
+        field. `value` holds the option that was last *selected*, so typing over a speaker
+        the track already remembers leaves `value` on the old name - reading it would
+        quietly transcribe as the wrong person.
+
+        `value` is still needed as the fallback, because `text` starts out unset: the
+        client fills it in from the selected option only once the dialog has mounted, so
+        between opening and that arriving `text` is None while `value` already holds the
+        remembered name. Hence None (never reported) and "" (cleared on purpose) mean
+        different things here and only the first one falls back.
+
+        A TextField, used when there are no known speakers to pick from, has `value` alone
+        and no such split.
         """
+        typed = getattr(self.speaker, "text", None)
+        if typed is not None:
+            return typed.strip()
+        return (self.speaker.value or "").strip()
+
+    def _mark_speaker(self, message: str | None) -> None:
+        """
+        Puts a validation message on the speaker field, whichever control it turned out to be.
+
+        Flet 0.86 spells this per control: a Dropdown carries `error_text`, a TextField
+        carries `error`. Both are plain dataclasses and accept the other spelling without
+        complaint, so writing the wrong one loses the message silently. See docs/desktop.md.
+        """
+        if isinstance(self.speaker, ft.Dropdown):
+            self.speaker.error_text = message
+        else:
+            self.speaker.error = message
+
+    def _threshold(self) -> float | None:
+        """The typed threshold, or None with the field marked."""
         try:
             value = float((self.threshold.value or "").strip())
         except ValueError:

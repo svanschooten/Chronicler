@@ -186,6 +186,73 @@ class TestStartingATranscription:
         assert choice.speaker == "Dave"
 
     @pytest.mark.asyncio
+    async def test_a_name_typed_into_the_dropdown_is_used(self, ask):
+        """
+        An editable Dropdown keeps the typed text and the selected option apart. A speaker
+        who is not in the list yet only ever reaches `text`, so reading `value` alone
+        dropped every newly introduced name and refused to start.
+        """
+        task, dialog, _ = await ask()
+        _fields(dialog)["speaker"].text = "  Dave  "
+
+        await dialog.actions[2].on_click(MagicMock())
+        choice = await asyncio.wait_for(task, timeout=1)
+
+        assert choice.speaker == "Dave"
+
+    @pytest.mark.asyncio
+    async def test_a_typed_name_wins_over_the_preselected_one(self, ask):
+        """
+        `value` holds the option last *selected*, so typing over a speaker the track
+        already remembers leaves it on the old name. Preferring it would quietly transcribe
+        as the wrong person.
+        """
+        task, dialog, _ = await ask(source=_source(speaker_name="Bob"))
+        speaker = _fields(dialog)["speaker"]
+        speaker.text = "Dave"
+
+        await dialog.actions[2].on_click(MagicMock())
+        choice = await asyncio.wait_for(task, timeout=1)
+
+        assert speaker.value == "Bob", "the stale value is exactly what must not be used"
+        assert choice.speaker == "Dave"
+
+    @pytest.mark.asyncio
+    async def test_the_remembered_name_is_used_before_the_field_reports_itself(self, ask):
+        """
+        The client fills `text` in from the selected option only once the dialog has
+        mounted. Starting inside that window - open, click, done - has to use the
+        remembered name rather than refuse for an empty field.
+        """
+        task, dialog, _ = await ask(source=_source(speaker_name="Bob"))
+        assert _fields(dialog)["speaker"].text is None, "nothing has reported the field yet"
+
+        await dialog.actions[2].on_click(MagicMock())
+        choice = await asyncio.wait_for(task, timeout=1)
+
+        assert choice.speaker == "Bob"
+
+    @pytest.mark.asyncio
+    async def test_clearing_the_field_is_not_undone_by_the_remembered_name(self, ask):
+        """
+        An emptied field and one that has never reported itself are both falsy but mean
+        opposite things: the first is a deliberate clear, and falling back there would put
+        the name the user just deleted back on the task.
+        """
+        task, dialog, _ = await ask(source=_source(speaker_name="Bob"))
+        speaker = _fields(dialog)["speaker"]
+        speaker.text = ""
+
+        await dialog.actions[2].on_click(MagicMock())
+        await asyncio.sleep(0)
+
+        assert not task.done()
+        assert speaker.error_text
+
+        await dialog.actions[0].on_click(MagicMock())
+        await asyncio.wait_for(task, timeout=1)
+
+    @pytest.mark.asyncio
     async def test_starting_without_a_speaker_is_refused_rather_than_queued(self, ask):
         task, dialog, subject = await ask()
 
@@ -235,6 +302,61 @@ class TestSavingTheSpeakerOnly:
         await asyncio.sleep(0)
 
         assert not task.done()
+
+        await dialog.actions[0].on_click(MagicMock())
+        await asyncio.wait_for(task, timeout=1)
+
+
+class TestWithNoKnownSpeakers:
+    """
+    The first track in a chronicle has nobody to pick from, and an editable Dropdown with
+    zero options is a menu that cannot be opened, so the field becomes a plain TextField.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_speaker_field_is_a_plain_text_field(self, ask):
+        task, dialog, _ = await ask(speakers=[])
+
+        assert isinstance(_fields(dialog)["speaker"], ft.TextField)
+
+        await dialog.actions[0].on_click(MagicMock())
+        await asyncio.wait_for(task, timeout=1)
+
+    @pytest.mark.asyncio
+    async def test_a_typed_name_starts_the_transcription(self, ask):
+        task, dialog, _ = await ask(speakers=[])
+        _fields(dialog)["speaker"].value = "  Dave  "
+
+        await dialog.actions[2].on_click(MagicMock())
+        choice = await asyncio.wait_for(task, timeout=1)
+
+        assert choice.speaker == "Dave"
+
+    @pytest.mark.asyncio
+    async def test_a_remembered_speaker_still_prefills_the_field(self, ask):
+        task, dialog, _ = await ask(speakers=[], source=_source(speaker_name="Bob"))
+
+        assert _fields(dialog)["speaker"].value == "Bob"
+
+        await dialog.actions[0].on_click(MagicMock())
+        await asyncio.wait_for(task, timeout=1)
+
+    @pytest.mark.asyncio
+    async def test_the_missing_speaker_message_lands_where_it_renders(self, ask):
+        """
+        A TextField renders `error` and a Dropdown renders `error_text`. Both are plain
+        dataclasses that accept the other spelling without complaint, so putting it on the
+        wrong one loses the message with nothing raised to say so.
+        """
+        task, dialog, _ = await ask(speakers=[])
+
+        await dialog.actions[2].on_click(MagicMock())
+        await asyncio.sleep(0)
+
+        assert not task.done()
+        field = _fields(dialog)["speaker"]
+        assert field.error, "a TextField renders `error`"
+        assert not getattr(field, "error_text", None), "`error_text` here would be silent"
 
         await dialog.actions[0].on_click(MagicMock())
         await asyncio.wait_for(task, timeout=1)
