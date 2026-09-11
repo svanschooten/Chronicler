@@ -172,6 +172,8 @@ MESSAGES = {
         "edit": "Transkript bearbeiten",
         "done": "Bearbeitung beenden",
         "delete_line": "Diese Zeile loeschen",
+        "fullscreen": "Vollbild",
+        "fullscreen_exit": "Vollbild verlassen",
         "delete_line_title": "Diese Zeile loeschen?",
         "delete_line_message": (
             'Damit wird "{excerpt}" aus dem Transkript entfernt. '

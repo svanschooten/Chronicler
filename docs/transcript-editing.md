@@ -44,6 +44,20 @@ The "show timestamps" checkbox still reformats the already-loaded lines in place
 round trip: `_transcript_body()` rebuilds the string from `transcript_lines` and nothing
 re-fetches.
 
+## The focused reader
+
+The book icon in the header opens the whole transcript as one block, with nothing else
+on screen. It was a fixed 760x520 dialog, which on a large monitor is a small island —
+the opposite of what a focused reading mode is for. It is now sized from `page.width` and
+`page.height`, with a floor so a small window still shows something readable and a
+fallback for a window that has not reported its size yet.
+
+The title row carries a full-screen toggle, which drives `page.window.full_screen` and
+swaps its own icon. The button is hidden when `page.web` is true: a browser tab has no
+window to resize, `page.window` is inert there, and a button that visibly does nothing is
+worse than no button. That is the web client; the desktop app — packaged or from source —
+always has a real window.
+
 ## Timings are never touched
 
 `update_line` writes text and speaker only. A corrected word must not shift the line off

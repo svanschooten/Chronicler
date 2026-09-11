@@ -167,6 +167,8 @@ MESSAGES = {
         "edit": "Edit the transcript",
         "done": "Finish editing",
         "delete_line": "Delete this line",
+        "fullscreen": "Full screen",
+        "fullscreen_exit": "Leave full screen",
         "delete_line_title": "Delete this line?",
         "delete_line_message": (
             'This removes "{excerpt}" from the transcript. This cannot be undone.'

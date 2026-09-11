@@ -168,6 +168,8 @@ MESSAGES = {
         "edit": "Transcript bewerken",
         "done": "Bewerken afronden",
         "delete_line": "Deze regel verwijderen",
+        "fullscreen": "Volledig scherm",
+        "fullscreen_exit": "Volledig scherm verlaten",
         "delete_line_title": "Deze regel verwijderen?",
         "delete_line_message": (
             'Dit verwijdert "{excerpt}" uit het transcript. Dit kan niet worden teruggedraaid.'

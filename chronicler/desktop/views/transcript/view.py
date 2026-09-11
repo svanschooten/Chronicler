@@ -34,6 +34,14 @@ def t_bold(value: str, color: str) -> ft.Text:
     return ft.Text(value, weight=ft.FontWeight.BOLD, color=color)
 
 
+READER_INSET = ft.Padding(left=40, top=24, right=40, bottom=24)
+READER_MARGIN_X = 140
+READER_MARGIN_Y = 200
+READER_MIN_WIDTH = 480
+READER_MIN_HEIGHT = 320
+DEFAULT_PAGE_WIDTH = 1200
+DEFAULT_PAGE_HEIGHT = 800
+
 TRANSCRIPT_LINE_HEIGHT = 1.35
 TRANSCRIPT_TEXT_SIZE = 13
 TRANSCRIPT_STYLE = ft.TextStyle(height=TRANSCRIPT_LINE_HEIGHT, size=TRANSCRIPT_TEXT_SIZE)
@@ -385,6 +393,10 @@ class TranscriptView(ft.Column):
             self.show_snackbar(t("summaries.folder_failed", error=error))
 
     async def read_transcript_clicked(self, e):
+        """
+        Focused reading: the whole transcript, sized to the window rather than to a
+        fixed 760x520 that left most of a large monitor unused.
+        """
         try:
             text = await self.transcript_service.read_transcript_text(
                 self.chronicle.id, include_timestamps=self.show_timestamps
@@ -393,29 +405,81 @@ class TranscriptView(ft.Column):
             self.show_snackbar(t("transcript.error", error=error))
             return
 
+        reader = ft.Container(
+            content=ft.Column(
+                scroll=ft.ScrollMode.AUTO,
+                controls=[
+                    ft.Text(
+                        text or t("transcript.empty"),
+                        selectable=True,
+                        font_family="monospace",
+                        style=TRANSCRIPT_STYLE,
+                        color=self.colors.text,
+                    )
+                ],
+            )
+        )
+        self._size_reader(reader)
+
+        fullscreen_button = ft.IconButton(
+            icon=ft.Icons.FULLSCREEN,
+            icon_color=self.colors.muted,
+            tooltip=t("transcript.fullscreen"),
+            visible=self._can_go_fullscreen(),
+        )
+
+        async def toggle_fullscreen(_event):
+            window = self.page.window
+            window.full_screen = not window.full_screen
+            fullscreen_button.icon = (
+                ft.Icons.FULLSCREEN_EXIT if window.full_screen else ft.Icons.FULLSCREEN
+            )
+            fullscreen_button.tooltip = (
+                t("transcript.fullscreen_exit")
+                if window.full_screen
+                else t("transcript.fullscreen")
+            )
+            self._size_reader(reader)
+            self.page.update()
+
+        fullscreen_button.on_click = toggle_fullscreen
+
         def build(on_choice) -> ft.AlertDialog:
             return ft.AlertDialog(
-                title=ft.Text(self.chronicle.title),
-                content=ft.Container(
-                    width=760,
-                    height=520,
-                    content=ft.Column(
-                        scroll=ft.ScrollMode.AUTO,
-                        controls=[
-                            ft.Text(
-                                text or t("transcript.empty"),
-                                selectable=True,
-                                font_family="monospace",
-                                size=12,
-                                color=self.colors.text,
-                            )
-                        ],
-                    ),
+                inset_padding=READER_INSET,
+                title=ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    controls=[
+                        ft.Text(self.chronicle.title, overflow=ft.TextOverflow.ELLIPSIS),
+                        fullscreen_button,
+                    ],
                 ),
+                content=reader,
                 actions=[ft.TextButton(t("common.close"), on_click=on_choice(lambda: None))],
             )
 
         await await_dialog(self.page, build)
+
+    def _can_go_fullscreen(self) -> bool:
+        """
+        A browser tab has no window to resize - `page.window` is inert there, so the
+        button would do nothing visible. The web client is the one mode that hits this.
+        """
+        return not getattr(self.page, "web", False)
+
+    def _size_reader(self, reader: ft.Container) -> None:
+        """
+        The reader fills the window it is in, minus room for the dialog's own chrome.
+
+        Fixed at 760x520 it was a small island on a large monitor - which is the opposite
+        of what a focused reading mode is for.
+        """
+        reader.width = max(
+            (self.page.width or DEFAULT_PAGE_WIDTH) - READER_MARGIN_X, READER_MIN_WIDTH
+        )
+        reader.height = max(
+            (self.page.height or DEFAULT_PAGE_HEIGHT) - READER_MARGIN_Y, READER_MIN_HEIGHT
+        )
 
     async def record_clicked(self, e):
         if self.chronicle_service is None or self.file_stager is None:

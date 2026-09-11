@@ -9,8 +9,14 @@ from chronicler.core.models import Chronicle, Tag, TranscriptLine
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.transcript import TranscriptView
 from chronicler.desktop.views.transcript.view import (
+    DEFAULT_PAGE_HEIGHT,
+    DEFAULT_PAGE_WIDTH,
     MAX_DETAIL_WIDTH,
     MIN_DETAIL_WIDTH,
+    READER_MARGIN_X,
+    READER_MARGIN_Y,
+    READER_MIN_HEIGHT,
+    READER_MIN_WIDTH,
     TRANSCRIPT_LINE_HEIGHT,
     detail_panel_width,
 )
@@ -264,6 +270,61 @@ class TestReadableLayout:
 
         await view.show_timestamps_changed(MagicMock(control=MagicMock(value=False)))
         assert view.transcript_text.value == "Alice: Hi\nBob: Hello"
+
+
+class TestFocusedReader:
+    """
+    The reading dialog was a fixed 760x520 island, which is the opposite of what a
+    focused reading mode is for on a large monitor.
+    """
+
+    def test_it_is_sized_from_the_window(self, make_view, attach_page):
+        page = attach_page(TranscriptView)
+        page.width, page.height = 2400, 1400
+        view = make_view()
+        reader = ft.Container()
+
+        view._size_reader(reader)
+
+        assert reader.width == 2400 - READER_MARGIN_X
+        assert reader.height == 1400 - READER_MARGIN_Y
+
+    def test_a_small_window_still_leaves_something_readable(self, make_view, attach_page):
+        page = attach_page(TranscriptView)
+        page.width, page.height = 400, 300
+        view = make_view()
+        reader = ft.Container()
+
+        view._size_reader(reader)
+
+        assert reader.width == READER_MIN_WIDTH
+        assert reader.height == READER_MIN_HEIGHT
+
+    def test_a_window_that_has_not_reported_its_size_falls_back(self, make_view, attach_page):
+        page = attach_page(TranscriptView)
+        page.width, page.height = None, None
+        view = make_view()
+        reader = ft.Container()
+
+        view._size_reader(reader)
+
+        assert reader.width == DEFAULT_PAGE_WIDTH - READER_MARGIN_X
+        assert reader.height == DEFAULT_PAGE_HEIGHT - READER_MARGIN_Y
+
+    def test_fullscreen_is_offered_in_the_desktop_window(self, make_view, attach_page):
+        page = attach_page(TranscriptView)
+        page.web = False
+        view = make_view()
+
+        assert view._can_go_fullscreen() is True
+
+    def test_fullscreen_is_hidden_in_a_browser_tab(self, make_view, attach_page):
+        """`page.window` is inert there, so the button would do nothing visible."""
+        page = attach_page(TranscriptView)
+        page.web = True
+        view = make_view()
+
+        assert view._can_go_fullscreen() is False
 
 
 class TestDetailPanelWidth:
