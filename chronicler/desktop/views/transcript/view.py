@@ -34,6 +34,10 @@ def t_bold(value: str, color: str) -> ft.Text:
     return ft.Text(value, weight=ft.FontWeight.BOLD, color=color)
 
 
+TRANSCRIPT_LINE_HEIGHT = 1.35
+TRANSCRIPT_TEXT_SIZE = 13
+TRANSCRIPT_STYLE = ft.TextStyle(height=TRANSCRIPT_LINE_HEIGHT, size=TRANSCRIPT_TEXT_SIZE)
+
 MIN_DETAIL_WIDTH = 260
 MAX_DETAIL_WIDTH = 520
 DETAIL_WIDTH_SHARE = 0.24
@@ -89,14 +93,16 @@ class TranscriptView(ft.Column):
         self.editing = False
         self.transcript_lines: list[TranscriptLine] = []
 
-        self.transcript_area = ft.TextField(
-            value=t("transcript.loading"),
-            multiline=True,
-            min_lines=12,
-            max_lines=16,
+        self.transcript_text = ft.Text(
+            t("transcript.loading"),
+            selectable=True,
+            color=self.colors.text,
+            style=TRANSCRIPT_STYLE,
+        )
+        self.transcript_area = ft.Column(
             expand=True,
-            border=ft.InputBorder.NONE,
-            read_only=True,
+            scroll=ft.ScrollMode.AUTO,
+            controls=[self.transcript_text],
         )
         self.editor = TranscriptEditor(
             chronicle,
@@ -431,26 +437,38 @@ class TranscriptView(ft.Column):
         try:
             self.transcript_lines = await self.transcript_service.get_transcript(self.chronicle.id)
         except Exception as e:
-            self.transcript_area.value = t("transcript.error", error=e)
-            self.transcript_area.update()
+            self.transcript_text.value = t("transcript.error", error=e)
+            _repaint(self.transcript_text, self.transcript_area)
             return
         self._render_transcript()
 
     def _render_transcript(self):
+        """
+        One selectable block, one line per turn.
+
+        The blank line between turns and the sixteen-line cap both came from rendering
+        this as a read-only TextField: it stopped partway down the panel however much
+        room there was, and cut off anything past the cap. A scrolling Text fills the
+        panel at any window size, and the spacing is a line height rather than an empty
+        line. See docs/transcript-editing.md.
+        """
+        self.transcript_text.value = self._transcript_body()
+        _repaint(self.transcript_text, self.transcript_area)
+
+    def _transcript_body(self) -> str:
         if not self.transcript_lines:
-            self.transcript_area.value = t("transcript.empty")
-        else:
-            formatted_lines = []
-            for line in self.transcript_lines:
-                speaker = line.speaker_name or t("common.unknown")
-                if self.show_timestamps:
-                    formatted_lines.append(
-                        f"[{format_timestamp(line.start_time)}] {speaker}: {line.text}"
-                    )
-                else:
-                    formatted_lines.append(f"{speaker}: {line.text}")
-            self.transcript_area.value = "\n\n".join(formatted_lines)
-        self.transcript_area.update()
+            return t("transcript.empty")
+
+        formatted_lines = []
+        for line in self.transcript_lines:
+            speaker = line.speaker_name or t("common.unknown")
+            if self.show_timestamps:
+                formatted_lines.append(
+                    f"[{format_timestamp(line.start_time)}] {speaker}: {line.text}"
+                )
+            else:
+                formatted_lines.append(f"{speaker}: {line.text}")
+        return "\n".join(formatted_lines)
 
     async def show_timestamps_changed(self, e):
         self.show_timestamps = e.control.value

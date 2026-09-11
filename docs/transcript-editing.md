@@ -23,6 +23,27 @@ line it was typed into, and nothing else.
 Each row carries the line's start time, its speaker, its text, and a delete button. The
 "show timestamps" checkbox is disabled while editing, because rows always show theirs.
 
+### The block is a Text, not a read-only TextField
+
+It used to be the latter, with `min_lines=12`, `max_lines=16` and a blank line between
+turns. Three things followed, all wrong: the field stopped growing at sixteen lines
+however tall the window was, so most of the panel was empty on a large screen; anything
+past the cap was simply not reachable; and the double newline spread a conversation out
+until very little of it was on screen at once.
+
+It is now an `ft.Text(selectable=True)` inside a scrolling `ft.Column(expand=True)`.
+Turns are joined with a single newline and the breathing room comes from
+`TextStyle(height=1.35)`, which is spacing rather than an empty line. `expand` on the
+column is what makes the panel fill its container at any size.
+
+Selectability is the reason it stayed a single control rather than becoming one `Text`
+per line, which would have made a drag across three turns select nothing — and that is
+the property this whole mode exists for.
+
+The "show timestamps" checkbox still reformats the already-loaded lines in place, with no
+round trip: `_transcript_body()` rebuilds the string from `transcript_lines` and nothing
+re-fetches.
+
 ## Timings are never touched
 
 `update_line` writes text and speaker only. A corrected word must not shift the line off

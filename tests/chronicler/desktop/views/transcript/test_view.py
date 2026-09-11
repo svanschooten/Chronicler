@@ -11,6 +11,7 @@ from chronicler.desktop.views.transcript import TranscriptView
 from chronicler.desktop.views.transcript.view import (
     MAX_DETAIL_WIDTH,
     MIN_DETAIL_WIDTH,
+    TRANSCRIPT_LINE_HEIGHT,
     detail_panel_width,
 )
 from tests.chronicler.desktop.controls import find_controls, text_values
@@ -28,6 +29,7 @@ def make_view():
         )
         view.file_picker = AsyncMock()
         view.transcript_area.update = MagicMock()
+        view.transcript_text.update = MagicMock()
         return view
 
     return _make
@@ -139,18 +141,18 @@ async def test_load_transcript_shows_a_placeholder_when_empty(make_view):
 
     await view.load_transcript()
 
-    assert view.transcript_area.value == "Transcript is empty or still processing."
+    assert view.transcript_text.value == "Transcript is empty or still processing."
 
 
 @pytest.mark.asyncio
-async def test_load_transcript_reports_a_failure_in_the_transcript_area(make_view):
+async def test_load_transcript_reports_a_failure_in_the_transcript_body(make_view):
     transcript_service = AsyncMock()
     transcript_service.get_transcript.side_effect = RuntimeError("project db missing")
     view = make_view(transcript_service=transcript_service)
 
     await view.load_transcript()
 
-    assert "project db missing" in view.transcript_area.value
+    assert "project db missing" in view.transcript_text.value
 
 
 @pytest.mark.asyncio
@@ -163,7 +165,7 @@ async def test_load_transcript_hides_timestamps_by_default(make_view):
 
     await view.load_transcript()
 
-    assert view.transcript_area.value == "Alice: Hi"
+    assert view.transcript_text.value == "Alice: Hi"
 
 
 @pytest.mark.asyncio
@@ -176,7 +178,7 @@ async def test_lines_with_no_speaker_render_as_unknown(make_view):
 
     await view.load_transcript()
 
-    assert view.transcript_area.value == "Unknown: Hi"
+    assert view.transcript_text.value == "Unknown: Hi"
 
 
 @pytest.mark.asyncio
@@ -196,13 +198,72 @@ async def test_show_timestamps_reformats_without_refetching(make_view):
     event = MagicMock(control=MagicMock(value=True))
     await view.show_timestamps_changed(event)
 
-    assert view.transcript_area.value == "[00:01:05] Alice: Hi"
+    assert view.transcript_text.value == "[00:01:05] Alice: Hi"
     transcript_service.get_transcript.assert_not_awaited()
 
     event.control.value = False
     await view.show_timestamps_changed(event)
 
-    assert view.transcript_area.value == "Alice: Hi"
+    assert view.transcript_text.value == "Alice: Hi"
+
+
+class TestReadableLayout:
+    """
+    The read view used to be a read-only TextField capped at sixteen lines with a blank
+    line between turns: it stopped partway down the panel however tall the window was,
+    and hid everything past the cap.
+    """
+
+    def test_it_fills_the_panel_and_scrolls(self, make_view):
+        view = make_view()
+
+        assert view.transcript_area.expand is True
+        assert view.transcript_area.scroll == ft.ScrollMode.AUTO
+
+    def test_turns_are_one_line_apart_not_two(self, make_view):
+        view = make_view()
+        view.transcript_lines = [
+            TranscriptLine(speaker_name="Alice", text="Hi", start_time=0.0, end_time=1.0),
+            TranscriptLine(speaker_name="Bob", text="Hello", start_time=1.0, end_time=2.0),
+        ]
+
+        assert view._transcript_body() == "Alice: Hi\nBob: Hello"
+
+    def test_the_spacing_is_a_line_height_rather_than_a_blank_line(self, make_view):
+        view = make_view()
+
+        assert view.transcript_text.style.height == TRANSCRIPT_LINE_HEIGHT
+
+    def test_the_whole_transcript_stays_selectable_as_one_block(self, make_view):
+        """Read and edit are separate modes precisely so this holds."""
+        view = make_view()
+
+        assert view.transcript_text.selectable is True
+
+    def test_nothing_is_cut_off_by_a_line_cap(self, make_view):
+        view = make_view()
+        view.transcript_lines = [
+            TranscriptLine(speaker_name="Alice", text=f"Line {n}", start_time=n, end_time=n + 1)
+            for n in range(200)
+        ]
+
+        assert len(view._transcript_body().splitlines()) == 200
+
+    @pytest.mark.asyncio
+    async def test_the_timestamp_toggle_still_reformats_both_ways(self, make_view):
+        transcript_service = AsyncMock()
+        transcript_service.get_transcript.return_value = [
+            TranscriptLine(speaker_name="Alice", text="Hi", start_time=65.0, end_time=66.0),
+            TranscriptLine(speaker_name="Bob", text="Hello", start_time=70.0, end_time=71.0),
+        ]
+        view = make_view(transcript_service=transcript_service)
+        await view.load_transcript()
+
+        await view.show_timestamps_changed(MagicMock(control=MagicMock(value=True)))
+        assert view.transcript_text.value == "[00:01:05] Alice: Hi\n[00:01:10] Bob: Hello"
+
+        await view.show_timestamps_changed(MagicMock(control=MagicMock(value=False)))
+        assert view.transcript_text.value == "Alice: Hi\nBob: Hello"
 
 
 class TestDetailPanelWidth:
