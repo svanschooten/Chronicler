@@ -151,3 +151,54 @@ def test_show_startup_failure_names_the_reason(page):
     desktop_main.show_startup_failure(page, dark_mode=True, message="connection refused")
 
     assert "connection refused" in text_values(page.add.call_args[0][0])
+
+
+# -- the bundled Flet client --------------------------------------------------
+
+
+def bundle_with_client(tmp_path, monkeypatch) -> str:
+    """A frozen build whose bundle carries the Flet client the hook copies in."""
+    client = tmp_path / desktop_main.BUNDLED_CLIENT_DIR
+    client.mkdir(parents=True)
+    monkeypatch.setattr(desktop_main.sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.delenv("FLET_VIEW_PATH", raising=False)
+    return str(client)
+
+
+def test_a_packaged_launch_uses_the_client_inside_the_bundle(tmp_path, monkeypatch):
+    """
+    Without this the client PyInstaller bundled in is ignored and Flet downloads its own
+    copy on first run - from a windowless build, with no console to say so.
+    """
+    client = bundle_with_client(tmp_path, monkeypatch)
+
+    desktop_main.use_bundled_flet_client()
+
+    assert desktop_main.os.environ["FLET_VIEW_PATH"] == client
+
+
+def test_running_from_source_leaves_the_client_to_flet(monkeypatch):
+    monkeypatch.delattr(desktop_main.sys, "_MEIPASS", raising=False)
+    monkeypatch.delenv("FLET_VIEW_PATH", raising=False)
+
+    desktop_main.use_bundled_flet_client()
+
+    assert "FLET_VIEW_PATH" not in desktop_main.os.environ
+
+
+def test_a_client_chosen_by_hand_is_not_overridden(tmp_path, monkeypatch):
+    bundle_with_client(tmp_path, monkeypatch)
+    monkeypatch.setenv("FLET_VIEW_PATH", "/somewhere/else")
+
+    desktop_main.use_bundled_flet_client()
+
+    assert desktop_main.os.environ["FLET_VIEW_PATH"] == "/somewhere/else"
+
+
+def test_a_bundle_without_a_client_falls_back_rather_than_failing(tmp_path, monkeypatch):
+    monkeypatch.setattr(desktop_main.sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.delenv("FLET_VIEW_PATH", raising=False)
+
+    desktop_main.use_bundled_flet_client()
+
+    assert "FLET_VIEW_PATH" not in desktop_main.os.environ

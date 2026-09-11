@@ -14,7 +14,9 @@ recreate the spec after a Flet upgrade changes what `flet pack` emits, not as th
 step itself.
 
 Anything hand-edited into the spec has to be mirrored into the script, or the next regen
-silently drops it. Today that is one setting: `console`.
+silently drops it — which is exactly what happened to the comments in it once. The script
+now writes those back after `flet pack` runs, and fails if `flet pack` ever stops emitting
+`console=False`, so the one setting the app depends on cannot be lost quietly.
 
 ## Why the build is windowed
 
@@ -56,6 +58,45 @@ streams are left alone.
 This is what keeps it to one binary rather than shipping a separate console build
 alongside the windowed one.
 
+## The three Flet packages
+
+`flet` on its own cannot open a window, and this is the trap the release workflow fell
+into: it declares `flet-desktop` as an **extra**, not a dependency.
+
+| Package | Needed for | Installed by |
+| ------- | ---------- | ------------ |
+| `flet` | the framework | `pip install .` |
+| `flet-desktop` | opening the window at runtime | the `flet[desktop]` extra in `pyproject.toml` |
+| `flet-cli` | the PyInstaller hook that bundles the client | the workflow's install step |
+
+Running from source hid the gap. `flet.run()` tries to `pip install flet-desktop` when the
+module is missing, which quietly works in a virtualenv — so a developer machine that has
+ever run the app has the package, and packs a working binary. A CI runner has neither the
+package nor a virtualenv to install it into, so the binary it produced died on launch with
+`ModuleNotFoundError: No module named 'flet_desktop'` (followed by `NameError: name 'exit'
+is not defined`, which is only PyInstaller's frozen build having no `site` builtins to
+report the first error with).
+
+`flet-cli` is a build-time dependency, not a runtime one. It registers a `pyinstaller40`
+entry point, which is how `hook-flet.py` gets discovered and run — nothing in the spec
+refers to it. Without it PyInstaller still produces a binary; it is just missing the
+client, about 38 MB smaller, and unable to start on a machine with no `~/.flet` cache.
+
+## The client is bundled, and has to be pointed at
+
+`hook-flet.py` copies the Flet client into the bundle as `flet_desktop/app/`. Flet does
+not then use it: `ensure_client_cached()` looks in that directory for a *downloaded
+archive*, while the hook puts an *extracted tree* there, so the check misses and the app
+downloads its own copy into `~/.flet` on first run.
+
+`use_bundled_flet_client()` in `desktop/main.py` closes that gap by setting
+`FLET_VIEW_PATH` to the bundled client before `ft.run()`. Without it every user who
+downloads a release pays for a client download on first launch — silently, because a
+windowed build has nowhere to print the progress bar, and fatally if they are offline.
+
+It only acts on a frozen build, and never overrides an `FLET_VIEW_PATH` that is already
+set, which is how `flet build` output is normally tried out.
+
 ## Hidden imports
 
 PyInstaller's static analysis misses anything imported by name. The list in the spec is
@@ -72,9 +113,16 @@ Add to both the spec and `scripts/pack.sh` when a new one turns up.
 ## Building one locally
 
 ```bash
-pip install pyinstaller
+pip install -e . flet-cli pyinstaller
 pyinstaller Chronicler.spec
 ```
+
+One `pip install` for all three keeps the Flet versions in step: `flet-cli` pins `flet` to
+its own version, and the `desktop` extra pins `flet-desktop` to whatever `flet` resolves
+to. Installing them separately can leave a skew.
+
+The first build on a machine with no `~/.flet` cache downloads the client, because the
+hook needs a copy to bundle. That is a build-time download only.
 
 The binary lands in `dist/` — `dist/Chronicler` on Linux, `dist/Chronicler.exe` on
 Windows. There is no separate build step for the two; the same spec covers both.
@@ -88,6 +136,11 @@ from Linux:
   with nothing — this is `attach_windows_console()` doing its job
 * `Chronicler.exe server` from a terminal reaches the console wizard when unconfigured
 * the folder picker on the workspace step opens a native dialog
+
+On either platform, a release binary is only proven by running it somewhere that has never
+had Flet installed — an empty `HOME` is enough. That is what catches a missing
+`flet-desktop` or an unbundled client, and what a build on the developer's own machine
+cannot catch, because its `~/.flet` cache papers over both.
 
 ## Releasing
 

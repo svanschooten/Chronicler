@@ -1,4 +1,7 @@
 import logging
+import os
+import sys
+from pathlib import Path
 
 import flet as ft
 
@@ -13,11 +16,34 @@ from chronicler.i18n import t
 logger = logging.getLogger(__name__)
 
 DESKTOP_MODE = "client:desktop"
+BUNDLED_CLIENT_DIR = Path("flet_desktop") / "app" / "flet"
 
 
 def run_desktop():
     logger.info("Chronicler Desktop starting...")
+    use_bundled_flet_client()
     ft.run(start)
+
+
+def use_bundled_flet_client() -> None:
+    """
+    Points Flet at the client PyInstaller bundled into this executable, so a packaged
+    launch never reaches for the copy in `~/.flet`. See docs/packaging.md.
+
+    Only a frozen build has one to point at, and an explicit FLET_VIEW_PATH is left alone
+    so a developer can still aim the app at a locally built client.
+    """
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle is None or os.environ.get("FLET_VIEW_PATH"):
+        return
+
+    client = Path(bundle) / BUNDLED_CLIENT_DIR
+    if not client.is_dir():
+        logger.warning(f"No Flet client bundled at {client}; falling back to the cache")
+        return
+
+    logger.info(f"Using the bundled Flet client at {client}")
+    os.environ["FLET_VIEW_PATH"] = str(client)
 
 
 async def start(page: ft.Page) -> None:
