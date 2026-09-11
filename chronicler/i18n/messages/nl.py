@@ -42,6 +42,10 @@ MESSAGES = {
             "service_layer": "Servicelaag",
             "local_ready": "Lokale services zijn klaar voor gebruik.",
             "thin_client": "Thin client",
+            "server_side": (
+                "Transcriptie, normalisatie en samenvattingen draaien op de server, "
+                "met de instellingen daar."
+            ),
             "full_stack": "Volledige installatie",
         },
         "transcription": {
@@ -101,11 +105,16 @@ MESSAGES = {
             "base_url": "Server-URL",
             "base_url_description": "Bijvoorbeeld http://localhost:8080/v1",
             "api_key": "API-sleutel",
-            "model": "Modelnaam",
+            "model": "Standaardmodel",
+            "model_description": "Vooraf gekozen in het samenvattingsvenster. Optioneel.",
+            "api_key_description": "Laat leeg voor een gateway die er geen nodig heeft.",
+            "model_path_description": "Het .gguf-bestand dat geladen wordt.",
             "model_path": "Modelbestand (.gguf)",
             "test": "Verbinding testen",
             "test_ok": "Verbonden met {model}.",
             "test_failed": "Kan het model niet bereiken: {error}",
+            "testing": "Bezig met controleren...",
+            "test_empty": "Verbonden, maar er werden geen modellen gevonden.",
             "not_configured": "Niet ingesteld",
         },
         "saved": "Instellingen opgeslagen.",

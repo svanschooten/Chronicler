@@ -23,6 +23,7 @@ def make_panel():
             overrides.get("available_models"),
             overrides.get("can_summarize"),
             overrides.get("model_error"),
+            overrides.get("default_model"),
         )
         panel.summary_list.update = MagicMock()
         return panel, transcript_service
@@ -137,3 +138,37 @@ class TestExplainingAnEmptyModelList:
 
         await dialog.actions[0].on_click(MagicMock())
         await asyncio.wait_for(task, timeout=1)
+
+
+class TestModelChoice:
+    def test_the_configured_default_starts_selected(self, make_panel):
+        """Configuring a model and then being handed someone else's was the surprise."""
+        panel, _ = make_panel(default_model=lambda: "qwen3")
+
+        offered, selected = panel._model_options(["llama", "qwen3", "mistral"])
+
+        assert selected == "qwen3"
+        assert offered == ["llama", "qwen3", "mistral"]
+
+    def test_a_default_the_gateway_did_not_list_is_still_offered(self, make_panel):
+        panel, _ = make_panel(default_model=lambda: "venice/uncensored")
+
+        offered, selected = panel._model_options(["llama"])
+
+        assert selected == "venice/uncensored"
+        assert offered == ["venice/uncensored", "llama"]
+
+    def test_without_a_default_the_first_model_is_selected(self, make_panel):
+        panel, _ = make_panel(default_model=lambda: None)
+
+        offered, selected = panel._model_options(["llama", "qwen3"])
+
+        assert selected == "llama"
+        assert offered == ["llama", "qwen3"]
+
+    def test_no_models_and_no_default_selects_nothing(self, make_panel):
+        panel, _ = make_panel()
+
+        offered, selected = panel._model_options([])
+
+        assert (offered, selected) == ([], None)

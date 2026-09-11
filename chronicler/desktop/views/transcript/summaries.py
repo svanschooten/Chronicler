@@ -26,6 +26,7 @@ class SummariesPanel(ft.Column):
         available_models: Callable[[], list[str]] | None = None,
         can_summarize: Callable[[], bool] | None = None,
         model_error: Callable[[], str | None] | None = None,
+        default_model: Callable[[], str | None] | None = None,
     ):
         self.chronicle = chronicle
         self.transcript_service = transcript_service
@@ -35,6 +36,7 @@ class SummariesPanel(ft.Column):
         self.available_models = available_models or (lambda: [])
         self.can_summarize = can_summarize or (lambda: True)
         self.model_error = model_error or (lambda: None)
+        self.default_model = default_model or (lambda: None)
         self.summaries: list[Summary] = []
 
         allowed = self.can_summarize()
@@ -174,18 +176,35 @@ class SummariesPanel(ft.Column):
 
         await await_dialog(self.page, build)
 
+    def _model_options(self, models: list[str]) -> tuple[list[str], str | None]:
+        """
+        The models to offer and which one starts selected.
+
+        The configured default leads, and is offered even when discovery did not return
+        it - a gateway that lists nothing should not make a model you have already named
+        unpickable.
+        """
+        default = self.default_model()
+        offered = list(models)
+        if default and default not in offered:
+            offered.insert(0, default)
+        if default:
+            return offered, default
+        return offered, offered[0] if offered else None
+
     async def _ask_options(self, models: list[str]) -> dict | None:
         """
         An empty model list says why it is empty. Discovery failures were collected and
         never shown, so an unreachable gateway looked identical to one with no models.
         """
+        offered, selected = self._model_options(models)
         model_field = ft.Dropdown(
             label=t("summaries.model"),
-            value=models[0] if models else None,
-            options=[ft.DropdownOption(key=name, text=name) for name in models],
+            value=selected,
+            options=[ft.DropdownOption(key=name, text=name) for name in offered],
             editable=True,
             enable_filter=True,
-            error_text=None if models else self.model_error(),
+            error_text=None if offered else self.model_error(),
         )
         title_field = ft.TextField(label=t("summaries.name"))
         prompt_field = ft.TextField(

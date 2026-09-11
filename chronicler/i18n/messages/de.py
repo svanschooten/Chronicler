@@ -43,6 +43,10 @@ MESSAGES = {
             "service_layer": "Dienstschicht",
             "local_ready": "Lokale Dienste sind bereit.",
             "thin_client": "Thin Client",
+            "server_side": (
+                "Transkription, Normalisierung und Zusammenfassungen laufen auf dem Server, "
+                "mit dessen Konfiguration."
+            ),
             "full_stack": "Vollinstallation",
         },
         "transcription": {
@@ -105,11 +109,16 @@ MESSAGES = {
             "base_url": "Server-URL",
             "base_url_description": "Zum Beispiel http://localhost:8080/v1",
             "api_key": "API-Schlüssel",
-            "model": "Modellname",
+            "model": "Standardmodell",
+            "model_description": "Im Zusammenfassungsdialog vorausgewaehlt. Optional.",
+            "api_key_description": "Leer lassen, wenn das Gateway keinen braucht.",
+            "model_path_description": "Die zu ladende .gguf-Datei.",
             "model_path": "Modelldatei (.gguf)",
             "test": "Verbindung testen",
             "test_ok": "Mit {model} verbunden.",
             "test_failed": "Modell nicht erreichbar: {error}",
+            "testing": "Wird geprueft...",
+            "test_empty": "Verbunden, aber es wurden keine Modelle aufgelistet.",
             "not_configured": "Nicht eingerichtet",
         },
         "saved": "Einstellungen gespeichert.",

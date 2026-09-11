@@ -41,6 +41,10 @@ MESSAGES = {
             "service_layer": "Service layer",
             "local_ready": "Local desktop services are ready to connect.",
             "thin_client": "Thin Client",
+            "server_side": (
+                "Transcription, normalisation and summaries run on the server, "
+                "using its own configuration."
+            ),
             "full_stack": "Full Stack",
         },
         "transcription": {
@@ -100,11 +104,16 @@ MESSAGES = {
             "base_url": "Server URL",
             "base_url_description": "For example http://localhost:8080/v1",
             "api_key": "API key",
-            "model": "Model name",
+            "model": "Default model",
+            "model_description": "Preselected in the summary dialog. Optional.",
+            "api_key_description": "Leave empty for a gateway that needs none.",
+            "model_path_description": "The .gguf file to load.",
             "model_path": "Model file (.gguf)",
             "test": "Test connection",
             "test_ok": "Connected to {model}.",
             "test_failed": "Could not reach the model: {error}",
+            "testing": "Checking...",
+            "test_empty": "Connected, but no models were listed.",
             "not_configured": "Not configured",
         },
         "saved": "Settings saved.",

@@ -17,7 +17,7 @@ from chronicler.core.worker_wiring import build_worker_runtime
 from chronicler.core.workers import WorkerManager
 from chronicler.desktop.components.sidebar import Sidebar
 from chronicler.desktop.runtime import DesktopRuntime
-from chronicler.desktop.state import AppState, ViewType
+from chronicler.desktop.state import AppState, ModelCheck, ViewType
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.archive import ArchiveView
 from chronicler.desktop.views.settings import SettingsView
@@ -199,9 +199,9 @@ class DesktopApp:
             self.sidebar.set_dark_mode(dark_mode)
         await self.update_view()
 
-    async def refresh_models(self) -> None:
+    async def refresh_models(self, refresh: bool = False) -> ModelCheck:
         """
-        Asks the service layer what it can do, once, at startup.
+        Asks the service layer what it can do.
 
         Through a scope of its own, like every other consumer: resolving off the root
         container cached its repository's session there for the life of the process,
@@ -211,6 +211,9 @@ class DesktopApp:
         configuration decide what the buttons here should offer. `capabilities` stays None
         when the call fails, which every consumer reads as "assume it works" rather than
         greying out half the interface over an unrelated network hiccup.
+
+        `refresh` bypasses the model cache, for when the configuration just changed and
+        the five-minute-old answer is known to be stale.
         """
         scope = (
             self.resolver.create_scope() if isinstance(self.resolver, Container) else self.resolver
@@ -218,10 +221,10 @@ class DesktopApp:
         try:
             system = scope.resolve(SystemService)
             try:
-                self.available_models = await system.list_models()
+                self.available_models = await system.list_models(refresh=refresh)
                 self.model_error = await system.model_error()
             except Exception as error:
-                logger.warning("Could not list language models at startup", exc_info=True)
+                logger.warning("Could not list language models", exc_info=True)
                 self.available_models = []
                 self.model_error = str(error)
 
@@ -233,6 +236,19 @@ class DesktopApp:
         finally:
             if scope is not self.resolver:
                 await close_scope(scope)
+
+        return ModelCheck(models=list(self.available_models), error=self.model_error)
+
+    async def on_llm_change(self) -> ModelCheck:
+        """
+        Re-asks the service layer after the language model configuration changed.
+
+        The worker already sees the change - it reads the same cached Settings object the
+        settings page edits. What did not was the interface: capabilities and the model
+        list were read once at startup, so the summarize button stayed greyed out until
+        the next launch. See docs/desktop.md.
+        """
+        return await self.refresh_models(refresh=True)
 
     async def on_locale_change(self, _locale: str):
         if self.sidebar is not None:
@@ -298,7 +314,10 @@ class DesktopApp:
 
         if self.state.current_view == ViewType.SETTINGS:
             return SettingsView(
-                self.runtime.settings, self.on_dark_mode_change, self.on_locale_change
+                self.runtime.settings,
+                self.on_dark_mode_change,
+                self.on_locale_change,
+                self.on_llm_change,
             )
 
         selected = self.state.selected_chronicle

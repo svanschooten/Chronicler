@@ -415,6 +415,76 @@ async def test_refresh_models_caches_the_provider_listing(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_on_llm_change_bypasses_the_model_cache(tmp_path):
+    """
+    The configuration just changed, so a five-minute-old listing is known to be wrong.
+    """
+    from unittest.mock import AsyncMock
+
+    from chronicler.core.services.system_service import SystemService
+
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    app = DesktopApp(runtime)
+
+    system = AsyncMock()
+    system.list_models.return_value = ["qwen3"]
+    system.model_error.return_value = None
+    runtime.resolver.register_instance(SystemService, system)
+
+    check = await app.on_llm_change()
+
+    system.list_models.assert_awaited_once_with(refresh=True)
+    assert check.models == ["qwen3"]
+    assert check.reachable
+
+
+@pytest.mark.asyncio
+async def test_on_llm_change_re_reads_the_capabilities(tmp_path):
+    """
+    This is what stops summaries needing a restart: the worker already sees the new
+    settings, the greyed-out button did not.
+    """
+    from unittest.mock import AsyncMock
+
+    from chronicler.core.models import ServerInfo
+    from chronicler.core.services.system_service import SystemService
+
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    app = DesktopApp(runtime)
+    app.capabilities = {"import"}
+
+    system = AsyncMock()
+    system.list_models.return_value = []
+    system.get_server_info.return_value = ServerInfo(
+        version="1.0.0", capabilities=["import", "summarize"]
+    )
+    runtime.resolver.register_instance(SystemService, system)
+
+    await app.on_llm_change()
+
+    assert "summarize" in (app.capabilities or set())
+
+
+@pytest.mark.asyncio
+async def test_refresh_models_reports_an_unreachable_provider_to_the_caller(tmp_path):
+    from unittest.mock import AsyncMock
+
+    from chronicler.core.services.system_service import SystemService
+
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    app = DesktopApp(runtime)
+
+    system = AsyncMock()
+    system.list_models.side_effect = RuntimeError("connection refused")
+    runtime.resolver.register_instance(SystemService, system)
+
+    check = await app.refresh_models()
+
+    assert check.reachable is False
+    assert "connection refused" in (check.error or "")
+
+
+@pytest.mark.asyncio
 async def test_refresh_models_survives_an_unreachable_provider(tmp_path):
     from unittest.mock import AsyncMock
 

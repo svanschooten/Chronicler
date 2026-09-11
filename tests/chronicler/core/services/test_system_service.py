@@ -30,9 +30,16 @@ class TestCapabilities:
 
         assert "summarize" in capabilities_for(settings)
 
-    def test_a_half_configured_gateway_does_not(self, settings):
+    def test_a_gateway_with_no_default_model_still_enables_summarize(self, settings):
+        """The model is chosen per summary; an address is all the server needs."""
         settings.llm.provider = "openai_compatible"
         settings.llm.base_url = "http://localhost:8080/v1"
+
+        assert "summarize" in capabilities_for(settings)
+
+    def test_a_gateway_with_no_address_does_not(self, settings):
+        settings.llm.provider = "openai_compatible"
+        settings.llm.model = "qwen3"
 
         assert "summarize" not in capabilities_for(settings)
 

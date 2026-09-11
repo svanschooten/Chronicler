@@ -150,18 +150,19 @@ class TestLlmSettings:
 
         assert settings.is_configured is False
 
-    def test_openai_compatible_needs_a_model(self):
+    def test_openai_compatible_does_not_need_a_model(self):
+        """`model` is the default the summary dialog preselects, not a second address."""
         settings = LlmSettings(provider="openai_compatible", base_url="http://localhost:8080/v1")
 
-        assert settings.is_configured is False
+        assert settings.is_configured is True
 
-    def test_openai_compatible_is_configured_with_url_and_model(self):
+    def test_openai_compatible_does_not_need_an_api_key(self):
+        """Plenty of local gateways want none, and demanding one disabled summaries."""
         settings = LlmSettings(
-            provider="openai_compatible",
-            base_url="http://localhost:8080/v1",
-            model="qwen3",
+            provider="openai_compatible", base_url="http://localhost:8080/v1", model="qwen3"
         )
 
+        assert settings.api_key is None
         assert settings.is_configured is True
 
     def test_llama_cpp_needs_a_model_path(self):

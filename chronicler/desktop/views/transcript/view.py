@@ -135,6 +135,7 @@ class TranscriptView(ft.Column):
             available_models,
             self._can_summarize,
             model_error,
+            lambda: self.settings.llm.model,
         )
         self.operations = ChronicleOperations(
             ImportCoordinator(

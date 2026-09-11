@@ -5,6 +5,7 @@ import pytest
 import yaml
 
 from chronicler.core.config import CONFIG_FILE_ENV_VAR, Settings, get_settings
+from chronicler.desktop.state import ModelCheck
 from chronicler.desktop.views.settings import SettingsView
 from chronicler.i18n import set_locale
 
@@ -154,6 +155,107 @@ class TestControlsReflectSettings:
         built, _ = view
 
         assert _inputs(built)["llm.api_key"].password is True
+
+
+class TestLanguageModel:
+    def test_a_gateway_does_not_offer_a_gguf_path(self, config_file):
+        built = SettingsView(Settings(llm={"provider": "openai_compatible"}))
+
+        assert "llm.model_path" not in _inputs(built)
+        assert "llm.base_url" in _inputs(built)
+
+    def test_a_local_model_offers_only_its_file(self, config_file):
+        built = SettingsView(Settings(llm={"provider": "llama_cpp"}))
+        inputs = _inputs(built)
+
+        assert "llm.model_path" in inputs
+        assert "llm.base_url" not in inputs
+        assert "llm.api_key" not in inputs
+
+    def test_switching_provider_swaps_the_fields(self, view):
+        built, _ = view
+        dropdown = _inputs(built)["llm.provider"]
+        dropdown.value = "llama_cpp"
+
+        # The rebuild is what the handler does after apply(); apply() itself is covered
+        # separately and needs a page for its snackbar.
+        built.settings.llm.provider = "llama_cpp"
+        built.llm_fields.controls = built._llm_fields()
+
+        assert "llm.model_path" in _inputs(built)
+
+    @pytest.mark.asyncio
+    async def test_changing_the_model_config_re_asks_the_service_layer(self, view):
+        """Otherwise summaries stay greyed out until the app is restarted."""
+        built, _ = view
+        built.on_llm_change = AsyncMock(return_value=ModelCheck(models=["qwen3"]))
+
+        await built.apply("llm.base_url", "http://localhost:8080/v1")
+
+        built.on_llm_change.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_an_unrelated_change_does_not(self, view):
+        built, _ = view
+        built.on_llm_change = AsyncMock(return_value=ModelCheck(models=[]))
+
+        await built.apply("transcription.model_size", "small")
+
+        built.on_llm_change.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_testing_the_connection_reports_the_model_it_reached(self, view):
+        built, _ = view
+        built.settings.llm.provider = "openai_compatible"
+        built.on_llm_change = AsyncMock(return_value=ModelCheck(models=["qwen3", "llama"]))
+
+        await built.test_llm_clicked(MagicMock())
+
+        assert "qwen3" in built.llm_status.value
+
+    @pytest.mark.asyncio
+    async def test_testing_the_connection_reports_a_failure(self, view):
+        built, _ = view
+        built.settings.llm.provider = "openai_compatible"
+        built.on_llm_change = AsyncMock(
+            return_value=ModelCheck(models=[], error="Could not reach http://localhost:8080")
+        )
+
+        await built.test_llm_clicked(MagicMock())
+
+        assert "localhost:8080" in built.llm_status.value
+
+    @pytest.mark.asyncio
+    async def test_reaching_a_gateway_that_lists_nothing_says_so(self, view):
+        built, _ = view
+        built.settings.llm.provider = "openai_compatible"
+        built.on_llm_change = AsyncMock(return_value=ModelCheck(models=[]))
+
+        await built.test_llm_clicked(MagicMock())
+
+        assert "no models" in built.llm_status.value.lower()
+
+
+class TestThinClient:
+    """The model configuration that matters in thin-client mode is the server's."""
+
+    def test_the_language_model_section_is_hidden(self, config_file):
+        built = SettingsView(Settings(server_url="http://localhost:8000", api_key="k"))
+        inputs = _inputs(built)
+
+        assert "llm.provider" not in inputs
+        assert "llm.base_url" not in inputs
+
+    def test_the_connection_section_says_where_the_work_happens(self, config_file):
+        built = SettingsView(Settings(server_url="http://localhost:8000", api_key="k"))
+        text = " ".join(_all_text(ft.Column(controls=built.controls)))
+
+        assert "on the server" in text
+
+    def test_a_full_stack_install_still_configures_it_here(self, view):
+        built, _ = view
+
+        assert "llm.provider" in _inputs(built)
 
 
 class TestEditing:

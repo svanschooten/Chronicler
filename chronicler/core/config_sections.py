@@ -155,8 +155,16 @@ class LlmSettings(BaseModel):
 
     @property
     def is_configured(self) -> bool:
+        """
+        Whether summaries can be generated at all.
+
+        A gateway needs an address and nothing else: `model` is the default offered in
+        the summarize dialog, not a requirement, and plenty of local gateways want no
+        API key. Requiring a model here meant configuring one, being told summaries were
+        still unavailable, and having to pick a model in the dialog anyway.
+        """
         if self.provider == "openai_compatible":
-            return bool(self.base_url) and bool(self.model)
+            return bool(self.base_url)
         if self.provider == "llama_cpp":
             return bool(self.model_path)
         return False

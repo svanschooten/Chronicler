@@ -74,17 +74,48 @@ A chronicle whose status is still `Imported`, `Transcribed` or `Cleaned` becomes
 `Summarized`, and gains a `Summarized` tag. An explicitly-set status is never stomped —
 the same rule transcription follows.
 
+## `llm.model` is a default, not an address
+
+`LlmSettings.is_configured` needs a base URL for a gateway, or a `model_path` for a local
+`.gguf`. It deliberately does **not** need `llm.model`, and never needs an API key.
+
+Both used to be required, and the result read as a contradiction: you configured a model,
+were still told summaries were unavailable until the app was restarted, and then had to
+pick a model in the dialog anyway. `llm.model` is what the summary dialog preselects —
+including when discovery did not return it, so a model you have already named by hand
+stays pickable against a gateway that does not implement `/models`. Plenty of local
+gateways want no key at all, so demanding one only disabled a working setup.
+
+The settings page shows only the fields the chosen provider reads: a gateway has no
+`.gguf` file and a local model has no API key.
+
 ## Buttons that know whether a model exists
 
 `SystemService.get_server_info()` reports `summarize` in its capabilities only when
-`LlmSettings.is_configured` — a base URL and a model for a gateway, or a `model_path` for
-a local `.gguf`. The desktop reads it once at startup, beside the model list, and the
-generate action is disabled with "Configure an AI model to enable summaries" on hover
+`LlmSettings.is_configured`. The desktop reads it at startup, beside the model list, and
+the generate action is disabled with "Configure an AI model to enable summaries" on hover
 when it is absent.
 
 It has to come from the server. In thin-client mode the client's own config is empty and
 irrelevant; the model configuration that decides whether a summary can run is the
-server's. See [deployment-and-rpc.md](deployment-and-rpc.md).
+server's — which is why the settings page hides the language-model section entirely in
+that mode rather than offering fields that would be saved and never read. See
+[deployment-and-rpc.md](deployment-and-rpc.md).
+
+### Changing the configuration does not need a restart
+
+`SettingsView` calls back into `DesktopApp.on_llm_change()` after any `llm.*` change, and
+that re-runs `refresh_models(refresh=True)` — a fresh model listing and a fresh reading of
+the capabilities the views are built from.
+
+The worker never needed this: it reads the same cached `Settings` object the settings page
+edits, so a queued summary already used the new configuration. What did not update was the
+interface, which read capabilities once at startup — so the button stayed greyed out until
+the next launch even though the task behind it would have worked.
+
+**Test connection** on the settings page is the same call, done deliberately, and reports
+what came back: the model it reached, the reason it could not, or that the gateway
+answered and listed nothing.
 
 Unknown capabilities — the call failed — leaves the button enabled. A network hiccup
 during startup should not quietly disable half the interface, and the task's own error

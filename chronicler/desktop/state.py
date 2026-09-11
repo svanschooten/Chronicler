@@ -1,6 +1,24 @@
+from dataclasses import dataclass
 from enum import Enum
 
 from chronicler.core.models import Chronicle
+
+
+@dataclass(frozen=True)
+class ModelCheck:
+    """
+    What the service layer answered when last asked about language models.
+
+    The settings page needs the answer as a value it can show, and the app needs it as
+    state the views are built from, so the refresh returns it rather than only storing it.
+    """
+
+    models: list[str]
+    error: str | None = None
+
+    @property
+    def reachable(self) -> bool:
+        return self.error is None
 
 
 class ViewType(str, Enum):
