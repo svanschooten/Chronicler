@@ -101,6 +101,18 @@ follow that single line.
 3. Publish the GitHub release for that tag. That fires `release-workflow.yml`, which
    builds both binaries from the spec and attaches them to the release.
 
+**The tag decides what gets built.** The workflow's `version` job reads the release tag,
+strips a leading `v` if there is one (`v1.0.9` and `1.0.9` both land as `1.0.9`), and
+`pack` stamps that number over `__version__` in its own checkout before running
+PyInstaller. So step 1 is what keeps the source honest, but forgetting it cannot ship a
+binary that reports the wrong version — the tag wins. Nothing is committed back; the
+branch only tracks the version because you edited it.
+
+A tag that is not three dot-separated numbers after the `v` fails the job on purpose —
+`tests/chronicler/test_basic.py` asserts `__version__` matches `\d+\.\d+\.\d+`, and the
+handshake's version comparison assumes the same shape. Prereleases like `v2.0.0-rc1`
+would need both of those loosened first.
+
 `tests/chronicler/test_basic.py` fails if a second version literal is ever added back to
 `pyproject.toml`, which is how this stayed in four files before.
 

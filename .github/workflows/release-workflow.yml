@@ -13,8 +13,28 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    name: Resolve version from tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Resolve version from tag
+        id: resolve
+        env:
+          RAW_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          version="${RAW_TAG#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$RAW_TAG' is not a semver release (expected v1.2.3 or 1.2.3)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version from tag $RAW_TAG"
+
   pack:
     name: Pack on ${{ matrix.os }}
+    needs: version
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -34,6 +54,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Stamp release version
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          sed -i -E "s/^__version__ = \".*\"$/__version__ = \"${VERSION}\"/" chronicler/__init__.py
+          grep -qx "__version__ = \"${VERSION}\"" chronicler/__init__.py
 
       - name: Setup Python
         uses: actions/setup-python@v7
