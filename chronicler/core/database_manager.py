@@ -121,6 +121,20 @@ class DatabaseManager:
             self._project_engines[chronicle_id] = engine
             return engine
 
+    async def close_project(self, chronicle_id: str) -> None:
+        """
+        Releases one chronicle's project database, so its file can be moved or removed.
+
+        The pool holds a connection open long after the session that used it was closed,
+        and Windows refuses to delete a file anything still has open - which is why
+        deleting a chronicle failed there and not on Linux. See docs/storage.md.
+        """
+        engine = self._project_engines.pop(chronicle_id, None)
+        if engine is None:
+            return
+        logger.debug(f"Closing the project database for chronicle {chronicle_id}")
+        await engine.dispose()
+
     async def close_all(self):
         await self.archive_engine.dispose()
         for engine in self._project_engines.values():

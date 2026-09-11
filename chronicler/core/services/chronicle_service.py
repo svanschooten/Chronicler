@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import shutil
 from pathlib import Path
@@ -88,14 +89,28 @@ class ChronicleService:
         return await self.repository.update(chronicle)
 
     async def delete_chronicle(self, chronicle_id: UUID) -> None:
+        """
+        Removes a chronicle, and the files behind it unless they are only linked.
+
+        The project database is closed first. Its connection outlives the session that
+        used it - the pool keeps one open - and Windows will not delete a file anything
+        still holds open, which is why this failed there and not on Linux. See
+        docs/storage.md.
+        """
         chronicle = await self.repository.get_by_id(chronicle_id)
+        await self.db_manager.close_project(str(chronicle_id))
         await self.repository.delete(chronicle_id)
 
-        if chronicle and not chronicle.project_path:
-            chronicle_dir = self.db_manager.workspace_path / "chronicles" / str(chronicle_id)
-            if chronicle_dir.exists():
-                shutil.rmtree(chronicle_dir)
-                logger.info(f"Removed chronicle directory {chronicle_dir}")
+        if chronicle and chronicle.project_path:
+            logger.info(
+                f"Unlinked chronicle {chronicle_id}; left {chronicle.project_path} in place"
+            )
+            return
+
+        chronicle_dir = self.db_manager.workspace_path / "chronicles" / str(chronicle_id)
+        if chronicle_dir.exists():
+            await remove_directory(chronicle_dir)
+            logger.info(f"Removed chronicle directory {chronicle_dir}")
 
     async def search_chronicles(self, query: str) -> list[Chronicle]:
         return await self.repository.search(query)
@@ -128,6 +143,30 @@ class ChronicleService:
         shutil.move(resolved_source, dest)
         logger.info(f"Added audio source '{dest.name}' for chronicle {chronicle_id}")
         return str(dest)
+
+
+REMOVAL_ATTEMPTS = 5
+REMOVAL_BACKOFF_SECONDS = 0.1
+
+
+async def remove_directory(path: Path) -> None:
+    """
+    Removes `path`, retrying briefly before giving up.
+
+    Closing the database releases the handle Chronicler itself was holding, but on
+    Windows a virus scanner or the search indexer can still have one of these files open
+    for a moment after it was last written, and that is reported as a hard failure rather
+    than waited out. A few retries turn a crash into a pause.
+    """
+    for attempt in range(REMOVAL_ATTEMPTS):
+        try:
+            shutil.rmtree(path)
+            return
+        except OSError as error:
+            if attempt == REMOVAL_ATTEMPTS - 1:
+                raise
+            logger.debug(f"Could not remove {path} yet ({error}); retrying")
+            await asyncio.sleep(REMOVAL_BACKOFF_SECONDS * (attempt + 1))
 
 
 def _title_for(project_path: Path) -> str:

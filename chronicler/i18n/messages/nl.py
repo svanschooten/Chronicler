@@ -193,6 +193,7 @@ MESSAGES = {
             "definitief. Dit kan niet worden teruggedraaid."
         ),
         "deleted": "'{title}' verwijderd",
+        "delete_failed": "Kon de kroniek niet verwijderen: {error}",
         "failed": "Fout: {error}",
         "transcript_exists_title": "Er is al een transcript",
         "transcript_exists_message": (

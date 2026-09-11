@@ -78,6 +78,35 @@ does not allow that on a shared instance. `build_worker_runtime` therefore hands
 session back to the caller rather than hiding it — whoever starts the loop owns closing
 it.
 
+## Deleting a chronicle closes its database first
+
+`ChronicleService.delete_chronicle` calls `DatabaseManager.close_project(id)` before it
+touches the filesystem, and that ordering is the whole point of the method.
+
+A project engine is cached for the life of the process, and SQLAlchemy's pool keeps a
+connection open long after the session that used it was closed — `async with session:`
+returns the connection to the pool, it does not close the file. Linux happily unlinks a
+file that is still open, so deleting a chronicle worked there. Windows does not, and
+reported:
+
+```
+[WinError 32] The process cannot access the file because it is being used by
+another process: '...\chronicles\<id>\project.db'
+```
+
+`close_project` pops the engine out of the cache and disposes it, which drops the last
+handle. Reopening the chronicle afterwards simply builds a new engine, so this is a
+release rather than a teardown.
+
+A **linked** chronicle is closed the same way and its files are then left alone — the
+`project.db` belongs to whoever the workspace borrowed it from, and deleting the
+chronicle here unlinks it rather than destroying a database that may be shared.
+
+`remove_directory` retries a few times before giving up. Disposing the engine releases
+the handle Chronicler owned; on Windows a virus scanner or the search indexer can still
+hold one for a moment. The desktop reports a failure that outlasts the retries as a
+message rather than letting it reach Flet as an unhandled error.
+
 ## Repository notes
 
 * **`get_all()` orders by `created_at DESC`.** Without an `ORDER BY` the archive

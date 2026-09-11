@@ -195,6 +195,15 @@ class ChronicleOperations:
         ):
             return False
 
-        await self.chronicle_service.delete_chronicle(chronicle.id)
+        try:
+            await self.chronicle_service.delete_chronicle(chronicle.id)
+        except Exception as error:
+            # Removing the files can still fail after the databases are closed - a file
+            # held open by something else on Windows is the usual reason. The chronicle
+            # may already be gone from the archive, so the view reloads either way.
+            logger.exception("Deleting a chronicle failed")
+            self.show_snackbar(t("actions.delete_failed", error=error))
+            return True
+
         self.show_snackbar(t("actions.deleted", title=chronicle.title))
         return True

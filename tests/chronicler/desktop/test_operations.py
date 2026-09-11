@@ -251,6 +251,19 @@ class TestDeleting:
 
         assert "Emberfall 14" in " ".join(str(part) for part in ask.await_args[0])
 
+    @pytest.mark.asyncio
+    async def test_a_failed_delete_is_reported_rather_than_raised(self, make_operations):
+        """A file Windows will not release must not reach Flet as an unhandled error."""
+        operations, parts, _ = make_operations()
+        parts["chronicle_service"].delete_chronicle.side_effect = OSError(
+            32, "The process cannot access the file"
+        )
+
+        with patch("chronicler.desktop.operations.confirm", new=AsyncMock(return_value=True)):
+            assert await operations.delete(_chronicle()) is True
+
+        assert "cannot access the file" in parts["show_snackbar"].call_args[0][0]
+
 
 class TestLinking:
     @pytest.mark.asyncio

@@ -192,6 +192,7 @@ MESSAGES = {
             "for it. This cannot be undone."
         ),
         "deleted": "Deleted '{title}'",
+        "delete_failed": "Could not delete the chronicle: {error}",
         "failed": "Error: {error}",
         "transcript_exists_title": "Transcript already exists",
         "transcript_exists_message": (

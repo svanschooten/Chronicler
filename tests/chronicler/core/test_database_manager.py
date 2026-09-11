@@ -36,6 +36,53 @@ async def test_database_manager_project_session(tmp_path):
     await db_manager.close_all()
 
 
+@pytest.mark.asyncio
+async def test_close_project_releases_the_file_handle(tmp_path):
+    """
+    The pool keeps a connection open after the session using it is closed, and Windows
+    refuses to delete a file anything still holds open - see docs/storage.md.
+    """
+    db_manager = DatabaseManager(tmp_path)
+    chronicle_id = "held-open"
+
+    async with await db_manager.get_project_session(chronicle_id) as session:
+        await session.execute(select(DBSpeaker))
+
+    assert chronicle_id in db_manager._project_engines
+
+    await db_manager.close_project(chronicle_id)
+
+    assert chronicle_id not in db_manager._project_engines
+    assert (tmp_path / "chronicles" / chronicle_id / "project.db").exists()
+
+    await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_close_project_for_an_unopened_chronicle_is_a_noop(tmp_path):
+    db_manager = DatabaseManager(tmp_path)
+
+    await db_manager.close_project("never-opened")
+
+    await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_a_closed_project_can_be_reopened(tmp_path):
+    """Closing releases the file; it does not make the chronicle unusable."""
+    db_manager = DatabaseManager(tmp_path)
+    chronicle_id = "reopened"
+
+    async with await db_manager.get_project_session(chronicle_id) as session:
+        await session.execute(select(DBSpeaker))
+    await db_manager.close_project(chronicle_id)
+
+    async with await db_manager.get_project_session(chronicle_id) as session:
+        assert (await session.execute(select(DBSpeaker))).scalars().all() == []
+
+    await db_manager.close_all()
+
+
 def test_get_chronicle_sources_path_creates_directory(tmp_path):
     db_manager = DatabaseManager(tmp_path)
 

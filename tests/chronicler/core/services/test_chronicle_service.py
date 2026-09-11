@@ -1,12 +1,19 @@
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
 from chronicler.core.models import Chronicle
 from chronicler.core.repositories import ChronicleRepository
-from chronicler.core.services.chronicle_service import ChronicleService
+from chronicler.core.services.chronicle_service import ChronicleService, remove_directory
+
+
+def _db_manager(workspace_path):
+    """A DatabaseManager stand-in whose close_project can be awaited."""
+    db_manager = MagicMock(workspace_path=workspace_path)
+    db_manager.close_project = AsyncMock()
+    return db_manager
 
 
 def _plain_repo():
@@ -61,7 +68,7 @@ async def test_delete_chronicle_removes_directory_for_non_linked_chronicle(tmp_p
     repo = MagicMock(spec=ChronicleRepository)
     repo.get_by_id = AsyncMock(return_value=Chronicle(id=chronicle_id, title="Local"))
     repo.delete = AsyncMock()
-    db_manager = MagicMock(workspace_path=tmp_path)
+    db_manager = _db_manager(tmp_path)
 
     service = ChronicleService(repo, db_manager)
     await service.delete_chronicle(chronicle_id)
@@ -88,13 +95,90 @@ async def test_delete_chronicle_does_not_touch_directory_for_linked_chronicle(tm
         )
     )
     repo.delete = AsyncMock()
-    db_manager = MagicMock(workspace_path=tmp_path)
+    db_manager = _db_manager(tmp_path)
 
     service = ChronicleService(repo, db_manager)
     await service.delete_chronicle(chronicle_id)
 
     assert external_dir.exists()
     assert (external_dir / "project.db").exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_chronicle_closes_the_project_database_before_removing_it(tmp_path):
+    """
+    Windows will not delete a file anything still has open, and the connection pool keeps
+    one open long after the last session closed - see docs/storage.md.
+    """
+    chronicle_id = uuid4()
+    chronicle_dir = tmp_path / "chronicles" / str(chronicle_id)
+    chronicle_dir.mkdir(parents=True)
+    (chronicle_dir / "project.db").write_text("data")
+
+    order = []
+    repo = MagicMock(spec=ChronicleRepository)
+    repo.get_by_id = AsyncMock(return_value=Chronicle(id=chronicle_id, title="Local"))
+    repo.delete = AsyncMock()
+    db_manager = _db_manager(tmp_path)
+    db_manager.close_project = AsyncMock(side_effect=lambda _id: order.append("closed"))
+
+    with patch(
+        "chronicler.core.services.chronicle_service.shutil.rmtree",
+        side_effect=lambda path: order.append("removed"),
+    ):
+        await ChronicleService(repo, db_manager).delete_chronicle(chronicle_id)
+
+    db_manager.close_project.assert_awaited_once_with(str(chronicle_id))
+    assert order == ["closed", "removed"]
+
+
+@pytest.mark.asyncio
+async def test_delete_chronicle_closes_a_linked_project_database_too(tmp_path):
+    """The file stays, but Chronicler must not keep holding it open."""
+    chronicle_id = uuid4()
+    external_dir = tmp_path / "elsewhere"
+    external_dir.mkdir()
+
+    repo = MagicMock(spec=ChronicleRepository)
+    repo.get_by_id = AsyncMock(
+        return_value=Chronicle(
+            id=chronicle_id, title="Linked", project_path=str(external_dir / "project.db")
+        )
+    )
+    repo.delete = AsyncMock()
+    db_manager = _db_manager(tmp_path)
+
+    await ChronicleService(repo, db_manager).delete_chronicle(chronicle_id)
+
+    db_manager.close_project.assert_awaited_once_with(str(chronicle_id))
+
+
+@pytest.mark.asyncio
+async def test_removing_a_directory_retries_before_giving_up(tmp_path):
+    """A file held open for a moment is a pause on Windows, not a failed delete."""
+    attempts = []
+
+    def flaky(path):
+        attempts.append(path)
+        if len(attempts) < 3:
+            raise OSError(32, "The process cannot access the file")
+
+    with patch("chronicler.core.services.chronicle_service.shutil.rmtree", side_effect=flaky):
+        with patch("chronicler.core.services.chronicle_service.REMOVAL_BACKOFF_SECONDS", 0):
+            await remove_directory(tmp_path)
+
+    assert len(attempts) == 3
+
+
+@pytest.mark.asyncio
+async def test_removing_a_directory_gives_up_and_raises_eventually(tmp_path):
+    with patch(
+        "chronicler.core.services.chronicle_service.shutil.rmtree",
+        side_effect=OSError(32, "The process cannot access the file"),
+    ):
+        with patch("chronicler.core.services.chronicle_service.REMOVAL_BACKOFF_SECONDS", 0):
+            with pytest.raises(OSError):
+                await remove_directory(tmp_path)
 
 
 @pytest.mark.asyncio

@@ -198,6 +198,7 @@ MESSAGES = {
             "endgueltig geloescht. Das kann nicht rueckgaengig gemacht werden."
         ),
         "deleted": "'{title}' geloescht",
+        "delete_failed": "Chronik konnte nicht geloescht werden: {error}",
         "failed": "Fehler: {error}",
         "transcript_exists_title": "Es gibt schon ein Transkript",
         "transcript_exists_message": (

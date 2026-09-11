@@ -98,6 +98,24 @@ The install prompt only appears when `extras.can_install()` is true: inside a vi
 or when `site-packages` is writable. A read-only system Python gets the pip command to
 run by hand instead of a button that would fail. See [optional-extras.md](optional-extras.md).
 
+## Deleting a chronicle fails with WinError 32
+
+```text
+[WinError 32] The process cannot access the file because it is being used by
+another process: '...\chronicles\<id>\project.db'
+```
+
+Something still had the project database open when the directory was removed. Chronicler
+closes its own handle first — `delete_chronicle` disposes the chronicle's engine before
+removing anything — so if this still appears, the file is held by something else: a
+sqlite browser left open on it, a sync client, or a virus scanner mid-scan. The removal
+is retried for about a second before it gives up, and the failure is reported in the app
+rather than crashing it. The chronicle is gone from the archive either way; the folder is
+safe to delete by hand afterwards.
+
+Linux never showed this, because unlinking a file that is still open is allowed there.
+See [storage.md](storage.md).
+
 ## "greenlet is being finalized" when closing the app
 
 ```text
