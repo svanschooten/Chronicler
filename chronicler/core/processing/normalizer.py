@@ -103,7 +103,10 @@ def measure_dbfs(source: Path) -> float | None:
     loudnorm computes internally cannot be read back out. This is a real, comparable
     measurement of the same thing in a simpler unit - see docs/audio-normalization.md.
     """
-    import numpy as np
+    try:
+        import numpy as np
+    except ImportError as error:  # ships with the normalization extra, via PyAV's wheel
+        raise NormalizationError(extras.missing_message("normalization", error)) from error
 
     try:
         container, stream = _open_source(source)

@@ -34,6 +34,59 @@ That distinction is why `missing_message()` takes the exception. An `ImportError
 pip can fix it. Anything else, for an extra with `system_packages`, means the Python
 package is there and its library is not — a different problem with a different answer.
 
+## A release ships them; a checkout installs them
+
+Since the binaries started being built with the extras installed, a packaged Chronicler
+transcribes, normalises and records out of the box. The release workflow installs
+`.[transcription,normalization,recording]` before PyInstaller runs, and PyInstaller
+collects what it finds — the imports are inside functions, which its analysis follows.
+This is not free: the Linux binary goes from roughly 57 MB to roughly 170 MB.
+
+The Linux job also installs `libportaudio2` first. `sounddevice`'s Linux wheel contains
+no PortAudio — it binds to the system library, and PyInstaller's hook copies whatever
+`ctypes.util.find_library` turns up. Without it the hook logs a warning and the packaged
+build cannot record. The Windows wheel ships its own DLL and needs nothing.
+
+`llm` is deliberately left out. `llama-cpp-python` is large and CPU-feature specific, and
+the OpenAI-compatible path — which is how most people reach a model — needs nothing at
+all. A local `.gguf` therefore still means a source install.
+
+### Nothing can be installed from a packaged build
+
+`can_install()` returns False whenever `sys.frozen` is set, and that is not a policy
+choice:
+
+* there is no pip in the bundle;
+* `sys.prefix` and `sys.base_prefix` are both the extraction directory, so the virtualenv
+  check cannot pass, and the `site-packages` it names does not exist;
+* `sys.executable` is **Chronicler**, so `sys.executable -m pip install …` would relaunch
+  the app with arguments argparse rejects rather than install anything.
+
+So `missing_message()` does not name a pip command in a packaged build. It says the
+feature is not included in this build, which is the whole truth there.
+
+## Buttons that go quiet rather than wrong
+
+Nothing prompts for an install it cannot perform, and nothing queues work that is certain
+to fail.
+
+| Feature | Asks | Disabled when |
+| ------- | ---- | ------------- |
+| Record | the **local** extras, via `is_usable("recording")` | missing and not installable |
+| Transcribe | the service layer's `capabilities` | `transcribe` absent |
+| Normalize | the service layer's `capabilities` | `normalize` absent |
+| Summarize | the service layer's `capabilities` | `summarize` absent |
+
+`is_usable()` is `is_available() or can_install()`: a source checkout missing an extra is
+one prompt away from having it, so the button stays live and `ExtraInstaller` does its
+job. A packaged build missing one is not, so the button greys out and its tooltip says
+so. The install prompt that used to appear and then fail is gone.
+
+Recording asks locally on purpose — the microphone is on the machine running the UI in
+every deployment mode. Transcription and normalisation run in the worker, which is the
+server in thin-client mode, so those ask the server. Unknown capabilities mean "assume it
+works": a handshake that has not landed yet should not grey out half the interface.
+
 ## Installing on demand
 
 `ExtraInstaller.ensure(page, name)` returns True when the extra is usable by the time it

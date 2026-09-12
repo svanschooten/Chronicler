@@ -3,6 +3,7 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+import flet as ft
 import pytest
 
 from chronicler.core.models import AudioSource, Chronicle, SourceState
@@ -31,13 +32,15 @@ def source(filename="alice.mp3", **overrides):
 
 @pytest.fixture
 def make_panel():
-    def _make(transcript_service=None, task_service=None, chronicle=None):
+    def _make(transcript_service=None, task_service=None, chronicle=None, capabilities=None):
         panel = SourcesPanel(
             chronicle or Chronicle(title="Some Chronicle"),
             transcript_service or AsyncMock(),
             task_service or AsyncMock(),
             theme_colors(True),
             MagicMock(),
+            None,
+            capabilities,
         )
         panel.source_list.update = MagicMock()
         return panel
@@ -401,3 +404,69 @@ class TestNormalizeAction:
         await panel.load()
 
         assert "Normalized" in panel.source_list.controls[0].controls[0].controls[1].value
+
+
+def _buttons(panel):
+    """The action buttons on the first source row, in order."""
+    row = panel.source_list.controls[0]
+    return [control for control in row.controls if isinstance(control, ft.IconButton)]
+
+
+class TestCapabilityGating:
+    """
+    A build or a server that cannot transcribe should say so on the button rather than
+    queue a task that is certain to fail. See docs/deployment-and-rpc.md.
+    """
+
+    @pytest.mark.asyncio
+    async def test_both_actions_are_offered_when_the_service_layer_can_do_them(self, make_panel):
+        transcript_service = AsyncMock()
+        transcript_service.list_audio_sources.return_value = [source()]
+        panel = make_panel(
+            transcript_service=transcript_service,
+            capabilities=lambda: {"transcribe", "normalize"},
+        )
+
+        await panel.load()
+
+        assert [button.disabled for button in _buttons(panel)] == [False, False]
+
+    @pytest.mark.asyncio
+    async def test_a_missing_transcribe_capability_disables_that_button(self, make_panel):
+        transcript_service = AsyncMock()
+        transcript_service.list_audio_sources.return_value = [source()]
+        panel = make_panel(
+            transcript_service=transcript_service, capabilities=lambda: {"normalize"}
+        )
+
+        await panel.load()
+
+        normalize, transcribe = _buttons(panel)
+        assert normalize.disabled is False
+        assert transcribe.disabled is True
+        assert "not available" in transcribe.tooltip
+
+    @pytest.mark.asyncio
+    async def test_a_missing_normalize_capability_disables_that_button(self, make_panel):
+        transcript_service = AsyncMock()
+        transcript_service.list_audio_sources.return_value = [source()]
+        panel = make_panel(
+            transcript_service=transcript_service, capabilities=lambda: {"transcribe"}
+        )
+
+        await panel.load()
+
+        normalize, transcribe = _buttons(panel)
+        assert normalize.disabled is True
+        assert transcribe.disabled is False
+
+    @pytest.mark.asyncio
+    async def test_unknown_capabilities_leave_everything_enabled(self, make_panel):
+        """A handshake that has not landed yet must not grey out half the panel."""
+        transcript_service = AsyncMock()
+        transcript_service.list_audio_sources.return_value = [source()]
+        panel = make_panel(transcript_service=transcript_service, capabilities=None)
+
+        await panel.load()
+
+        assert [button.disabled for button in _buttons(panel)] == [False, False]

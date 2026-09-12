@@ -4,6 +4,7 @@ from pathlib import Path
 
 import flet as ft
 
+from chronicler.core import extras
 from chronicler.core.config import Settings, get_settings
 from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import Chronicle, TranscriptLine
@@ -139,6 +140,7 @@ class TranscriptView(ft.Column):
             self.colors,
             self.show_snackbar,
             self.settings,
+            capabilities,
         )
         self.summaries = SummariesPanel(
             chronicle,
@@ -180,6 +182,25 @@ class TranscriptView(ft.Column):
         self.detail_panel = self._detail_panel()
 
         self.controls = [self._header(), self.actions, self._body()]
+
+    def _record_button(self) -> ft.TextButton:
+        """
+        Recording runs on this machine whatever the deployment mode, so this asks the
+        local extras rather than the service layer's capabilities.
+
+        Enabled when the extra is there, and also when it is merely missing from a source
+        checkout - that is one prompt away. A packaged build without it cannot be fixed
+        from here, so the button says so instead of opening a dialog that ends in an
+        error. See docs/optional-extras.md.
+        """
+        usable = extras.is_usable("recording")
+        return ft.TextButton(
+            t("sources.record"),
+            icon=ft.Icons.MIC,
+            on_click=self.record_clicked,
+            disabled=not usable,
+            tooltip=None if usable else t("sources.record_unavailable"),
+        )
 
     def _can_summarize(self) -> bool:
         """
@@ -316,15 +337,7 @@ class TranscriptView(ft.Column):
                     t_bold(t("transcript.tags"), self.colors.text),
                     ft.Text(tags or t("archive.no_tags"), color=self.colors.muted),
                     ft.Divider(color=self.colors.border),
-                    ft.Row(
-                        controls=[
-                            ft.TextButton(
-                                t("sources.record"),
-                                icon=ft.Icons.MIC,
-                                on_click=self.record_clicked,
-                            )
-                        ]
-                    ),
+                    ft.Row(controls=[self._record_button()]),
                     self.sources,
                     ft.Divider(color=self.colors.border),
                     self.summaries,

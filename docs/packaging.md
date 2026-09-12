@@ -97,6 +97,33 @@ windowed build has nowhere to print the progress bar, and fatally if they are of
 It only acts on a frozen build, and never overrides an `FLET_VIEW_PATH` that is already
 set, which is how `flet build` output is normally tried out.
 
+## The optional extras are in the binary
+
+The release workflow installs `.[transcription,normalization,recording]` before running
+PyInstaller, and on Linux installs `libportaudio2` first. Both matter, and neither is
+optional any more:
+
+* A packaged build **cannot install anything at runtime** — no pip in the bundle, and
+  `sys.executable` is Chronicler itself. Whatever is missing at pack time is missing for
+  the life of that binary. See [optional-extras.md](optional-extras.md).
+* `sounddevice`'s Linux wheel has no PortAudio in it. PyInstaller's hook copies the
+  *system* library, so a runner without `libportaudio2` produces a binary that cannot
+  record, with only a warning in the build log to say so.
+
+No new hidden imports were needed: `import av`, `from faster_whisper import WhisperModel`
+and `import sounddevice` all sit inside functions, and PyInstaller's analysis follows
+those. What it could not follow was a module that was never installed.
+
+The cost is size — roughly 57 MB to roughly 170 MB on Linux, most of it `ctranslate2` and
+`onnxruntime` behind faster-whisper. A onefile build extracts that on every launch, so
+startup is slower than it was. `llm` is left out: `llama-cpp-python` is large and
+CPU-feature specific, and the OpenAI-compatible path needs nothing.
+
+Worth checking on a release binary, because CI cannot: that **Record a new source** opens
+the device picker rather than a greyed-out button, and that a transcription actually runs
+(the Whisper model still downloads on first use — that part is not bundled and cannot
+reasonably be).
+
 ## Hidden imports
 
 PyInstaller's static analysis misses anything imported by name. The list in the spec is

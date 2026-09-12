@@ -171,3 +171,61 @@ class TestInstall:
                     extras.install("recording")
 
         invalidate.assert_called_once()
+
+
+class TestPackagedBuilds:
+    """
+    A PyInstaller build has no pip, `sys.prefix` and `sys.base_prefix` are both the
+    extraction directory, and `sys.executable` is Chronicler itself - so the install path
+    cannot work there and must not be offered. See docs/optional-extras.md.
+    """
+
+    def test_a_frozen_build_cannot_install(self, monkeypatch):
+        monkeypatch.setattr(extras.sys, "frozen", True, raising=False)
+
+        assert extras.can_install() is False
+
+    def test_a_frozen_build_is_recognised(self, monkeypatch):
+        monkeypatch.setattr(extras.sys, "frozen", True, raising=False)
+
+        assert extras.is_frozen() is True
+
+    def test_a_normal_interpreter_is_not_frozen(self):
+        assert extras.is_frozen() is False
+
+    def test_the_message_does_not_name_a_pip_command_that_cannot_be_run(self, monkeypatch):
+        monkeypatch.setattr(extras.sys, "frozen", True, raising=False)
+
+        message = extras.missing_message("transcription")
+
+        assert "pip" not in message
+        assert "this build" in message
+
+    def test_a_missing_system_library_is_still_reported_as_itself(self, monkeypatch):
+        """That one is true whether or not the build is packaged, and is actionable."""
+        monkeypatch.setattr(extras.sys, "frozen", True, raising=False)
+
+        message = extras.missing_message("recording", OSError("PortAudio library not found"))
+
+        assert "libportaudio2" in message
+
+
+class TestUsability:
+    def test_an_installed_extra_is_usable(self, monkeypatch):
+        monkeypatch.setattr(extras, "is_available", lambda name: True)
+        monkeypatch.setattr(extras, "can_install", lambda: False)
+
+        assert extras.is_usable("recording") is True
+
+    def test_a_missing_extra_that_can_be_installed_is_usable(self, monkeypatch):
+        """A source checkout is one prompt away from having it."""
+        monkeypatch.setattr(extras, "is_available", lambda name: False)
+        monkeypatch.setattr(extras, "can_install", lambda: True)
+
+        assert extras.is_usable("recording") is True
+
+    def test_a_missing_extra_in_a_packaged_build_is_not(self, monkeypatch):
+        monkeypatch.setattr(extras, "is_available", lambda name: False)
+        monkeypatch.setattr(extras, "can_install", lambda: False)
+
+        assert extras.is_usable("recording") is False

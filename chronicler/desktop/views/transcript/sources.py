@@ -28,6 +28,7 @@ class SourcesPanel(ft.Column):
         colors: ThemeColors,
         show_snackbar: Callable[[str], None],
         settings: Settings | None = None,
+        capabilities: Callable[[], set[str]] | None = None,
     ):
         self.chronicle = chronicle
         self.transcript_service = transcript_service
@@ -35,6 +36,7 @@ class SourcesPanel(ft.Column):
         self.colors = colors
         self.show_snackbar = show_snackbar
         self.settings = settings or get_settings()
+        self.capabilities = capabilities
         self.sources: dict[str, AudioSource] = {}
 
         self.source_list = ft.Column(spacing=4)
@@ -110,27 +112,55 @@ class SourcesPanel(ft.Column):
                     []
                     if source.is_normalized or source.missing
                     else [
-                        ft.IconButton(
-                            icon=ft.Icons.GRAPHIC_EQ,
-                            icon_size=16,
-                            icon_color=self.colors.muted,
-                            data=source.filename,
-                            on_click=self.normalize_source_clicked,
-                            tooltip=t("sources.normalize"),
+                        self._source_action(
+                            ft.Icons.GRAPHIC_EQ,
+                            source.filename,
+                            self.normalize_source_clicked,
+                            t("sources.normalize"),
+                            enabled=self.can("normalize"),
+                            disabled_tooltip=t("sources.normalize_unavailable"),
                         )
                     ]
                 ),
-                ft.IconButton(
-                    icon=ft.Icons.RECORD_VOICE_OVER,
-                    icon_size=16,
-                    icon_color=self.colors.muted,
-                    data=source.filename,
-                    on_click=self.transcribe_source_clicked,
-                    tooltip=t("transcribe.start_again")
-                    if source.is_transcribed
-                    else t("transcribe.start"),
+                self._source_action(
+                    ft.Icons.RECORD_VOICE_OVER,
+                    source.filename,
+                    self.transcribe_source_clicked,
+                    t("transcribe.start_again") if source.is_transcribed else t("transcribe.start"),
+                    enabled=self.can("transcribe"),
+                    disabled_tooltip=t("sources.transcribe_unavailable"),
                 ),
             ],
+        )
+
+    def can(self, capability: str) -> bool:
+        """
+        Whether the service layer offers `capability`.
+
+        Unknown means "assume it works" - a handshake that has not landed yet should not
+        grey out half the panel. Both answers are the server's in thin-client mode; it is
+        its extras that decide, not this machine's. See docs/deployment-and-rpc.md.
+        """
+        return self.capabilities is None or capability in self.capabilities()
+
+    def _source_action(
+        self,
+        icon: ft.IconData,
+        filename: str,
+        on_click,
+        tooltip: str,
+        enabled: bool,
+        disabled_tooltip: str,
+    ) -> ft.IconButton:
+        """A disabled button still shows a tooltip, which is what lets it explain itself."""
+        return ft.IconButton(
+            icon=icon,
+            icon_size=16,
+            icon_color=self.colors.muted if enabled else self.colors.border,
+            data=filename,
+            on_click=on_click,
+            tooltip=tooltip if enabled else disabled_tooltip,
+            disabled=not enabled,
         )
 
     def _path_of(self, filename: str) -> str:

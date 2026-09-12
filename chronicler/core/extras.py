@@ -112,18 +112,50 @@ def missing_message(name: str, error: BaseException | None = None) -> str:
             f"({extra.apt_hint})."
         )
 
+    if is_frozen():
+        # Naming a pip command here would be a lie: there is no environment to install
+        # into. A release bundles the extras, so this only happens on a build that left
+        # one out deliberately.
+        return f"{extra.purpose} is not included in this build of Chronicler."
+
     message = f"{extra.purpose} requires the '{extra.name}' extra ({extra.pip_extra})."
     if extra.system_packages:
         message += f" On Linux it also needs {', '.join(extra.system_packages)} ({extra.apt_hint})."
     return message
 
 
+def is_frozen() -> bool:
+    """Whether this is a PyInstaller build rather than a Python installation."""
+    return bool(getattr(sys, "frozen", False))
+
+
 def can_install() -> bool:
-    """Whether this interpreter's environment can be written to by pip."""
+    """
+    Whether this interpreter's environment can be written to by pip.
+
+    Never in a packaged build. There is no pip in the bundle, `sys.prefix` and
+    `sys.base_prefix` are both the extraction directory, and `sys.executable` is
+    Chronicler itself - so `sys.executable -m pip install` would relaunch the app with
+    nonsense arguments rather than install anything. A release ships the extras instead;
+    see docs/optional-extras.md.
+    """
+    if is_frozen():
+        return False
     if sys.prefix != sys.base_prefix:
         return True
     purelib = sysconfig.get_paths().get("purelib")
     return purelib is not None and os.access(purelib, os.W_OK)
+
+
+def is_usable(name: str) -> bool:
+    """
+    Whether the feature behind `name` can run - now, or after an install the user can
+    actually perform.
+
+    This is what a button asks before greying itself out. A source checkout missing an
+    extra is a prompt away from having it; a packaged build missing one is not.
+    """
+    return is_available(name) or can_install()
 
 
 def install_command(name: str) -> list[str]:

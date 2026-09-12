@@ -1,16 +1,25 @@
 import logging
 from typing import Any
 
+from chronicler.core import extras
 from chronicler.core.config_sections import AUTO_LANGUAGE, TranscriptionSettings
 from chronicler.core.models import TranscriptLine
 
 logger = logging.getLogger(__name__)
 
+
+class TranscriptionError(RuntimeError):
+    """Transcription could not run - usually because its extra is not there."""
+
+
 _model_cache: dict[tuple[str, str, str], Any] = {}
 
 
 def _get_model(model_size: str, device: str, compute_type: str) -> Any:
-    from faster_whisper import WhisperModel
+    try:
+        from faster_whisper import WhisperModel
+    except (ImportError, OSError) as error:
+        raise TranscriptionError(extras.missing_message("transcription", error)) from error
 
     key = (model_size, device, compute_type)
     if key not in _model_cache:

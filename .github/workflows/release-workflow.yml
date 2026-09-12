@@ -69,10 +69,25 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # PortAudio is not in the sounddevice wheel on Linux - the wheel binds to the
+      # system library, and PyInstaller's hook copies whatever it finds. Without this the
+      # hook warns and the packaged Linux build cannot record. Windows wheels ship their
+      # own DLL.
+      - name: Install PortAudio (Linux)
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+
+      # The extras are installed so PyInstaller can bundle them: a packaged build has no
+      # pip and no environment to install into, so anything left out here is unavailable
+      # for the life of the binary. See docs/optional-extras.md.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install . flet-cli pyinstaller
+          pip install ".[transcription,normalization,recording]" flet-cli pyinstaller
+
+      - name: Verify the extras were installed
+        shell: bash
+        run: python -c "import av, sounddevice, faster_whisper; print('extras present')"
 
       - name: Build with PyInstaller
         run: pyinstaller Chronicler.spec

@@ -1,6 +1,6 @@
 """Tests for TranscriptView - layout, lifecycle and transcript rendering."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import flet as ft
 import pytest
@@ -270,6 +270,27 @@ class TestReadableLayout:
 
         await view.show_timestamps_changed(MagicMock(control=MagicMock(value=False)))
         assert view.transcript_text.value == "Alice: Hi\nBob: Hello"
+
+
+class TestRecordButton:
+    """
+    Recording runs on this machine in every deployment mode, so the button asks the local
+    extras rather than the service layer. See docs/optional-extras.md.
+    """
+
+    def test_it_is_offered_when_the_extra_is_installed(self, make_view):
+        with patch("chronicler.core.extras.is_usable", return_value=True):
+            button = make_view()._record_button()
+
+        assert button.disabled is False
+
+    def test_a_build_that_cannot_record_says_so_instead_of_erroring(self, make_view):
+        """A packaged build without it cannot be fixed from a dialog, so it does not open one."""
+        with patch("chronicler.core.extras.is_usable", return_value=False):
+            button = make_view()._record_button()
+
+        assert button.disabled is True
+        assert "not available" in button.tooltip
 
 
 class TestFocusedReader:
