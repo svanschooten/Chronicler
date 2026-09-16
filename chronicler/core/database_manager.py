@@ -121,6 +121,27 @@ class DatabaseManager:
             self._project_engines[chronicle_id] = engine
             return engine
 
+    async def snapshot_project(
+        self, chronicle_id: str, destination: Path, custom_path: Path | None = None
+    ) -> Path:
+        """
+        Writes a consistent copy of one chronicle's database to `destination`.
+
+        `VACUUM INTO` rather than a file copy: the engine is cached and may have a
+        connection open, so copying the file could catch a write half-made. SQLite builds
+        the copy from committed pages instead, without disturbing the live connection.
+        See docs/storage.md.
+        """
+        if destination.exists():
+            raise FileExistsError(f"Refusing to overwrite {destination}")
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        engine = await self._project_engine(chronicle_id, custom_path)
+        literal = str(destination).replace("'", "''")
+        async with engine.begin() as conn:
+            await conn.exec_driver_sql(f"VACUUM INTO '{literal}'")
+        return destination
+
     async def close_project(self, chronicle_id: str) -> None:
         """
         Releases one chronicle's project database, so its file can be moved or removed.

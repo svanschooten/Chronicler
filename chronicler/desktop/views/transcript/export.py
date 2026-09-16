@@ -6,7 +6,9 @@ from collections.abc import Callable
 import flet as ft
 
 from chronicler.core.models import Chronicle
+from chronicler.core.services.bundle import safe_folder_name
 from chronicler.core.services.transcript_service import TranscriptService
+from chronicler.desktop.dialogs import await_dialog
 from chronicler.desktop.reveal import describe_desktop_integration_error
 from chronicler.desktop.widgets import amber_button
 from chronicler.i18n import t
@@ -21,11 +23,13 @@ class TranscriptExporter:
         transcript_service: TranscriptService,
         show_snackbar: Callable[[str], None],
         file_picker: Callable[[], ft.FilePicker | None],
+        page: Callable[[], ft.Page | None],
     ):
         self.chronicle = chronicle
         self.transcript_service = transcript_service
         self.show_snackbar = show_snackbar
         self._file_picker = file_picker
+        self._page = page
 
     def menu(self) -> ft.PopupMenuButton:
         """The Export dropdown."""
@@ -62,7 +66,7 @@ class TranscriptExporter:
                 ft.PopupMenuItem(
                     content=ft.Text(t("export.zip")),
                     icon=ft.Icons.FOLDER_ZIP,
-                    disabled=True,
+                    on_click=self.export_zip_clicked,
                 ),
             ],
             tooltip=t("export.tooltip"),
@@ -138,6 +142,54 @@ class TranscriptExporter:
 
         await self._save(content, f"{self.default_file_stem()}.pdf", "pdf")
 
+    async def export_zip_clicked(self, e):
+        include_sources = await self._ask_about_sources()
+        if include_sources is None:
+            return
+
+        try:
+            content = await self.transcript_service.export_zip(
+                self.chronicle.id, include_sources=include_sources
+            )
+        except Exception as ex:
+            logger.error(f"Error exporting the chronicle archive: {ex}")
+            self.show_snackbar(t("export.failed", error=ex))
+            return
+
+        await self._save(content, f"{self.default_file_stem()}.zip", "zip")
+
+    async def _ask_about_sources(self) -> bool | None:
+        """
+        Whether to carry the audio, or None if the export was called off.
+
+        Audio dwarfs the rest of the bundle, so it is asked about rather than assumed
+        either way. A page-less exporter still exports - the question is a preference,
+        not a gate.
+        """
+        page = self._page()
+        if page is None:
+            return False
+
+        include_sources = ft.Checkbox(label=t("export.zip_include_sources"), value=False)
+
+        def build(on_choice) -> ft.AlertDialog:
+            return ft.AlertDialog(
+                title=ft.Text(t("export.zip_title")),
+                content=ft.Column(
+                    [ft.Text(t("export.zip_message")), include_sources],
+                    tight=True,
+                ),
+                actions=[
+                    ft.TextButton(t("common.cancel"), on_click=on_choice(lambda: None)),
+                    ft.FilledButton(
+                        t("export.zip_confirm"),
+                        on_click=on_choice(lambda: bool(include_sources.value)),
+                    ),
+                ],
+            )
+
+        return await await_dialog(page, build)
+
     async def _save(self, content: str | bytearray, file_name: str, extension: str) -> None:
         picker = self._file_picker()
         if picker is None:
@@ -174,5 +226,4 @@ class TranscriptExporter:
 
     def default_file_stem(self) -> str:
         """The chronicle title reduced to something safe to suggest as a filename."""
-        safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in self.chronicle.title)
-        return safe or "transcript"
+        return safe_folder_name(self.chronicle.title, fallback="transcript")

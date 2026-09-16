@@ -299,7 +299,16 @@ MESSAGES = {
         "srt": "Untertitel (.srt)",
         "html": "HTML (.html)",
         "pdf": "PDF (.pdf)",
-        "zip": "Chronicle-.zip (in Kürze)",
+        "zip": "Chronicle-Archiv (.zip)",
+        "zip_title": "Chronicle-Archiv exportieren",
+        "zip_message": (
+            "Das Archiv enthält die eigene Datenbank dieser Chronicle - Transkript, Sprecher und "
+            "Zusammenfassungen -, sodass sie anderswo als verknüpfte Chronicle geöffnet werden "
+            "kann. Audio ist deutlich größer als der Rest und bleibt außen vor, sofern nicht "
+            "angefordert."
+        ),
+        "zip_include_sources": "Audioquellen einbeziehen",
+        "zip_confirm": "Exportieren",
         "saved": "Exportiert nach {path}",
         "failed": "Fehler beim Exportieren: {error}",
         "write_failed": "Fehler beim Schreiben der Datei: {error}",

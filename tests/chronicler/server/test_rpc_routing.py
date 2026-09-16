@@ -360,3 +360,51 @@ async def test_handshake_rejects_a_wrong_api_key(tmp_path):
                 await perform_handshake(remote)
     finally:
         await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_document_exports_reach_a_thin_client(tmp_path):
+    """
+    HTML, PDF and the Chronicle archive were unreachable remotely: they return documents,
+    JSON cannot carry bytes, and an unexposed method is not even installed on the proxy -
+    so a thin client's Export menu raised AttributeError instead of exporting. Binary
+    returns now travel as octet-stream. See docs/deployment-and-rpc.md.
+    """
+    import io
+    import zipfile
+
+    from chronicler.core.remote import RemoteContainer
+
+    db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
+    try:
+        await db_manager.init_archive()
+
+        async with db_manager.get_archive_session() as archive_session:
+            chronicle = await SQLiteChronicleRepository(archive_session).create(
+                Chronicle(title="Remote Exports")
+            )
+
+        async with await db_manager.get_project_session(str(chronicle.id)) as project_session:
+            repo = SQLiteTranscriptRepository(project_session)
+            speaker = await repo.get_or_create_speaker("Alice")
+            await repo.add_line(
+                TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Hi")
+            )
+            await project_session.commit()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
+            transcripts = remote.resolve(TranscriptService)
+
+            html = await transcripts.export_html(chronicle.id, "Remote Exports")
+            pdf = await transcripts.export_pdf(chronicle.id, "Remote Exports")
+            archive = await transcripts.export_zip(chronicle.id)
+
+        assert "Alice" in html
+        assert bytes(pdf).startswith(b"%PDF")
+        with zipfile.ZipFile(io.BytesIO(bytes(archive))) as bundle:
+            assert "Remote Exports/project.db" in bundle.namelist()
+            assert bundle.read("Remote Exports/project.db").startswith(b"SQLite format 3")
+    finally:
+        await db_manager.close_all()

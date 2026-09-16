@@ -9,6 +9,9 @@ T = TypeVar("T")
 
 EXPOSED_ATTRIBUTE = "__rpc_exposed__"
 
+BINARY_RETURNS = (bytes, bytearray)
+BINARY_MEDIA_TYPE = "application/octet-stream"
+
 
 def service(cls: type[T] | None = None, *, expose: Sequence[str] | None = None) -> Any:
     """
@@ -79,10 +82,11 @@ class RpcServer:
         app.include_router(router)
 
     def _add_route(self, router: Any, service_cls: type, method: Callable, name: str):
-        from fastapi import Body
+        from fastapi import Body, Response
         from sqlalchemy.ext.asyncio import AsyncSession
 
         sig = inspect.signature(method)
+        returns_binary = method.__annotations__.get("return") in BINARY_RETURNS
 
         new_params = []
         for param_name, param in sig.parameters.items():
@@ -108,14 +112,26 @@ class RpcServer:
             try:
                 instance = scope.resolve(service_cls)
                 bound_method = getattr(instance, name)
-                return await bound_method(*args, **kwargs)
+                result = await bound_method(*args, **kwargs)
             finally:
                 if scope.is_registered(AsyncSession):
                     await scope.resolve(AsyncSession).close()
 
+            if returns_binary:
+                return Response(content=bytes(result), media_type=BINARY_MEDIA_TYPE)
+            return result
+
         wrapper.__signature__ = new_sig  # type: ignore
         wrapper.__name__ = name
-        wrapper.__annotations__ = method.__annotations__
+        wrapper.__annotations__ = dict(method.__annotations__)
+
+        if returns_binary:
+            # A document is returned as it is, so the return annotation has to go with it:
+            # left in place FastAPI builds a response model from it and refuses `bytearray`
+            # outright. Every other route keeps its inferred model.
+            wrapper.__annotations__.pop("return", None)
+            router.add_api_route(f"/{name}", wrapper, methods=["POST"], response_model=None)
+            return
 
         router.add_api_route(f"/{name}", wrapper, methods=["POST"])
 

@@ -288,7 +288,15 @@ MESSAGES = {
         "srt": "Subtitles (.srt)",
         "html": "HTML (.html)",
         "pdf": "PDF (.pdf)",
-        "zip": "Chronicle .zip (coming soon)",
+        "zip": "Chronicle archive (.zip)",
+        "zip_title": "Export Chronicle archive",
+        "zip_message": (
+            "The archive holds this chronicle's own database - its transcript, speakers and "
+            "summaries - so it can be opened as a linked chronicle elsewhere. Audio is much "
+            "larger than the rest and is left out unless you ask for it."
+        ),
+        "zip_include_sources": "Include the audio sources",
+        "zip_confirm": "Export",
         "saved": "Exported to {path}",
         "failed": "Error exporting transcript: {error}",
         "write_failed": "Error writing export file: {error}",

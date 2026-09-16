@@ -1,4 +1,5 @@
 import logging
+import tempfile
 import textwrap
 from pathlib import Path
 from uuid import UUID
@@ -11,6 +12,12 @@ from chronicler.core.models import AudioSource, Summary, TranscriptLine
 from chronicler.core.processing.fingerprint import fingerprint_file
 from chronicler.core.repositories import ChronicleRepository, KnownSpeakerRepository
 from chronicler.core.rpc import service
+from chronicler.core.services.bundle import (
+    DATABASE_NAME,
+    BundleManifest,
+    format_bundle,
+    safe_folder_name,
+)
 from chronicler.core.services.html import format_html
 from chronicler.core.services.pdf import format_pdf
 from chronicler.core.services.srt import format_srt
@@ -31,9 +38,12 @@ NORMALIZED_SUFFIX = ".normalized.wav"
         "assign_speaker",
         "chronicle_directory",
         "delete_summary",
+        "export_html",
+        "export_pdf",
         "export_plaintext",
         "delete_line",
         "export_srt",
+        "export_zip",
         "get_transcript",
         "list_audio_sources",
         "list_summaries",
@@ -182,6 +192,38 @@ class TranscriptService:
         """PDF for a transcribed chronicle."""
         lines = await self.get_transcript(chronicle_id)
         return format_pdf(lines, chronicle_title)
+
+    async def export_zip(self, chronicle_id: UUID, include_sources: bool = False) -> bytearray:
+        """
+        A portable copy of the chronicle: its own database, plus a manifest naming what
+        the workspace database knows and optionally the audio it was built from.
+
+        Audio is opt-in because it dwarfs everything else - a bundle without it is a few
+        hundred kilobytes, one with it is however many hours of recording. Left out, the
+        sources are still listed in the manifest and their rows still exist, so they read
+        as missing rather than as never having been there.
+        """
+        chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
+        if chronicle is None:
+            raise LookupError(f"There is no chronicle {chronicle_id} to export")
+
+        on_disk = await self._on_disk(chronicle_id)
+        manifest = BundleManifest.of(
+            chronicle, [path.name for path in on_disk], sources_included=include_sources
+        )
+
+        with tempfile.TemporaryDirectory() as workspace:
+            snapshot = await self.db_manager.snapshot_project(
+                str(chronicle_id),
+                Path(workspace) / DATABASE_NAME,
+                custom_path=await self._project_path(chronicle_id),
+            )
+            return format_bundle(
+                snapshot,
+                manifest,
+                root=safe_folder_name(chronicle.title),
+                sources=on_disk if include_sources else (),
+            )
 
     async def list_summaries(self, chronicle_id: UUID) -> list[Summary]:
         """Every generated summary, numbered in the order they were produced."""

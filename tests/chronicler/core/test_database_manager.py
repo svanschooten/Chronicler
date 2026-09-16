@@ -218,3 +218,102 @@ class TestConcurrentProjectSessions:
                 await extra.close()
         finally:
             await db_manager.close_all()
+
+
+class TestProjectSnapshots:
+    """`snapshot_project` is what makes a Chronicle archive export consistent."""
+
+    @pytest.mark.asyncio
+    async def test_snapshot_copies_the_committed_contents(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        chronicle_id = "snapshot-me"
+
+        async with await db_manager.get_project_session(chronicle_id) as session:
+            session.add(DBSpeaker(name="Maldal"))
+            await session.commit()
+
+        destination = tmp_path / "out" / "project.db"
+        await db_manager.snapshot_project(chronicle_id, destination)
+
+        assert destination.exists()
+        copy = DatabaseManager(tmp_path / "elsewhere")
+        async with await copy.get_project_session("read-back", custom_path=destination) as session:
+            names = (await session.execute(select(DBSpeaker.name))).scalars().all()
+        assert list(names) == ["Maldal"]
+
+        await copy.close_all()
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_the_live_database_still_works_after_a_snapshot(self, tmp_path):
+        """A snapshot must not disturb the connection the app is still using."""
+        db_manager = DatabaseManager(tmp_path)
+        chronicle_id = "still-live"
+
+        async with await db_manager.get_project_session(chronicle_id) as session:
+            session.add(DBSpeaker(name="Before"))
+            await session.commit()
+
+        await db_manager.snapshot_project(chronicle_id, tmp_path / "out" / "project.db")
+
+        async with await db_manager.get_project_session(chronicle_id) as session:
+            session.add(DBSpeaker(name="After"))
+            await session.commit()
+            names = (await session.execute(select(DBSpeaker.name))).scalars().all()
+        assert sorted(names) == ["After", "Before"]
+
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_snapshot_follows_a_linked_chronicle_to_its_own_path(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        linked = tmp_path / "elsewhere" / "project.db"
+        linked.parent.mkdir(parents=True)
+
+        async with await db_manager.get_project_session("linked", custom_path=linked) as session:
+            session.add(DBSpeaker(name="Windrider"))
+            await session.commit()
+
+        destination = tmp_path / "out" / "project.db"
+        await db_manager.snapshot_project("linked", destination, custom_path=linked)
+
+        assert destination.exists()
+        assert not (tmp_path / "chronicles" / "linked").exists()
+
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_snapshot_refuses_to_overwrite_an_existing_file(self, tmp_path):
+        """
+        SQLite's own rule, surfaced rather than swallowed: VACUUM INTO will not write over
+        a file that is already there, and silently reusing a stale one would ship it.
+        """
+        db_manager = DatabaseManager(tmp_path)
+        destination = tmp_path / "taken.db"
+        destination.write_text("not a database")
+
+        with pytest.raises(FileExistsError):
+            await db_manager.snapshot_project("whatever", destination)
+
+        assert destination.read_text() == "not a database"
+
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_path_with_a_quote_in_it_is_still_snapshotted(self, tmp_path):
+        """
+        The destination goes into SQL as a literal, so a quote in the path has to survive
+        being escaped rather than truncating the statement.
+        """
+        db_manager = DatabaseManager(tmp_path)
+
+        async with await db_manager.get_project_session("quoted") as session:
+            session.add(DBSpeaker(name="Sergus"))
+            await session.commit()
+
+        destination = tmp_path / "it's here" / "project.db"
+        await db_manager.snapshot_project("quoted", destination)
+
+        assert destination.exists()
+
+        await db_manager.close_all()

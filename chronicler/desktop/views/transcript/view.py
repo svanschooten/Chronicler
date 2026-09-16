@@ -132,6 +132,7 @@ class TranscriptView(ft.Column):
             transcript_service,
             self.show_snackbar,
             lambda: self.file_picker,
+            lambda: self.page,
         )
         self.sources = SourcesPanel(
             chronicle,

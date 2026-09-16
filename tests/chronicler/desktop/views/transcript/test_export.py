@@ -1,5 +1,6 @@
 """Tests for TranscriptExporter - the Export menu and save flow."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import flet as ft
@@ -11,33 +12,45 @@ from chronicler.desktop.views.transcript.export import TranscriptExporter
 
 @pytest.fixture
 def make_exporter():
-    def _make(chronicle=None, transcript_service=None, file_picker=None):
+    def _make(chronicle=None, transcript_service=None, file_picker=None, page=None):
         picker = AsyncMock() if file_picker is None else file_picker
+        the_page = MagicMock(spec=ft.Page) if page is None else page
         exporter = TranscriptExporter(
             chronicle or Chronicle(title="Some Chronicle"),
             transcript_service or AsyncMock(),
             MagicMock(),
             lambda: picker,
+            lambda: the_page,
         )
         return exporter, picker
 
     return _make
 
 
+async def _answer_dialog(page, choose, *, tick=None):
+    """Waits for the dialog to be shown, lets `choose` act on it, then clicks a button."""
+    await asyncio.sleep(0)
+    (dialog,), _ = page.show_dialog.call_args
+    if tick is not None:
+        tick(dialog)
+    await choose(dialog).on_click(MagicMock())
+
+
 def _event(data=False):
     return MagicMock(control=MagicMock(data=data))
 
 
-def test_menu_offers_available_exports_now_and_signposts_the_rest():
-    exporter = TranscriptExporter(Chronicle(title="T"), AsyncMock(), MagicMock(), lambda: None)
+def test_menu_offers_every_export():
+    exporter = TranscriptExporter(
+        Chronicle(title="T"), AsyncMock(), MagicMock(), lambda: None, lambda: None
+    )
 
     menu = exporter.menu()
 
     enabled = [item for item in menu.items if not item.disabled]
-    disabled = [item for item in menu.items if item.disabled]
-    assert len(enabled) == 5
+    assert len(enabled) == 6
+    assert len(menu.items) == 6
     assert [item.data for item in enabled[:2]] == [False, True]
-    assert len(disabled) == 1  # TODO remove once zip export is implemented
 
 
 @pytest.mark.asyncio
@@ -134,7 +147,9 @@ async def test_export_reports_when_there_is_no_picker_yet(make_exporter):
     ],
 )
 def test_default_file_stem_strips_path_unsafe_characters(title, expected):
-    exporter = TranscriptExporter(Chronicle(title=title), AsyncMock(), MagicMock(), lambda: None)
+    exporter = TranscriptExporter(
+        Chronicle(title=title), AsyncMock(), MagicMock(), lambda: None, lambda: None
+    )
 
     assert exporter.default_file_stem() == expected
 
@@ -195,3 +210,86 @@ async def test_export_srt_cancelled_at_the_picker_writes_nothing(make_exporter, 
     await exporter.export_srt_clicked(_event())
 
     assert list(tmp_path.iterdir()) == []
+
+
+class TestZipExport:
+    @pytest.mark.asyncio
+    async def test_it_asks_about_audio_and_leaves_it_out_by_default(self, make_exporter, tmp_path):
+        transcript_service = AsyncMock()
+        transcript_service.export_zip.return_value = bytearray(b"PK\x03\x04")
+        page = MagicMock(spec=ft.Page)
+        exporter, picker = make_exporter(transcript_service=transcript_service, page=page)
+        destination = tmp_path / "chronicle.zip"
+        picker.save_file.return_value = str(destination)
+
+        task = asyncio.ensure_future(exporter.export_zip_clicked(_event()))
+        await _answer_dialog(page, lambda dialog: dialog.actions[-1])
+        await asyncio.wait_for(task, timeout=1)
+
+        transcript_service.export_zip.assert_awaited_once_with(
+            exporter.chronicle.id, include_sources=False
+        )
+        assert destination.read_bytes() == b"PK\x03\x04"
+        assert picker.save_file.await_args.kwargs["allowed_extensions"] == ["zip"]
+
+    @pytest.mark.asyncio
+    async def test_ticking_the_box_includes_the_audio(self, make_exporter, tmp_path):
+        transcript_service = AsyncMock()
+        transcript_service.export_zip.return_value = bytearray(b"PK")
+        page = MagicMock(spec=ft.Page)
+        exporter, picker = make_exporter(transcript_service=transcript_service, page=page)
+        picker.save_file.return_value = str(tmp_path / "chronicle.zip")
+
+        def tick(dialog):
+            dialog.content.controls[-1].value = True
+
+        task = asyncio.ensure_future(exporter.export_zip_clicked(_event()))
+        await _answer_dialog(page, lambda dialog: dialog.actions[-1], tick=tick)
+        await asyncio.wait_for(task, timeout=1)
+
+        transcript_service.export_zip.assert_awaited_once_with(
+            exporter.chronicle.id, include_sources=True
+        )
+
+    @pytest.mark.asyncio
+    async def test_cancelling_the_dialog_exports_nothing(self, make_exporter, tmp_path):
+        transcript_service = AsyncMock()
+        page = MagicMock(spec=ft.Page)
+        exporter, picker = make_exporter(transcript_service=transcript_service, page=page)
+
+        task = asyncio.ensure_future(exporter.export_zip_clicked(_event()))
+        await _answer_dialog(page, lambda dialog: dialog.actions[0])
+        await asyncio.wait_for(task, timeout=1)
+
+        transcript_service.export_zip.assert_not_awaited()
+        picker.save_file.assert_not_awaited()
+        assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.asyncio
+    async def test_a_failure_is_reported_without_opening_the_save_dialog(self, make_exporter):
+        transcript_service = AsyncMock()
+        transcript_service.export_zip.side_effect = RuntimeError("boom")
+        page = MagicMock(spec=ft.Page)
+        exporter, picker = make_exporter(transcript_service=transcript_service, page=page)
+
+        task = asyncio.ensure_future(exporter.export_zip_clicked(_event()))
+        await _answer_dialog(page, lambda dialog: dialog.actions[-1])
+        await asyncio.wait_for(task, timeout=1)
+
+        picker.save_file.assert_not_awaited()
+        assert "boom" in exporter.show_snackbar.call_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_without_a_page_it_exports_without_the_audio(self, make_exporter, tmp_path):
+        """A dialog is a preference, not a gate - a page-less exporter still works."""
+        transcript_service = AsyncMock()
+        transcript_service.export_zip.return_value = bytearray(b"PK")
+        exporter, picker = make_exporter(transcript_service=transcript_service)
+        exporter._page = lambda: None
+        picker.save_file.return_value = str(tmp_path / "chronicle.zip")
+
+        await exporter.export_zip_clicked(_event())
+
+        transcript_service.export_zip.assert_awaited_once_with(
+            exporter.chronicle.id, include_sources=False
+        )

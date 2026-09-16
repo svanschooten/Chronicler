@@ -5,7 +5,7 @@ from typing import Any, TypeVar, get_type_hints
 import httpx
 from pydantic import TypeAdapter
 
-from chronicler.core.rpc import exposed_methods
+from chronicler.core.rpc import BINARY_RETURNS, exposed_methods
 
 T = TypeVar("T")
 
@@ -58,9 +58,12 @@ class RemoteServiceProxy:
             response = await self._client.post(url, json=json_payload, headers=headers)
             response.raise_for_status()
 
-            data = response.json()
-
             return_type = param_hints.get("return")
+
+            if return_type in BINARY_RETURNS:
+                return bytearray(response.content)
+
+            data = response.json()
 
             if return_type:
                 return TypeAdapter(return_type).validate_python(data)

@@ -293,7 +293,15 @@ MESSAGES = {
         "srt": "Ondertitels (.srt)",
         "html": "HTML (.html)",
         "pdf": "PDF (.pdf)",
-        "zip": "Chronicle .zip (binnenkort)",
+        "zip": "Chronicle-archief (.zip)",
+        "zip_title": "Chronicle-archief exporteren",
+        "zip_message": (
+            "Het archief bevat de eigen database van deze chronicle - het transcript, de sprekers "
+            "en de samenvattingen - zodat je hem elders als gekoppelde chronicle kunt openen. "
+            "Audio is veel groter dan de rest en blijft eruit tenzij je erom vraagt."
+        ),
+        "zip_include_sources": "Audiobronnen meenemen",
+        "zip_confirm": "Exporteren",
         "saved": "Geëxporteerd naar {path}",
         "failed": "Fout bij exporteren: {error}",
         "write_failed": "Fout bij schrijven van bestand: {error}",
