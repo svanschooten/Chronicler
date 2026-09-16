@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 DESKTOP_MODE = "client:desktop"
 BUNDLED_CLIENT_DIR = Path("flet_desktop") / "app" / "flet"
+EMBEDDED_CLIENT_DIR = Path("share") / "flet-client"
 
 
 def run_desktop():
@@ -27,23 +28,35 @@ def run_desktop():
 
 def use_bundled_flet_client() -> None:
     """
-    Points Flet at the client PyInstaller bundled into this executable, so a packaged
-    launch never reaches for the copy in `~/.flet`. See docs/packaging.md.
+    Points Flet at the client a packaged build ships, so a packaged launch never reaches
+    for the copy in `~/.flet`. See docs/packaging.md.
 
-    Only a frozen build has one to point at, and an explicit FLET_VIEW_PATH is left alone
-    so a developer can still aim the app at a locally built client.
+    That is the client PyInstaller bundled into the executable, or the one inside the
+    embedded runtime. An explicit FLET_VIEW_PATH is left alone so a developer can still
+    aim the app at a locally built client.
     """
-    bundle = getattr(sys, "_MEIPASS", None)
-    if bundle is None or os.environ.get("FLET_VIEW_PATH"):
+    if os.environ.get("FLET_VIEW_PATH"):
         return
 
-    client = Path(bundle) / BUNDLED_CLIENT_DIR
-    if not client.is_dir():
-        logger.warning(f"No Flet client bundled at {client}; falling back to the cache")
+    client = packaged_flet_client()
+    if client is None:
         return
 
     logger.info(f"Using the bundled Flet client at {client}")
     os.environ["FLET_VIEW_PATH"] = str(client)
+
+
+def packaged_flet_client() -> Path | None:
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle is not None:
+        client = Path(bundle) / BUNDLED_CLIENT_DIR
+        if client.is_dir():
+            return client
+        logger.warning(f"No Flet client bundled at {client}; falling back to the cache")
+        return None
+
+    embedded = Path(sys.prefix) / EMBEDDED_CLIENT_DIR
+    return embedded if embedded.is_dir() else None
 
 
 async def start(page: ft.Page) -> None:

@@ -1,23 +1,19 @@
 """
 Entry point of the embedded runtime, installed into it as `chronicler_launcher`.
 
-Before Chronicler starts it puts the installed components on the import path and points
-Flet at the client shipped inside the runtime. `components` is a small command line for
-installing components from the locks the build embedded; it stands in for the component
-manager until that is part of the app itself.
+Before Chronicler starts it puts the installed components on the import path. The
+`components` command line installs them from the locks the build embedded; it stands in
+for the component manager until that is part of the app itself. See docs/runtime-build.md.
 """
 
 import hashlib
-import os
 import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-SHARE = Path(sys.prefix) / "share"
-LOCKS = SHARE / "chronicler" / "locks"
-FLET_CLIENT = SHARE / "flet-client"
+LOCKS = Path(sys.prefix) / "share" / "chronicler" / "locks"
 
 
 def components_root() -> Path:
@@ -53,8 +49,6 @@ def activate() -> None:
     target = active_dir()
     if target is not None and str(target) not in sys.path:
         sys.path.append(str(target))
-    if FLET_CLIENT.is_dir() and not os.environ.get("FLET_VIEW_PATH"):
-        os.environ["FLET_VIEW_PATH"] = str(FLET_CLIENT)
 
 
 def install(names: list[str]) -> int:
@@ -115,9 +109,11 @@ def smoke(audio: str) -> int:
 
 
 def where() -> int:
+    from chronicler.desktop.main import packaged_flet_client
+
     print(f"prefix={sys.prefix}")
     print(f"executable={sys.executable}")
-    print(f"flet_client={FLET_CLIENT if FLET_CLIENT.is_dir() else None}")
+    print(f"flet_client={packaged_flet_client()}")
     print(f"components={active_dir()}")
     return 0
 

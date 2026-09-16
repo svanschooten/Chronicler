@@ -29,7 +29,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.runtime.locks import uv  # noqa: E402
+from scripts.runtime.locks import LOCKS_DIR, uv  # noqa: E402
 from scripts.runtime.pins import (  # noqa: E402
     FLET_CLIENT_VERSION,
     FLET_CLIENTS,
@@ -41,6 +41,7 @@ from scripts.runtime.pins import (  # noqa: E402
 )
 
 LAUNCHER_MODULE = "chronicler_launcher"
+WINDOWS_GUI_ATTRIBUTE = '#![windows_subsystem = "windows"]'
 
 
 def log(message: str) -> None:
@@ -158,7 +159,7 @@ def trim(root: Path, patterns: tuple[str, ...]) -> None:
 
 
 def archive_runtime(root: Path, work: Path) -> Path:
-    import zstandard
+    import zstandard  # type: ignore[import-not-found]
 
     staging = work / "runtime.tar.zst"
     compressor = zstandard.ZstdCompressor(level=19, threads=-1)
@@ -174,6 +175,16 @@ def archive_runtime(root: Path, work: Path) -> Path:
     return archive
 
 
+def use_windows_gui_subsystem(main: Path) -> None:
+    """
+    PyApp's launcher is always a console executable, so double-clicking even its GUI
+    variant opens a console window next to the app. See docs/runtime-build.md.
+    """
+    text = main.read_text()
+    if WINDOWS_GUI_ATTRIBUTE not in text:
+        main.write_text(f"{WINDOWS_GUI_ATTRIBUTE}\n{text}")
+
+
 def build_launcher(
     platform: str, archive: Path, variant: str, version: str, work: Path, cache: Path
 ) -> Path:
@@ -185,6 +196,8 @@ def build_launcher(
     shutil.rmtree(source_root, ignore_errors=True)
     extract(fetch(PYAPP_SOURCE, cache), source_root)
     (source,) = [path.parent for path in source_root.rglob("Cargo.toml")]
+    if variant == "gui" and platform == "windows":
+        use_windows_gui_subsystem(source / "src" / "main.rs")
 
     spec = PLATFORMS[platform]
     env = {
@@ -212,7 +225,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     parser.add_argument("--platform", choices=sorted(PLATFORMS), default=host())
     parser.add_argument("--variant", choices=["console", "gui"], default="console")
-    parser.add_argument("--locks", type=Path, help="default: build/runtime/locks/<platform>")
+    parser.add_argument("--locks", type=Path, help="default: scripts/runtime/locks/<platform>")
     parser.add_argument("--out", type=Path, default=REPO_ROOT / "dist" / "runtime")
     parser.add_argument("--version", default=chronicler_version())
     args = parser.parse_args()
@@ -224,9 +237,9 @@ def main() -> None:
     spec = PLATFORMS[args.platform]
     work = REPO_ROOT / "build" / "runtime" / args.platform
     cache = REPO_ROOT / "build" / "runtime" / "cache"
-    locks = args.locks or REPO_ROOT / "build" / "runtime" / "locks" / args.platform
+    locks = args.locks or LOCKS_DIR / args.platform
     if not (locks / "base.lock").is_file():
-        raise SystemExit(f"No locks in {locks}; run scripts/runtime/locks.py first")
+        raise SystemExit(f"No locks in {locks}; run scripts/runtime/locks.py")
 
     root = work / "runtime"
     shutil.rmtree(root, ignore_errors=True)

@@ -7,10 +7,12 @@ import subprocess
 import sys
 import sysconfig
 from dataclasses import dataclass, field
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 INSTALL_TIMEOUT_SECONDS = 900
+COMPONENT_LOCKS = Path("share") / "chronicler" / "locks"
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,14 @@ def missing_message(name: str, error: BaseException | None = None) -> str:
         # one out deliberately.
         return f"{extra.purpose} is not included in this build of Chronicler."
 
+    if is_embedded_runtime():
+        if not is_component(name):
+            return f"{extra.purpose} is not included in this build of Chronicler."
+        return (
+            f"{extra.purpose} is a downloadable component. Install it by running the "
+            f"Chronicler executable with: components install {extra.name}"
+        )
+
     message = f"{extra.purpose} requires the '{extra.name}' extra ({extra.pip_extra})."
     if extra.system_packages:
         message += f" On Linux it also needs {', '.join(extra.system_packages)} ({extra.apt_hint})."
@@ -129,6 +139,19 @@ def is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def is_embedded_runtime() -> bool:
+    """
+    Whether this is the embedded-runtime build, recognised by the component locks it ships.
+    See docs/runtime-build.md.
+    """
+    return (Path(sys.prefix) / COMPONENT_LOCKS).is_dir()
+
+
+def is_component(name: str) -> bool:
+    """Whether the embedded runtime can download `name` as a component."""
+    return (Path(sys.prefix) / COMPONENT_LOCKS / f"component-{name}.lock").is_file()
+
+
 def can_install() -> bool:
     """
     Whether this interpreter's environment can be written to by pip.
@@ -138,8 +161,11 @@ def can_install() -> bool:
     Chronicler itself - so `sys.executable -m pip install` would relaunch the app with
     nonsense arguments rather than install anything. A release ships the extras instead;
     see docs/optional-extras.md.
+
+    Not through pip in the embedded runtime either: an unpinned package installed into it
+    is gone after the next update. Components install from the locks it ships instead.
     """
-    if is_frozen():
+    if is_frozen() or is_embedded_runtime():
         return False
     if sys.prefix != sys.base_prefix:
         return True

@@ -110,6 +110,12 @@ PLATFORMS = {
     ),
 }
 
+# Sixteen seconds of public-domain English speech, for the post-build transcription check.
+SMOKE_AUDIO = Artifact(
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/1-two-speakers-en.wav",
+    "f1c877dc01595e28be7147bf2fe38e5268147a868bf3fdb5c37b97f5940e21f3",
+)
+
 # llama-cpp-python is deliberately absent: PyPI has no wheels for it, so local .gguf
 # models stay a source-install feature.
 COMPONENTS = ("transcription", "normalization", "recording")
