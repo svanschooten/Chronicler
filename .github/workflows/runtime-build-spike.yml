@@ -1,0 +1,105 @@
+# THROWAWAY - delete before feature/modular-build is merged.
+#
+# Builds the embedded-runtime (PyApp) executable on Linux and Windows and smoke-tests it
+# headlessly: launch, component install from the hash-pinned locks, and an offline-model
+# transcription. The Windows job also reports the PE subsystem of both launchers, which
+# decides whether a double-click flashes a console. Binaries are uploaded for hands-on
+# testing.
+name: Runtime build spike
+on:
+  push:
+    branches:
+      - feature/modular-build
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-build-spike-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            variants: console
+            binary: dist/runtime/Chronicler-console
+          - os: windows-latest
+            platform: windows
+            variants: console gui
+            binary: dist/runtime/Chronicler-console.exe
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv and Rust
+        run: |
+          python -m pip install --upgrade pip uv
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo --version
+
+      - name: Install PortAudio (Linux)
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+
+      - name: Generate locks
+        run: uv run --no-project --python 3.12 python scripts/runtime/locks.py --platform ${{ matrix.platform }} --out build/runtime/locks/${{ matrix.platform }}
+
+      - name: Build
+        run: |
+          for variant in ${{ matrix.variants }}; do
+            uv run --no-project --python 3.12 --with zstandard python scripts/runtime/build.py --variant "$variant"
+          done
+          ls -la dist/runtime
+
+      - name: Report Windows launcher subsystems
+        if: matrix.platform == 'windows'
+        run: |
+          python - <<'PY'
+          import struct
+          from pathlib import Path
+          names = {2: "GUI (no console)", 3: "CONSOLE (a double-click opens a console window)"}
+          for exe in sorted(Path("dist/runtime").glob("*.exe")):
+              data = exe.read_bytes()[:4096]
+              header = struct.unpack_from("<I", data, 0x3C)[0]
+              subsystem = struct.unpack_from("<H", data, header + 24 + 68)[0]
+              print(f"{exe.name}: subsystem {subsystem} = {names.get(subsystem, 'other')}")
+          PY
+
+      - name: Smoke - first and warm launch
+        run: |
+          for run in first warm; do
+            start=$(date +%s.%N)
+            ./${{ matrix.binary }} --help > launch.txt
+            end=$(date +%s.%N)
+            python -c "print('$run launch: %.2fs' % ($end - $start))"
+          done
+          head -2 launch.txt
+          ./${{ matrix.binary }} components where
+
+      - name: Smoke - install components from the locks
+        run: ./${{ matrix.binary }} components install transcription normalization recording
+
+      - name: Smoke - transcribe
+        run: |
+          curl -sSfL -o speech.wav https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/1-two-speakers-en.wav
+          ./${{ matrix.binary }} components smoke speech.wav
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: chronicler-runtime-${{ matrix.platform }}
+          path: dist/runtime/
