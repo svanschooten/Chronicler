@@ -224,3 +224,24 @@ jobs:
           path: |
             junit.xml
             coverage.xml
+
+  runtime-locks:
+    name: Runtime Locks Are Current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        name: Checkout Repository
+
+      - uses: actions/setup-python@v7
+        name: Setup Python
+        with:
+          python-version: "3.12"
+
+      # The embedded-runtime build installs exactly these locks, so a pyproject.toml change
+      # that is not reflected in them would ship something other than what was reviewed.
+      # uv resolves for Windows from Linux, so one runner checks both. See
+      # docs/runtime-build.md.
+      - name: Check the locks
+        run: |
+          python -m pip install uv
+          python scripts/runtime/locks.py --check

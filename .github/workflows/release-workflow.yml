@@ -98,8 +98,88 @@ jobs:
           name: ${{ matrix.asset_name }}
           path: ${{ matrix.executable_path }}
 
+  # The embedded-runtime build: a PyApp launcher around a trimmed standalone CPython, with
+  # transcription, normalization and recording installable later from the hash-pinned
+  # locks it ships. Released next to the PyInstaller build until it has proven itself.
+  # See docs/runtime-build.md.
+  runtime:
+    name: Build the embedded runtime on ${{ matrix.os }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Stamp release version
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          sed -i -E "s/^__version__ = \".*\"$/__version__ = \"${VERSION}\"/" chronicler/__init__.py
+          grep -qx "__version__ = \"${VERSION}\"" chronicler/__init__.py
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv and Rust
+        run: |
+          python -m pip install --upgrade pip uv
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      # Only for the smoke test's recording check; the runtime itself binds to the user's
+      # PortAudio at run time, exactly like a source install.
+      - name: Install PortAudio (Linux)
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+
+      - name: Build
+        run: |
+          variants="console"
+          if [ "${{ matrix.platform }}" = "windows" ]; then variants="gui console"; fi
+          for variant in $variants; do
+            uv run --no-project --python 3.12 --with zstandard python scripts/runtime/build.py --variant "$variant"
+          done
+
+      - name: Smoke test
+        run: |
+          python scripts/runtime/smoke.py --subsystems dist/runtime
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            python scripts/runtime/smoke.py dist/runtime/Chronicler-console.exe
+          else
+            python scripts/runtime/smoke.py dist/runtime/Chronicler-console
+          fi
+
+      - name: Name the release assets
+        run: |
+          mkdir release
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            cp dist/runtime/Chronicler-gui.exe release/Chronicler-modular.exe
+            cp dist/runtime/Chronicler-console.exe release/Chronicler-modular-cli.exe
+          else
+            cp dist/runtime/Chronicler-console release/Chronicler-modular
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-${{ matrix.platform }}
+          path: release/
+
   release:
-    needs: pack
+    needs: [pack, runtime]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts

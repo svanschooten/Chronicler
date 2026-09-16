@@ -195,6 +195,33 @@ def test_a_client_chosen_by_hand_is_not_overridden(tmp_path, monkeypatch):
     assert desktop_main.os.environ["FLET_VIEW_PATH"] == "/somewhere/else"
 
 
+def runtime_with_client(tmp_path, monkeypatch) -> str:
+    """The embedded runtime, whose client sits under its prefix rather than in a bundle."""
+    client = tmp_path / desktop_main.EMBEDDED_CLIENT_DIR
+    client.mkdir(parents=True)
+    monkeypatch.delattr(desktop_main.sys, "_MEIPASS", raising=False)
+    monkeypatch.setattr(desktop_main.sys, "prefix", str(tmp_path))
+    monkeypatch.delenv("FLET_VIEW_PATH", raising=False)
+    return str(client)
+
+
+def test_the_embedded_runtime_uses_the_client_it_ships(tmp_path, monkeypatch):
+    client = runtime_with_client(tmp_path, monkeypatch)
+
+    desktop_main.use_bundled_flet_client()
+
+    assert desktop_main.os.environ["FLET_VIEW_PATH"] == client
+
+
+def test_the_embedded_runtime_leaves_a_client_chosen_by_hand_alone(tmp_path, monkeypatch):
+    runtime_with_client(tmp_path, monkeypatch)
+    monkeypatch.setenv("FLET_VIEW_PATH", "/somewhere/else")
+
+    desktop_main.use_bundled_flet_client()
+
+    assert desktop_main.os.environ["FLET_VIEW_PATH"] == "/somewhere/else"
+
+
 def test_a_bundle_without_a_client_falls_back_rather_than_failing(tmp_path, monkeypatch):
     monkeypatch.setattr(desktop_main.sys, "_MEIPASS", str(tmp_path), raising=False)
     monkeypatch.delenv("FLET_VIEW_PATH", raising=False)

@@ -210,6 +210,48 @@ class TestPackagedBuilds:
         assert "libportaudio2" in message
 
 
+class TestEmbeddedRuntime:
+    """
+    The embedded runtime is a real Python, so pip would work - but whatever it installed
+    would be gone after the next update. Components install from the locks it ships.
+    See docs/runtime-build.md.
+    """
+
+    @pytest.fixture
+    def runtime(self, tmp_path, monkeypatch):
+        locks = tmp_path / extras.COMPONENT_LOCKS
+        locks.mkdir(parents=True)
+        (locks / "component-transcription.lock").write_text("faster-whisper==1.2.1\n")
+        monkeypatch.setattr(extras.sys, "prefix", str(tmp_path))
+        return locks
+
+    def test_the_shipped_locks_identify_the_runtime(self, runtime):
+        assert extras.is_embedded_runtime() is True
+
+    def test_a_normal_interpreter_is_not_the_embedded_runtime(self):
+        assert extras.is_embedded_runtime() is False
+
+    def test_pip_is_not_offered(self, runtime):
+        assert extras.can_install() is False
+
+    def test_a_component_is_named_as_one_to_install(self, runtime):
+        message = extras.missing_message("transcription")
+
+        assert "components install transcription" in message
+        assert "pip" not in message
+
+    def test_an_extra_without_a_lock_is_not_in_this_build(self, runtime):
+        message = extras.missing_message("llm")
+
+        assert "not included in this build" in message
+        assert "pip" not in message
+
+    def test_a_missing_system_library_is_still_reported_as_itself(self, runtime):
+        message = extras.missing_message("recording", OSError("PortAudio library not found"))
+
+        assert "libportaudio2" in message
+
+
 class TestUsability:
     def test_an_installed_extra_is_usable(self, monkeypatch):
         monkeypatch.setattr(extras, "is_available", lambda name: True)
