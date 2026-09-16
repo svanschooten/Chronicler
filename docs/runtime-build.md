@@ -105,14 +105,21 @@ still opened a console window next to the app (CI reads the PE header to report 
 `build.py` therefore prepends `#![windows_subsystem = "windows"]` to PyApp's `main.rs` for
 the GUI variant - the source is built here anyway, so a one-line patch beats a fork.
 
-The first launch on Windows is slow: about 50 seconds on a CI runner against about one
-second on Linux, for the same ~8,000 files. The throwaway spike workflow times it with and
-without a Defender exclusion to find out how much of that is antivirus scanning. A GUI
-launcher shows nothing while it unpacks, so this has to be solved before the format
-replaces the PyInstaller build.
-
 Linux needs only the console variant: there is no console window to hide, and the GUI mode
 would detach `chronicler server` from the terminal that started it.
+
+## Known rough edges
+
+* **The first launch on Windows unpacks for a while.** Measured for the same ~8,000 files: about
+  1 s on Linux, 8-9 s on a CI runner with Defender real-time protection off, and about 20 s
+  on a desktop with it on. Later launches take under a second. The GUI launcher shows
+  nothing while it unpacks, so an impatient second double-click is likely. Fewer files (the
+  standard library as a zip) or a first-run notice would help.
+* **Windows asks before running an unsigned executable**, exactly as it does for the
+  PyInstaller build.
+* **The first Whisper model download can stall on Windows**, leaving an incomplete cached
+  snapshot that fails the transcription; restarting the app and transcribing again works.
+  Not yet reproduced or explained.
 
 ## Where it lives on disk
 
