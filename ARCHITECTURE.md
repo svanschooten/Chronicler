@@ -219,7 +219,7 @@ Responsible for:
 * reading a Chronicle's transcript
 * reconciling its speaker count
 * listing its audio sources
-* rendering plain-text exports
+* rendering exports - plain text, subtitles, HTML, PDF, and a portable Chronicle archive
 
 It is the one service that reaches into a Chronicle's own database rather than the
 workspace database, so it depends on `DatabaseManager` directly instead of a pre-bound

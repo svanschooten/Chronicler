@@ -1137,7 +1137,32 @@ Future:
   matters more than packaging simplicity.
 * [ ] DOCX
 * [ ] HTML
-* [ ] Chronicle export (zip the chronicle's workspace directory to a chosen location)
+* [x] Chronicle export (zip the chronicle's workspace directory to a chosen location)
+    * Done 2026-09-15: `TranscriptService.export_zip` packs one chronicle into a `.zip`
+      under a single folder named after it — `project.db` plus a `chronicle.json`
+      manifest, and `sources/` only when asked for. The database is snapshotted with
+      `VACUUM INTO` (`DatabaseManager.snapshot_project`) rather than copied: the project
+      engine is cached and may have a connection open, so a file copy could catch a write
+      half-made and ship a torn database that looks fine until someone opens it. The
+      manifest exists because title, description, kind and tags live in the *workspace*
+      database, so a `project.db` lifted out on its own arrives anonymous — and the
+      folder name is what `link_external_chronicle` reads the title from, so an unpacked
+      archive comes back named correctly either way. Audio is opt-in behind a dialog
+      (unticked by default): without it the bundle is a few hundred kilobytes, with it
+      it is however many hours of recording. The sources are still listed in the
+      manifest, so omitted tracks read as *missing* rather than as never having existed.
+      See docs/storage.md.
+    * Done 2026-09-15: the Export menu's last `disabled=True` item is gone — every
+      format in the dropdown now does something.
+* [x] Document exports work in thin-client mode
+    * Fixed 2026-09-15: `export_html`, `export_pdf` and `export_zip` are now exposed over
+      RPC. They were not reachable remotely at all, and not in a way that failed politely:
+      `RemoteServiceProxy` only installs *exposed* methods, so a thin client's Export menu
+      raised `AttributeError` on HTML and PDF rather than reporting anything. Exposing
+      them needed a transport that can carry documents — a method returning
+      `bytes`/`bytearray` is now served as `application/octet-stream` and read back off
+      `response.content`, since JSON cannot carry bytes. HTML was only ever unexposed
+      because it sat next to the two that could not be. See docs/deployment-and-rpc.md.
 
 ---
 

@@ -32,6 +32,23 @@ passed `None` for a genuinely optional argument got a 422.
 Each request gets a fresh `Container` scope — see
 [dependency-injection.md](dependency-injection.md).
 
+## Documents come back as bytes, not JSON
+
+A method annotated `-> bytes` or `-> bytearray` is served as
+`application/octet-stream` instead of being run through a response model, and
+`RemoteServiceProxy` reads `response.content` for it rather than `response.json()`.
+
+This is what makes the document exports work remotely. JSON cannot carry bytes, so
+`export_pdf` and `export_zip` had no way over the wire at all, and because an unexposed
+method is never installed on the proxy, a thin client's Export menu raised
+`AttributeError` rather than failing gracefully — HTML was in the same position for no
+reason beyond being listed next to them. Base64 in a JSON field would have worked too,
+at a third more bytes and a decode on each end.
+
+The whole document is held in memory on both sides, which is the reason a Chronicle
+archive leaves the audio out unless it is asked for — see
+[storage.md](storage.md).
+
 Without a container there is nothing to resolve service instances from, so only
 `/upload` (which needs just a `DatabaseManager`) is registered in that case.
 

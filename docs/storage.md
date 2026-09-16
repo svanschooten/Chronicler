@@ -165,3 +165,46 @@ directory is the generic `chronicles`.
 
 `hydrate_from_project` is separate from the link so it can be re-run — the chronicle
 view's *Identify speakers* covers the speaker half of the same job.
+
+## Exporting a Chronicle as an archive
+
+`TranscriptService.export_zip(chronicle_id, include_sources=False)` packs one chronicle
+into a portable `.zip`, built by `chronicler/core/services/bundle.py`:
+
+```text
+<Chronicle title>/
+├── chronicle.json     What the project database cannot say about itself
+└── project.db         A consistent snapshot
+└── sources/           Only when the audio was asked for
+```
+
+Everything sits under one folder named after the chronicle, so unpacking it into a busy
+directory leaves one directory behind rather than loose files. That folder name is also
+what `link_external_chronicle` reads the title from, so an unpacked archive comes back
+named correctly even if nothing reads the manifest.
+
+### Why a manifest
+
+Title, description, kind and tags live in the **workspace** database, not the
+chronicle's own — see the storage model above. A `project.db` lifted out on its own
+therefore arrives anonymous. `chronicle.json` carries that metadata alongside it, plus
+the Chronicler version and the export time.
+
+### Why `VACUUM INTO` rather than copying the file
+
+`DatabaseManager.snapshot_project` asks SQLite to build the copy. The project engine is
+cached and may have a connection open, so copying the file could catch a write half-made
+— and a torn database is a bundle that looks fine until someone opens it. `VACUUM INTO`
+writes a consistent copy from committed pages instead, without disturbing the live
+connection, and compacts it on the way out. It refuses to overwrite an existing file,
+which `snapshot_project` surfaces as `FileExistsError` rather than silently shipping a
+stale snapshot.
+
+### Why the audio is opt-in
+
+A bundle without audio is a few hundred kilobytes; one with it is however many hours of
+recording, and in thin-client mode that is a whole HTTP response held in memory on both
+ends. Left out, the `audio_sources` rows still exist, so the tracks read as *missing*
+rather than as never having been there, and `chronicle.json` lists the filenames that
+were omitted. Normalized derivatives (`*.normalized.wav`) are never carried — they are
+rebuilt from the originals.
