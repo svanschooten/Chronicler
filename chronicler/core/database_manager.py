@@ -31,10 +31,17 @@ def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
 
 
 class DatabaseManager:
-    def __init__(self, workspace_path: Path):
+    def __init__(self, workspace_path: Path, busy_timeout: float = 5.0):
+        """
+        `busy_timeout` is how many seconds a connection waits on another one's write lock
+        before raising "database is locked". Tests lower it so contention fails fast.
+        """
         self.workspace_path = workspace_path
         self.archive_db_path = workspace_path / "chronicler.db"
-        self.archive_engine = create_async_engine(f"sqlite+aiosqlite:///{self.archive_db_path}")
+        self._connect_args = {"timeout": busy_timeout}
+        self.archive_engine = create_async_engine(
+            f"sqlite+aiosqlite:///{self.archive_db_path}", connect_args=self._connect_args
+        )
         self.archive_session_factory = async_sessionmaker(
             self.archive_engine, expire_on_commit=False
         )
@@ -110,7 +117,9 @@ class DatabaseManager:
                 project_db_path = self.workspace_path / "chronicles" / chronicle_id / "project.db"
             project_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-            engine = create_async_engine(f"sqlite+aiosqlite:///{project_db_path}")
+            engine = create_async_engine(
+                f"sqlite+aiosqlite:///{project_db_path}", connect_args=self._connect_args
+            )
             try:
                 async with engine.begin() as conn:
                     await conn.run_sync(_run_alembic_upgrade, "project")
