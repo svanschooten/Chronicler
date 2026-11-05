@@ -10,6 +10,7 @@ packages (`__init__.py`) because the mirrored layout repeats module names.
 | Fixture | Defined in | Purpose |
 | ------- | ---------- | ------- |
 | `async_session` | `tests/conftest.py` | An in-memory workspace database session |
+| `two_sessions` | `tests/conftest.py` | A file-backed workspace with two independent sessions on `chronicler.db`, for lock contention |
 | `mock_flet_app` | `tests/conftest.py` | Autouse; stops anything from opening a real window |
 | `attach_page` | `tests/chronicler/desktop/conftest.py` | Gives a Flet control a stand-in `page`, since `Control.page` is a read-only property that raises when unattached |
 
@@ -113,3 +114,15 @@ It parametrises over modules rather than asserting once, so a failure names the 
 carries a `test_there_are_desktop_modules_to_check` guard so a bad glob cannot make every
 case pass vacuously. `ALLOWED` holds the handful of literals that are genuinely not
 language — separators, `"monospace"`.
+
+## Simulating a locked database
+
+`async_session` is one in-memory connection, so nothing in it can ever wait on a lock.
+Tests for "database is locked" use `two_sessions` instead: a flushed, uncommitted write in
+`first` holds the write lock, and a write in `second` raises `OperationalError`.
+
+Its `DatabaseManager` is built with `busy_timeout=LOCK_TIMEOUT` (0.2 seconds), so that
+error arrives quickly rather than after SQLite's default 5 seconds. Pass
+`two_sessions.db_manager` to code under test that opens its own sessions, such as the
+worker, and those sessions get the same short timeout.
+`test_a_second_writer_fails_fast_while_the_first_holds_the_lock` is the reference example.
