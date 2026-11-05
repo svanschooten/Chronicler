@@ -1,3 +1,6 @@
+import os
+import sys
+
 import pytest
 import yaml
 
@@ -58,9 +61,15 @@ def test_workspace_validation(tmp_path):
     settings = Settings(workspace_path=existing)
     assert settings.is_workspace_valid()
 
+
+@pytest.mark.skipif(
+    sys.platform == "win32" or os.geteuid() == 0,
+    reason="chmod cannot make a directory unwritable on Windows or for root",
+)
+def test_read_only_workspace_is_invalid(tmp_path):
+    read_only = tmp_path / "readonly"
+    read_only.mkdir(mode=0o555)
     try:
-        read_only = tmp_path / "readonly"
-        read_only.mkdir(mode=0o555)
         settings = Settings(workspace_path=read_only)
         assert not settings.is_workspace_valid()
     finally:
