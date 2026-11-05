@@ -10,6 +10,7 @@ from chronicler.core.wizard import (
     default_workspace_path,
     supported_languages,
 )
+from tests.isolation import isolate_home
 
 
 @pytest.fixture(autouse=True)
@@ -116,7 +117,7 @@ class TestWorkspaceStep:
         assert settings.workspace_path.is_absolute()
 
     def test_a_home_shorthand_is_expanded(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
+        isolate_home(monkeypatch, tmp_path)
         settings = Settings()
 
         with patch("builtins.input", return_value="~/MyChronicles"):

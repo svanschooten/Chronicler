@@ -1,3 +1,7 @@
+import json
+import os
+import sys
+
 import pytest
 import yaml
 
@@ -9,6 +13,7 @@ from chronicler.core.config import (
     resolve_config_file,
     set_config_file_override,
 )
+from tests.isolation import isolate_home
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +21,7 @@ def isolated_config(monkeypatch, tmp_path):
     """Keeps config resolution away from the developer's real configuration."""
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    isolate_home(monkeypatch, home)
     monkeypatch.delenv(CONFIG_FILE_ENV_VAR, raising=False)
     get_settings.cache_clear()
     yield home
@@ -57,9 +62,15 @@ def test_workspace_validation(tmp_path):
     settings = Settings(workspace_path=existing)
     assert settings.is_workspace_valid()
 
+
+@pytest.mark.skipif(
+    sys.platform == "win32" or os.geteuid() == 0,
+    reason="chmod cannot make a directory unwritable on Windows or for root",
+)
+def test_read_only_workspace_is_invalid(tmp_path):
+    read_only = tmp_path / "readonly"
+    read_only.mkdir(mode=0o555)
     try:
-        read_only = tmp_path / "readonly"
-        read_only.mkdir(mode=0o555)
         settings = Settings(workspace_path=read_only)
         assert not settings.is_workspace_valid()
     finally:
@@ -180,7 +191,7 @@ def test_load_settings(tmp_path, monkeypatch):
 
     config_file_json = tmp_path / "settings.json"
     workspace_str = str(tmp_path / "test_workspace_json")
-    config_file_json.write_text(f'{{"workspace_path": "{workspace_str}"}}')
+    config_file_json.write_text(json.dumps({"workspace_path": workspace_str}))
 
     settings = Settings()
     assert str(settings.workspace_path) == workspace_str

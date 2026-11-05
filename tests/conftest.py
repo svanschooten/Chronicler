@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from chronicler.core.config import CONFIG_FILE_ENV_VAR, get_settings
 from chronicler.core.database import Base
 from chronicler.core.database_manager import DatabaseManager
+from tests.isolation import isolate_home
 
 LOCK_TIMEOUT = 0.2
 """Seconds `two_sessions` waits on a lock, so contention tests fail fast instead of in 5s."""
@@ -79,7 +80,7 @@ def isolated_config(monkeypatch, tmp_path):
     """
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    isolate_home(monkeypatch, home)
     monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(home / "settings.yaml"))
     get_settings.cache_clear()
     yield home

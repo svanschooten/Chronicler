@@ -65,15 +65,20 @@ override for it.
 
 ## Keeping the developer's own configuration out of the tests
 
-`isolated_config` in `tests/conftest.py` points `HOME` and `CHRONICLER_CONFIG_FILE` at a
-temporary directory and clears the `get_settings` cache. Any test that builds a
+`isolated_config` in `tests/conftest.py` points the home directory, the per-user config
+directory and `CHRONICLER_CONFIG_FILE` at a temporary directory and clears the
+`get_settings` cache. The first two go through `isolate_home` in `tests/isolation.py`,
+which sets `USERPROFILE` as well as `HOME` because Windows ignores `HOME`, and patches
+platformdirs' `user_config_dir` because on Windows it asks the OS for `AppData` rather
+than reading the environment. Any test that builds a
 `Settings()` needs it, or it reads whatever is on the machine running it and passes or
 fails accordingly — which is how a transcribe-dialog test asserting the default language
 is `auto` failed on a laptop with `en` configured.
 
 It started as two near-identical copies in `test_config.py` and `test_wizard_defaults.py`.
 `test_config.py` keeps its own override on purpose: it tests the default config-file
-*search*, so it must not have an explicit file forced on it.
+*search*, so it must not have an explicit file forced on it. It still calls
+`isolate_home`.
 
 **Any test that constructs a bare `Settings()` needs it**, not just the ones about
 configuration. The task-handler tests build one to get the shipped defaults, and without
