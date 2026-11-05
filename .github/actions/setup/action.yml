@@ -1,0 +1,21 @@
+name: Set up Chronicler
+description: Install Python and Chronicler with the dev and server extras.
+inputs:
+  python-version:
+    description: Python version to install.
+    default: "3.12"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: pip
+        cache-dependency-path: pyproject.toml
+
+    # bash on every runner, so the same step works on Windows.
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -e ".[dev,server]"
