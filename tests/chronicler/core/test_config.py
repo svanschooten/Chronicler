@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 
@@ -190,7 +191,7 @@ def test_load_settings(tmp_path, monkeypatch):
 
     config_file_json = tmp_path / "settings.json"
     workspace_str = str(tmp_path / "test_workspace_json")
-    config_file_json.write_text(f'{{"workspace_path": "{workspace_str}"}}')
+    config_file_json.write_text(json.dumps({"workspace_path": workspace_str}))
 
     settings = Settings()
     assert str(settings.workspace_path) == workspace_str
