@@ -12,174 +12,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  setup:
-    name: Setup Environment
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        name: Checkout Repository
-
-      - uses: actions/setup-python@v7
-        name: Setup Python
-        with:
-          python-version: "3.12"
-          cache: "pip"
-
-      - name: Cache virtualenv
-        id: cache-venv
-        uses: actions/cache@v6
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-
-      - name: Create virtualenv and install dependencies
-        if: steps.cache-venv.outputs.cache-hit != 'true'
-        run: |
-          python -m venv .venv
-          .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install -r requirements.txt
-          .venv/bin/pip install -r requirements-dev.txt
-          .venv/bin/pip install -e .
-
   quality-control:
     name: Quality Control
-    needs: setup
     runs-on: ubuntu-latest
-    # pull-requests: write is only for the advisory formatting comment below. Note
-    # that GITHUB_TOKEN is read-only for PRs from forks and from Dependabot, so that
-    # step is expected to be a no-op there - it is allowed to fail rather than being
-    # skipped, so the reason stays visible in the run.
-    permissions:
-      contents: read
-      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         name: Checkout Repository
 
-      - uses: actions/setup-python@v7
-        name: Setup Python
-        with:
-          python-version: "3.12"
-
-      - name: Restore virtualenv
-        id: restore-venv
-        uses: actions/cache@v6
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-
-      # A cache miss here (eviction, or a cross-run race with the setup job) used to
-      # fail the whole job on "no such file: .venv/bin/ruff" - a green-or-red signal
-      # about infrastructure, not about the code. Same fallback the tests job has.
-      - name: Install Dependencies (Fallback)
-        if: steps.restore-venv.outputs.cache-hit != 'true'
-        run: |
-          python -m venv .venv
-          .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install -r requirements.txt
-          .venv/bin/pip install -r requirements-dev.txt
-          .venv/bin/pip install -e .
+      - uses: ./.github/actions/setup
 
       - name: Check Ruff
-        run: |
-          .venv/bin/ruff check chronicler tests
+        run: ruff check chronicler tests
+
+      - name: Check Ruff Format
+        run: ruff format --check chronicler tests
 
       - name: Check Mypy
-        run: |
-          .venv/bin/mypy chronicler tests
-
-      # Advisory, not a gate: formatting has never been enforced here, so drift
-      # predates any one PR and failing the build on it would block unrelated work.
-      # This reports the drift instead. Drop the continue-on-error once the tree has
-      # stayed clean long enough to be worth defending.
-      - name: Check Ruff Format (advisory)
-        id: ruff-format
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          .venv/bin/ruff format --check chronicler tests | tee ruff-format.txt
-
-      - name: Report Formatting Drift
-        if: always()
-        run: |
-          {
-            echo "## Ruff format (advisory)"
-            echo
-            if [ "${{ steps.ruff-format.outcome }}" = "success" ]; then
-              echo "No drift - \`ruff format --check\` is clean."
-            else
-              echo "\`ruff format\` would reformat the files below. **This does not fail CI.**"
-              echo
-              echo '```'
-              if [ -f ruff-format.txt ]; then
-                grep '^Would reformat:' ruff-format.txt || cat ruff-format.txt
-              else
-                echo "No formatting report available (check was skipped)."
-              fi
-              echo '```'
-              echo
-              echo "Run \`ruff format chronicler tests\` to clear it."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # Upsert rather than append: one comment per PR, rewritten on every run, so a
-      # branch that gets formatted mid-review ends up with an accurate comment
-      # instead of a pile of stale ones.
-      - name: Upsert Formatting Comment
-        if: always() && github.event_name == 'pull_request'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          OUTCOME: ${{ steps.ruff-format.outcome }}
-        run: |
-          MARKER='<!-- chronicler-ci: ruff-format -->'
-
-          EXISTING=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
-            --jq "map(select(.body | contains(\"$MARKER\"))) | .[0].id // empty" | head -n1)
-
-          if [ "$OUTCOME" = "success" ]; then
-            # A clean PR gets no comment at all - but if an earlier run on this branch
-            # left one, it gets corrected rather than left there contradicting itself.
-            if [ -z "$EXISTING" ]; then
-              echo "Formatting clean and no existing comment - nothing to post."
-              exit 0
-            fi
-            {
-              echo "$MARKER"
-              echo "**Ruff format:** clean - the drift reported earlier on this branch is gone."
-            } > comment.md
-          else
-            {
-              echo "$MARKER"
-              echo "**Ruff format:** \`ruff format\` would reformat the files below."
-              echo "Advisory only - this does not fail CI."
-              echo
-              echo '```'
-              if [ -f ruff-format.txt ]; then
-                grep '^Would reformat:' ruff-format.txt || true
-              else
-                echo "No formatting report available (check was skipped)."
-              fi
-              echo '```'
-              echo
-              echo "Run \`ruff format chronicler tests\` to clear it."
-            } > comment.md
-          fi
-
-          jq -Rs '{body: .}' comment.md > payload.json
-
-          if [ -n "$EXISTING" ]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$EXISTING" \
-              --input payload.json --silent
-          else
-            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-              --input payload.json --silent
-          fi
+        run: mypy chronicler tests
 
   tests:
     name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
-    needs: setup
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -191,30 +43,12 @@ jobs:
       - uses: actions/checkout@v7
         name: Checkout Repository
 
-      - uses: actions/setup-python@v7
-        name: Setup Python
+      - uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Restore virtualenv
-        id: restore-venv
-        uses: actions/cache@v6
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-
-      - name: Install Dependencies (Fallback)
-        if: steps.restore-venv.outputs.cache-hit != 'true'
-        run: |
-          python -m venv .venv
-          .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install -r requirements.txt
-          .venv/bin/pip install -r requirements-dev.txt
-          .venv/bin/pip install -e .
-
       - name: Run the tests
-        run: |
-          .venv/bin/pytest -v -s --junitxml=junit.xml --cov=chronicler --cov-report=xml --cov-report=term --cov-fail-under=80
+        run: pytest -v -s --junitxml=junit.xml --cov=chronicler --cov-report=xml --cov-report=term --cov-fail-under=80
 
       - name: Upload Test and Coverage Reports
         if: always()

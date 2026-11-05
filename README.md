@@ -350,7 +350,7 @@ python -m venv .venv && source .venv/bin/activate
 ```
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,server]"
 ```
 
 Optional extras, each absent by default and imported lazily:
@@ -429,10 +429,14 @@ python -m chronicler [mode] [-v|--verbose] [--config PATH] [--help]
 
 ### Quality checks
 
-The same three checks CI runs, in the order it runs them:
+The same four checks CI runs, in the order it runs them:
 
 ```bash
 ruff check chronicler tests
+```
+
+```bash
+ruff format --check chronicler tests
 ```
 
 ```bash
@@ -443,7 +447,7 @@ mypy chronicler tests
 pytest --cov=chronicler --cov-report=term --cov-fail-under=80
 ```
 
-Both `ruff` and `mypy` are blocking gates with no per-module exemptions — if you need to
+All four are blocking gates with no per-module exemptions — if you need to
 suppress something, prefer a narrow `# type: ignore[code]` with a comment explaining why
 over widening the configuration.
 
