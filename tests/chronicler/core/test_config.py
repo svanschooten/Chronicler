@@ -9,6 +9,7 @@ from chronicler.core.config import (
     resolve_config_file,
     set_config_file_override,
 )
+from tests.isolation import isolate_home
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +17,7 @@ def isolated_config(monkeypatch, tmp_path):
     """Keeps config resolution away from the developer's real configuration."""
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    isolate_home(monkeypatch, home)
     monkeypatch.delenv(CONFIG_FILE_ENV_VAR, raising=False)
     get_settings.cache_clear()
     yield home
