@@ -77,7 +77,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [002-T2 Tests cannot simulate a locked database](002-T2_two_connection_test_fixture.md) · high · XS · after 001
 
-- [ ] [003-T1 11 tests fail on Windows, and test isolation does not hold there](003-T1_windows_test_portability.md) · high · S · after 001
+- [x] [003-T1 11 tests fail on Windows, and test isolation does not hold there](003-T1_windows_test_portability.md) · high · S · after 001
 
 - [x] [004-S12 CI and install files carry a lot of avoidable text](004-S12_ci_and_install_cleanup.md) · medium · S · after 001
 
