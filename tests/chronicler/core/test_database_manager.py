@@ -1,7 +1,9 @@
 import asyncio
+import time
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
 
 from chronicler.core.database import DBChronicle
 from chronicler.core.database_manager import DatabaseManager
@@ -317,3 +319,21 @@ class TestProjectSnapshots:
         assert destination.exists()
 
         await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_a_second_writer_fails_fast_while_the_first_holds_the_lock(two_sessions):
+    two_sessions.first.add(DBChronicle(title="held"))
+    await two_sessions.first.flush()
+
+    two_sessions.second.add(DBChronicle(title="blocked"))
+    started = time.monotonic()
+    with pytest.raises(OperationalError, match="database is locked"):
+        await two_sessions.second.flush()
+
+    assert time.monotonic() - started < 1.0
+    await two_sessions.second.rollback()
+
+    await two_sessions.first.commit()
+    titles = (await two_sessions.second.execute(select(DBChronicle.title))).scalars().all()
+    assert titles == ["held"]
