@@ -75,7 +75,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [001-C1 A fresh install cannot start](001-C1_sqlalchemy_asyncio_extra.md) · critical · XS
 
-- [ ] [002-T2 Tests cannot simulate a locked database](002-T2_two_connection_test_fixture.md) · high · XS · after 001
+- [x] [002-T2 Tests cannot simulate a locked database](002-T2_two_connection_test_fixture.md) · high · XS · after 001
 
 - [ ] [003-T1 11 tests fail on Windows, and test isolation does not hold there](003-T1_windows_test_portability.md) · high · S · after 001
 
