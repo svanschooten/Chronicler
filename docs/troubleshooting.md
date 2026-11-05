@@ -147,3 +147,14 @@ Two rules came out of it, both now enforced by tests in
 
 `WorkerManager.stop()` only asks the loop to finish its current sleep, so `cleanup` now
 also holds the task handle and cancels it rather than leaving it to outlive the shutdown.
+
+## "The workspace is already open in another Chronicler process"
+
+Only one desktop app or server can have a workspace open at a time. Another Chronicler
+on this machine is using it: close that one, or point this one at a different
+workspace (`--config` keeps a second configuration apart, see [HOWTO.md](../HOWTO.md)).
+
+A crashed or killed Chronicler does not cause this, because the OS releases the lock
+when the process ends. Deleting `.chronicler.lock` does not help either: the lock is
+held on the open file, not by its existence. See
+[storage.md](storage.md#one-process-per-workspace).

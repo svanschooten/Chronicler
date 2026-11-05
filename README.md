@@ -223,6 +223,12 @@ Examples:
 
 Because every Chronicle is self-contained, projects can be shared independently without exposing the rest of the workspace.
 
+> **Open a synced workspace on one machine at a time.** Chronicler locks a workspace so a
+> second app or server on the same machine cannot open it, but that lock does not travel
+> through Dropbox or other sync tools. Two machines working in one synced workspace at once
+> can corrupt its databases. Close Chronicler on one machine and let the sync finish before
+> opening it on another.
+
 ## Background processing
 
 Long-running operations are represented as persistent tasks.

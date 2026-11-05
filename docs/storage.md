@@ -22,6 +22,27 @@ user put it, outside the workspace. `delete_chronicle` must never remove that di
 — only a chronicle whose data actually lives under `<workspace>/chronicles/<id>/` gets
 its directory removed.
 
+## One process per workspace
+
+`chronicler/core/workspace_lock.py`
+
+A workspace belongs to one process at a time. `init_archive` takes an exclusive OS lock
+on `<workspace>/.chronicler.lock` (`fcntl.flock` on Linux and macOS, `msvcrt.locking` on
+Windows), and `close_all` releases it. A second desktop app or server on the same
+workspace gets `WorkspaceLockedError`: the desktop shows it on the startup screen, and
+the server exits with status 1 and the message.
+
+Sharing a workspace between processes would need task leases and heartbeats so a crashed
+worker's tasks could be told apart from a live one's. Ruling it out keeps task recovery a
+plain reset at startup.
+
+The OS drops the lock when the process ends, however it ends, so a crash or a kill never
+leaves a stale lock behind. The lock file itself stays and is harmless.
+
+The lock is local to one machine. Two machines opening a synced copy of one workspace
+(Dropbox, OneDrive, a network share) do not see each other's lock, so only open a synced
+workspace on one machine at a time.
+
 ## Alembic without an `alembic.ini`
 
 `_run_alembic_upgrade` runs one chain against an already-open sync connection, handed
