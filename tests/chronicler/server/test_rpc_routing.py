@@ -149,9 +149,16 @@ async def test_each_request_gets_a_fresh_session(tmp_path):
     try:
         await db_manager.init_archive()
 
+        # Keep every session alive, so a freed one cannot pass its id() to the next.
+        sessions: list[AsyncSession] = []
+
+        def make_session() -> AsyncSession:
+            sessions.append(db_manager.get_archive_session())
+            return sessions[-1]
+
         container = Container()
         container.register_instance(DatabaseManager, db_manager)
-        container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
+        container.register_factory(AsyncSession, make_session)
         container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
 
         server = RpcServer(container, services=[_SessionIdProbeService], api_key="probe-key")
