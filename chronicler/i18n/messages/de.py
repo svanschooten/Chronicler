@@ -398,5 +398,10 @@ MESSAGES = {
             "Prüfe die Verbindungseinstellungen in deiner Konfigurationsdatei und starte "
             "Chronicler erneut."
         ),
+        "workspace_locked": (
+            "Der Arbeitsbereich unter {path} ist bereits in einem anderen Chronicler-Fenster "
+            "oder Server geöffnet."
+        ),
+        "workspace_locked_hint": "Schließe diesen zuerst und starte Chronicler dann erneut.",
     },
 }
