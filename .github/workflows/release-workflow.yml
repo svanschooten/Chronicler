@@ -85,9 +85,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install ".[transcription,normalization,recording]" flet-cli pyinstaller
 
-      - name: Verify the extras were installed
+      - name: Verify the app and extras import
         shell: bash
-        run: python -c "import av, sounddevice, faster_whisper; print('extras present')"
+        run: python -c "import chronicler.desktop.main, av, sounddevice, faster_whisper; print('imports ok')"
 
       - name: Build with PyInstaller
         run: pyinstaller Chronicler.spec

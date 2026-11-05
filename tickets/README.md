@@ -73,7 +73,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 ### Wave 1: baseline, so parallel work is safe
 
-- [ ] [001-C1 A fresh install cannot start](001-C1_sqlalchemy_asyncio_extra.md) · critical · XS
+- [x] [001-C1 A fresh install cannot start](001-C1_sqlalchemy_asyncio_extra.md) · critical · XS
 
 - [ ] [002-T2 Tests cannot simulate a locked database](002-T2_two_connection_test_fixture.md) · high · XS · after 001
 
