@@ -79,7 +79,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [ ] [003-T1 11 tests fail on Windows, and test isolation does not hold there](003-T1_windows_test_portability.md) · high · S · after 001
 
-- [ ] [004-S12 CI and install files carry a lot of avoidable text](004-S12_ci_and_install_cleanup.md) · medium · S · after 001
+- [x] [004-S12 CI and install files carry a lot of avoidable text](004-S12_ci_and_install_cleanup.md) · medium · S · after 001
 
 - [ ] [005-T3 CI never runs on Windows, a platform you ship to](005-T3_windows_in_ci.md) · high · XS · after 003, 004
 
