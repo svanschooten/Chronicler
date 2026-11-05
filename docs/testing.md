@@ -33,10 +33,14 @@ because the real config supplied a key.
 
 ## Gates
 
-The three checks CI runs, in order:
+CI installs with `pip install -e ".[dev,server]"` and runs these checks, in order:
 
 ```bash
 ruff check chronicler tests
+```
+
+```bash
+ruff format --check chronicler tests
 ```
 
 ```bash
@@ -47,12 +51,12 @@ mypy chronicler tests
 pytest --cov=chronicler --cov-report=term --cov-fail-under=80
 ```
 
-`ruff` and `mypy` are blocking with no per-module exemptions. Prefer a narrow
-`# type: ignore[code]` over widening the configuration.
+All of them are blocking, with no per-module exemptions. Prefer a narrow
+`# type: ignore[code]` over widening the configuration. Run `ruff format chronicler tests`
+before pushing to clear a formatting failure.
 
-`ruff format` is advisory only and reported as a PR comment rather than a gate:
-formatting was never enforced, so drift predates any one PR and failing on it would
-block unrelated work.
+Every job sets up through `.github/actions/setup`, so a new job or platform reuses that
+one step instead of repeating the install.
 
 `faster-whisper` is deliberately **not** installed in CI. It is an optional extra,
 imported lazily, and ships no `py.typed` marker, so mypy has an `ignore_missing_imports`
