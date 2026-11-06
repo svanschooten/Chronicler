@@ -120,7 +120,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [ ] [019-M5 Every thin-client call has a 5-second timeout](019-M5_rpc_timeouts.md) · medium · XS
 
-- [ ] [020-M3 The subtitle guard stops working after a clean or a line delete](020-M3_explicit_timing_flag.md) · medium · S · after 010
+- [x] [020-M3 The subtitle guard stops working after a clean or a line delete](020-M3_explicit_timing_flag.md) · medium · S · after 010
 
 - [ ] [021-M10 Reading an unknown chronicle creates it on disk](021-M10_reads_must_not_create_chronicles.md) · medium · S
 
