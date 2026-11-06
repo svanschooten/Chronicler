@@ -363,3 +363,13 @@ class TestWorkspaceLock:
         second = DatabaseManager(tmp_path)
         await second.init_archive()
         await second.close_all()
+
+
+def test_sources_path_for_is_a_pure_lookup(tmp_path):
+    db_manager = DatabaseManager(tmp_path)
+
+    path = db_manager.sources_path_for("abc")
+
+    assert not path.exists()
+    assert db_manager.ensure_sources_path_for("abc") == path
+    assert path.is_dir()

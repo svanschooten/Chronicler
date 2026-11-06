@@ -206,3 +206,62 @@ async def test_list_speaker_names_returns_sorted_names(tmp_path):
         assert names == ["Alice", "Bob"]
     finally:
         await db_manager.close_all()
+
+
+async def _service(tmp_path):
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    session = db_manager.get_archive_session()
+    return db_manager, session, TranscriptService(db_manager, SQLiteChronicleRepository(session))
+
+
+@pytest.mark.asyncio
+async def test_reading_an_unknown_chronicle_raises_and_creates_nothing(tmp_path):
+    from uuid import uuid4
+
+    db_manager, session, service = await _service(tmp_path)
+    try:
+        unknown = uuid4()
+
+        with pytest.raises(LookupError):
+            await service.get_transcript(unknown)
+        with pytest.raises(LookupError):
+            await service.list_audio_sources(unknown)
+
+        assert not (tmp_path / "chronicles" / str(unknown)).exists()
+    finally:
+        await session.close()
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_a_known_chronicle_gets_its_database_on_first_use(tmp_path):
+    db_manager, session, service = await _service(tmp_path)
+    try:
+        chronicle = await SQLiteChronicleRepository(session).create(Chronicle(title="New"))
+        await session.commit()
+
+        assert await service.get_transcript(chronicle.id) == []
+        assert (tmp_path / "chronicles" / str(chronicle.id) / "project.db").exists()
+    finally:
+        await session.close()
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_a_linked_chronicle_whose_file_moved_raises_instead_of_starting_a_new_one(tmp_path):
+    db_manager, session, service = await _service(tmp_path)
+    try:
+        gone = tmp_path / "elsewhere" / "project.db"
+        chronicle = await SQLiteChronicleRepository(session).create(
+            Chronicle(title="Linked", project_path=str(gone))
+        )
+        await session.commit()
+
+        with pytest.raises(FileNotFoundError):
+            await service.get_transcript(chronicle.id)
+
+        assert not gone.parent.exists()
+    finally:
+        await session.close()
+        await db_manager.close_all()

@@ -12,9 +12,13 @@ import pytest
 import pytest_asyncio
 
 from chronicler.core.database_manager import DatabaseManager
-from chronicler.core.models import SourceState, Task, TaskStatus, TaskType
+from chronicler.core.models import Chronicle, SourceState, Task, TaskStatus, TaskType
 from chronicler.core.processing.handlers import WorkerHandlers
-from chronicler.core.sqlite import SQLiteAudioSourceRepository, SQLiteTaskRepository
+from chronicler.core.sqlite import (
+    SQLiteAudioSourceRepository,
+    SQLiteChronicleRepository,
+    SQLiteTaskRepository,
+)
 from chronicler.core.worker_wiring import build_worker_manager
 
 
@@ -139,6 +143,9 @@ async def test_the_wired_worker_clears_the_source_of_a_task_recovery_fails(works
     chronicle_id = uuid4()
     audio = await _source(workspace, chronicle_id, transcription=SourceState.RUNNING)
     async with workspace.get_archive_session() as session:
+        await SQLiteChronicleRepository(session).create(
+            Chronicle(id=chronicle_id, title="Recovered")
+        )
         tasks = SQLiteTaskRepository(session)
         task = Task(
             type=TaskType.TRANSCRIBE,
@@ -155,3 +162,14 @@ async def test_the_wired_worker_clears_the_source_of_a_task_recovery_fails(works
     record = await _record(workspace, chronicle_id)
     assert record.transcription_state == SourceState.FAILED
     assert record.transcription_error == "Interrupted before finishing"
+
+
+@pytest.mark.asyncio
+async def test_a_task_for_a_deleted_chronicle_does_not_recreate_its_folder(workspace):
+    chronicle_id = uuid4()
+    handlers = WorkerHandlers(workspace, archive_sessions=workspace.get_archive_session)
+
+    with pytest.raises(LookupError):
+        await handlers.project_session(chronicle_id)
+
+    assert not (workspace.workspace_path / "chronicles" / str(chronicle_id)).exists()

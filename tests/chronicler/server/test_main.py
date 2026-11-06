@@ -8,8 +8,8 @@ import yaml
 
 from chronicler.core.config import Settings
 from chronicler.core.database_manager import DatabaseManager
-from chronicler.core.models import Task, TaskStatus, TaskType
-from chronicler.core.sqlite import SQLiteTaskRepository
+from chronicler.core.models import Chronicle, Task, TaskStatus, TaskType
+from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTaskRepository
 from chronicler.core.worker_wiring import build_worker_manager
 from chronicler.core.workspace_lock import WorkspaceLock
 from chronicler.server.main import _serve_and_work, run_server
@@ -63,9 +63,13 @@ async def test_a_queued_task_actually_executes_on_a_server(tmp_path):
         await db_manager.init_archive()
         worker_manager = build_worker_manager(db_manager)
 
+        chronicle_id = uuid4()
         async with db_manager.get_archive_session() as session:
+            await SQLiteChronicleRepository(session).create(
+                Chronicle(id=chronicle_id, title="Queued")
+            )
             task = await SQLiteTaskRepository(session).create(
-                Task(type=TaskType.CLEAN, chronicle_id=uuid4())
+                Task(type=TaskType.CLEAN, chronicle_id=chronicle_id)
             )
 
         await worker_manager.process_tasks()
