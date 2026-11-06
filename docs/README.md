@@ -21,6 +21,7 @@ below and leave the code clean.
 | [cleaning.md](cleaning.md) | The cleaning rule pipeline, hallucination handling, measured results |
 | [transcription.md](transcription.md) | Language, threshold and model resolution; the transcribe dialog; SRT export |
 | [transcript-editing.md](transcript-editing.md) | Correcting a transcript line by line, and why timings are never touched |
+| [pdf-export.md](pdf-export.md) | The bundled font, the CJK fallback and how unrenderable characters are reported |
 | [speakers.md](speakers.md) | Per-chronicle speakers and the workspace-wide name registry |
 | [audio-sources.md](audio-sources.md) | Per-track state: transcription, normalisation, speaker memory, fingerprints |
 | [audio-normalization.md](audio-normalization.md) | The loudness pipeline, why the source is never touched, LUFS vs dBFS |
