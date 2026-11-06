@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
+from uuid import UUID
 
 from alembic import command
 from alembic.config import Config
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from chronicler.core.models import Chronicle
 from chronicler.core.workspace_lock import WorkspaceLock
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,7 @@ def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
     command.upgrade(cfg, "head")
 
 
-def ensure_project_available(chronicle: object | None, chronicle_id: object) -> None:
+def ensure_project_available(chronicle: Chronicle | None, chronicle_id: UUID) -> None:
     """
     Reading a chronicle must never create its database. Raises LookupError when there is
     no such chronicle, and FileNotFoundError when a linked one's project.db has moved -
@@ -40,9 +42,10 @@ def ensure_project_available(chronicle: object | None, chronicle_id: object) -> 
     """
     if chronicle is None:
         raise LookupError(f"No chronicle {chronicle_id}")
-    project_path = getattr(chronicle, "project_path", None)
-    if project_path and not Path(project_path).is_file():
-        raise FileNotFoundError(f"The linked project database {project_path} no longer exists")
+    if chronicle.project_path and not Path(chronicle.project_path).is_file():
+        raise FileNotFoundError(
+            f"The linked project database {chronicle.project_path} no longer exists"
+        )
 
 
 class DatabaseManager:
