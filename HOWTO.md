@@ -119,7 +119,7 @@ The transcript importer is regex-driven, so most exported formats can be read wi
 pre-processing. In the Import Transcript dialog:
 
 * **Line Regex** — must match one transcript line, with capture groups for the parts you
-  want. The default (`^([A-Za-z0-9 _]+)\s*:(.*)$`) handles `Alice: hello`.
+  want. The default (`^([\w .'-]+?)\s*:(.*)$`) handles `Alice: hello`, including non-ASCII names like `Jürgen`. Lines before the first speaker are dropped and logged.
 * **Speaker Group Index** / **Text Group Index** — which capture groups hold the speaker
   and the text.
 * **Timestamp Group Index** — optional. Set it if your format carries a timestamp, e.g.
