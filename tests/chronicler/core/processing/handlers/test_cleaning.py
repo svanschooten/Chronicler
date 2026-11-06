@@ -15,6 +15,7 @@ from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
     SQLiteTranscriptRepository,
 )
+from tests.chronicler.core.processing.handlers.helpers import read_chronicle
 
 
 @pytest.fixture(autouse=True)
@@ -134,7 +135,7 @@ async def test_handle_clean_backfills_speaker_count_without_retagging(tmp_path):
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Test Chronicle"))
 
-            handlers = WorkerHandlers(db_manager, chronicle_repo=chronicle_repo)
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
             imports_dir = db_manager.get_imports_path()
             transcript_file = imports_dir / "transcript.txt"
             transcript_file.write_text("Alice: Hello\nAlice: there\nBob: Hi\n")
@@ -149,7 +150,7 @@ async def test_handle_clean_backfills_speaker_count_without_retagging(tmp_path):
             clean_task = Task(type=TaskType.CLEAN, chronicle_id=chronicle.id)
             await handlers.handle_clean(clean_task, _noop_progress)
 
-            updated = await chronicle_repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.speakers_count == 2
             assert [t.name for t in updated.tags] == ["Transcript"]
     finally:

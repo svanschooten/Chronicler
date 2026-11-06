@@ -212,25 +212,26 @@ class TranscribeHandler(NormalizeHandler):
     async def _backfill_metadata(
         self, chronicle_id: UUID, speakers_count: int, duration_seconds: float
     ) -> None:
-        if not self.chronicle_repo:
+        if not self.archive_sessions:
             return
-        chronicle = await self.chronicle_repo.get_by_id(chronicle_id)
-        if not chronicle:
-            return
+        async with self.chronicles() as chronicles:
+            chronicle = await chronicles.get_by_id(chronicle_id)
+            if not chronicle:
+                return
 
-        changed = False
-        if chronicle.speakers_count != speakers_count:
-            chronicle.speakers_count = speakers_count
-            changed = True
+            changed = False
+            if chronicle.speakers_count != speakers_count:
+                chronicle.speakers_count = speakers_count
+                changed = True
 
-        duration_str = format_duration(duration_seconds)
-        if chronicle.duration != duration_str:
-            chronicle.duration = duration_str
-            changed = True
+            duration_str = format_duration(duration_seconds)
+            if chronicle.duration != duration_str:
+                chronicle.duration = duration_str
+                changed = True
 
-        if chronicle.status == "Imported":
-            chronicle.status = "Transcribed"
-            changed = True
+            if chronicle.status == "Imported":
+                chronicle.status = "Transcribed"
+                changed = True
 
-        if changed:
-            await self.chronicle_repo.update(chronicle)
+            if changed:
+                await chronicles.update(chronicle)

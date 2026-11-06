@@ -9,13 +9,15 @@ operation just made stale. That shape lives in `HandlerBase`, so each handler mo
 contains only what makes it different.
 
 `WorkerHandlers` composes the three handler classes by inheritance rather than
-delegation, so they keep sharing a single `db_manager`/`chronicle_repo` pair — and
-therefore one archive session — with no forwarding boilerplate. The three classes are
-independent: they define disjoint `handle_*` methods and share only `HandlerBase`.
+delegation, so they share one `db_manager`/`archive_sessions` pair with no forwarding
+boilerplate. The three classes are independent: they define disjoint `handle_*` methods
+and share only `HandlerBase`.
 
-`chronicle_repo` is optional. Without it a handler still rewrites the transcript
-correctly; it just cannot tag the chronicle or backfill derived metadata. Tests that
-only care about transcript contents leave it out.
+`archive_sessions` is a session factory. `HandlerBase.chronicles()` opens a short session
+on it for each chronicle lookup or update, so no handler holds the archive open while it
+transcribes or summarizes. It is optional. Without it a handler still rewrites the
+transcript correctly; it just cannot tag the chronicle or backfill derived metadata.
+Tests that only care about transcript contents leave it out.
 
 ## Timestamps
 
