@@ -1,6 +1,8 @@
 import pytest
 import pytest_asyncio
+from sqlalchemy.exc import OperationalError
 
+from chronicler.core.database import DBChronicle
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.sqlite import SQLiteKnownSpeakerRepository
 
@@ -18,6 +20,36 @@ async def repo(tmp_path):
 
 
 class TestRegister:
+    @pytest.mark.asyncio
+    async def test_another_connection_sees_it_at_once(self, two_sessions):
+        await SQLiteKnownSpeakerRepository(two_sessions.first).register("Alice")
+
+        assert await SQLiteKnownSpeakerRepository(two_sessions.second).list_names() == ["Alice"]
+
+    @pytest.mark.asyncio
+    async def test_it_does_not_hold_the_write_lock(self, two_sessions):
+        await SQLiteKnownSpeakerRepository(two_sessions.first).register("Alice")
+
+        await SQLiteKnownSpeakerRepository(two_sessions.second).register("Bob")
+
+        assert await SQLiteKnownSpeakerRepository(two_sessions.first).list_names() == [
+            "Alice",
+            "Bob",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_failed_write_leaves_the_session_usable(self, two_sessions):
+        repository = SQLiteKnownSpeakerRepository(two_sessions.first)
+        two_sessions.second.add(DBChronicle(title="holds the lock"))
+        await two_sessions.second.flush()
+
+        with pytest.raises(OperationalError):
+            await repository.register("Alice")
+        await two_sessions.second.rollback()
+
+        await repository.register("Alice")
+        assert await repository.list_names() == ["Alice"]
+
     @pytest.mark.asyncio
     async def test_records_a_new_speaker(self, repo):
         repository, session = repo
