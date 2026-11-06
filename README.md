@@ -56,7 +56,7 @@ The application is built around a shared service layer. Whether running locally 
 
 ## Deployment modes
 
-Chronicler supports four deployment modes.
+Chronicler supports three deployment modes.
 
 The active mode is determined by the application configuration and the command used to start the application.
 
@@ -93,12 +93,6 @@ A lightweight client containing:
 
 All processing, storage, and AI models remain on the server.
 
-### Web Client (Server)
-
-A browser-based client providing access to a remote Chronicler server.
-
-The web client is served by a lightweight web server and communicates with the Chronicler server via its HTTP API.
-
 ```mermaid
 flowchart LR
 
@@ -125,14 +119,7 @@ subgraph Thin Client
     UI2 --> Proxy
 end
 
-subgraph Web Client
-    Browser[Web Browser]
-    WS[Web Client Server + Proxy]
-    Browser --> WS
-end
-
 Proxy --> API
-WS --> API
 ```
 
 ## Storage
@@ -363,7 +350,7 @@ Optional extras, each absent by default and imported lazily:
 
 | Extra | Provides | Needed for |
 | ----- | -------- | ---------- |
-| `server` | FastAPI, Uvicorn | Running as a server or web client |
+| `server` | FastAPI, Uvicorn | Running as a server |
 | `transcription` | faster-whisper | `TRANSCRIBE` tasks |
 | `normalization` | PyAV | `NORMALIZE` tasks (already present with `transcription`) |
 | `llm` | llama-cpp-python | Running a local `.gguf`; not needed for a model server |
@@ -404,20 +391,6 @@ python -m chronicler server
 The server exposes the generated HTTP API and runs the background worker loop on the
 same event loop, so tasks queued by any client are actually executed.
 
-#### Web Client (Server)
-
-```bash
-python -m chronicler web
-```
-
-or:
-
-```bash
-python -m chronicler client:web
-```
-
-The web client server hosts the web-based user interface. It requires a configuration that points to a **Chronicler Server** (similar to a Thin Client setup).
-
 ### Command Line Options
 
 Chronicler supports several command-line options:
@@ -426,7 +399,7 @@ Chronicler supports several command-line options:
 python -m chronicler [mode] [-v|--verbose] [--config PATH] [--help]
 ```
 
-- `mode`: The run mode. One of `desktop`, `server`, `web`.
+- `mode`: The run mode. One of `desktop` or `server`.
 - `-v`, `--verbose`: Enable debug logging (sets log level to DEBUG).
 - `--config PATH`: Read *and write* configuration at `PATH` instead of the default
   location. Use it to run an isolated instance, or to keep several workspaces on one
