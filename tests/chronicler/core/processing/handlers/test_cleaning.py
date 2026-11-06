@@ -1,6 +1,8 @@
 """Tests for the CLEAN task handler."""
 
 import json
+import sqlite3
+from contextlib import closing
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
@@ -8,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from chronicler.core.database_manager import DatabaseManager
-from chronicler.core.models import Chronicle, Task, TaskType
+from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
 from chronicler.core.processing.handlers import WorkerHandlers
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
 
@@ -288,3 +290,86 @@ async def test_handle_clean_rejects_an_unsafe_override_pattern(tmp_path):
             )
     finally:
         await db_manager.close_all()
+
+
+async def _chronicle_with_lines(db_manager, chronicle_id, *texts, custom_path=None):
+    session = await db_manager.get_project_session(str(chronicle_id), custom_path=custom_path)
+    async with session:
+        repo = SQLiteTranscriptRepository(session)
+        alice = await repo.get_or_create_speaker("Alice")
+        await repo.add_lines(
+            [
+                TranscriptLine(speaker_id=alice.id, text=text, start_time=i, end_time=i + 1)
+                for i, text in enumerate(texts)
+            ]
+        )
+        await session.commit()
+
+
+def _snapshot_texts(path) -> list[str]:
+    with closing(sqlite3.connect(path)) as connection:
+        rows = connection.execute("SELECT text FROM transcript_lines ORDER BY start_time")
+        return [text for (text,) in rows]
+
+
+class TestSnapshotBeforeCleaning:
+    @pytest.mark.asyncio
+    async def test_the_original_lines_are_kept_in_a_snapshot(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        try:
+            chronicle_id = uuid4()
+            await _chronicle_with_lines(db_manager, chronicle_id, "You.", "We ride at dawn.")
+
+            await WorkerHandlers(db_manager).handle_clean(
+                Task(type=TaskType.CLEAN, chronicle_id=chronicle_id), _noop_progress
+            )
+
+            snapshots = db_manager.snapshots_path_for(str(chronicle_id))
+            (snapshot,) = snapshots.glob("before-clean-*.db")
+            assert snapshots == tmp_path / "chronicles" / str(chronicle_id) / "snapshots"
+            assert _snapshot_texts(snapshot) == ["You.", "We ride at dawn."]
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_only_the_newest_three_are_kept(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        try:
+            chronicle_id = uuid4()
+            await _chronicle_with_lines(db_manager, chronicle_id, "We ride at dawn.")
+            handlers = WorkerHandlers(db_manager)
+
+            made = []
+            for _ in range(4):
+                made.append(await handlers.snapshot_before_clean(chronicle_id))
+
+            kept = sorted(db_manager.snapshots_path_for(str(chronicle_id)).iterdir())
+            assert kept == made[1:]
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_linked_chronicle_keeps_them_beside_its_database(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path / "workspace")
+        await db_manager.init_archive()
+        try:
+            project_db = tmp_path / "elsewhere" / "project.db"
+            project_db.parent.mkdir()
+            archive_session = db_manager.get_archive_session()
+            async with archive_session:
+                chronicle_repo = SQLiteChronicleRepository(archive_session)
+                chronicle = await chronicle_repo.create(
+                    Chronicle(title="Linked", project_path=str(project_db))
+                )
+                await _chronicle_with_lines(
+                    db_manager, chronicle.id, "We ride.", custom_path=project_db
+                )
+
+                await WorkerHandlers(db_manager, chronicle_repo=chronicle_repo).handle_clean(
+                    Task(type=TaskType.CLEAN, chronicle_id=chronicle.id), _noop_progress
+                )
+
+            assert len(list((project_db.parent / "snapshots").glob("before-clean-*.db"))) == 1
+            assert not (tmp_path / "workspace" / "chronicles" / str(chronicle.id)).exists()
+        finally:
+            await db_manager.close_all()
