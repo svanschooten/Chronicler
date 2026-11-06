@@ -579,6 +579,65 @@ async def test_a_stop_that_cannot_requeue_leaves_the_task_to_recovery(two_sessio
 
 
 @pytest.mark.asyncio
+async def test_stopping_while_the_outcome_waits_on_a_lock_still_records_it(two_sessions, caplog):
+    """The work is finished; being stopped then must not make the next start redo it."""
+    sessions = two_sessions.db_manager.get_archive_session
+    tasks = Tasks(sessions)
+    blocker = two_sessions.first
+    task = await tasks.create(Task(type=TaskType.IMPORT))
+
+    async def handler(_task, _progress):
+        await _hold_the_write_lock(blocker)
+
+    manager = WorkerManager(sessions, status_write_timeout=30.0)
+    manager.register_handler(TaskType.IMPORT, handler)
+    runner = asyncio.create_task(manager.run_forever(interval=0.01))
+
+    async def retrying_for_a_while():
+        # The second retry sleeps 0.2 s, long enough for the stop to land inside it.
+        while caplog.text.count("retrying a task status write") < 2:
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(retrying_for_a_while(), timeout=10)
+    await blocker.rollback()
+    runner.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await runner
+
+    fetched = await tasks.get_by_id(task.id)
+    assert fetched.status == TaskStatus.DONE
+    assert fetched.attempts == 0
+
+
+@pytest.mark.asyncio
+async def test_a_stop_whose_last_try_is_locked_leaves_the_task_to_recovery(two_sessions, caplog):
+    sessions = two_sessions.db_manager.get_archive_session
+    tasks = Tasks(sessions)
+    blocker = two_sessions.first
+    task = await tasks.create(Task(type=TaskType.IMPORT))
+
+    async def handler(_task, _progress):
+        await _hold_the_write_lock(blocker)
+
+    manager = WorkerManager(sessions, status_write_timeout=30.0)
+    manager.register_handler(TaskType.IMPORT, handler)
+    runner = asyncio.create_task(manager.run_forever(interval=0.01))
+
+    async def retrying():
+        while "retrying a task status write" not in caplog.text:
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(retrying(), timeout=10)
+    runner.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await runner
+    await blocker.rollback()
+
+    assert (await tasks.get_by_id(task.id)).status == TaskStatus.WORKING
+    assert "it will run again after the next start" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_a_failed_announcement_does_not_skip_the_next_tasks_cleanup(tasks, caplog):
     """The rows are already committed, so a retry would never get back to these."""
     first = await _interrupted(tasks, attempts=2, max_attempts=3)

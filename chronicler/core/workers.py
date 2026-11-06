@@ -163,8 +163,9 @@ class WorkerManager:
     async def _return_to_queue(self, task: Task) -> None:
         """
         The worker is being stopped. The task did nothing wrong, so it goes back to
-        PENDING without using an attempt. One try only, so a locked database cannot hold up
-        shutdown; if it fails, recovery at the next start picks the task up instead.
+        PENDING without using an attempt. One try only, so a locked database holds up
+        shutdown for at most its busy timeout; if it fails, recovery at the next start
+        picks the task up instead.
         """
         logger.info(f"Task {task.id} ({task.type.value}) stopped, returning it to the queue")
         try:
@@ -182,17 +183,34 @@ class WorkerManager:
         """
         deadline = time.monotonic() + self.status_write_timeout
         delay = 0.1
-        while True:
-            try:
-                async with self._tasks() as tasks:
-                    await write(tasks)
-                return
-            except OperationalError:
-                if time.monotonic() + delay > deadline:
-                    raise
-                logger.warning(f"Database busy, retrying a task status write in {delay:.1f}s")
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, 2.0)
+        try:
+            while True:
+                try:
+                    async with self._tasks() as tasks:
+                        await write(tasks)
+                    return
+                except OperationalError:
+                    if time.monotonic() + delay > deadline:
+                        raise
+                    logger.warning(f"Database busy, retrying a task status write in {delay:.1f}s")
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, 2.0)
+        except asyncio.CancelledError:
+            # Stopped while waiting out a lock. The work itself is finished, so one last
+            # try is worth making: without it, recovery runs the task again next start.
+            await self._last_try(write)
+            raise
+
+    async def _last_try(self, write: Callable[[SQLiteTaskRepository], Awaitable[None]]) -> None:
+        try:
+            async with self._tasks() as tasks:
+                await write(tasks)
+        except Exception:
+            logger.warning(
+                "Could not record a finished task's outcome before stopping; "
+                "it will run again after the next start",
+                exc_info=True,
+            )
 
     async def _publish_completion(self, task_id: uuid.UUID) -> None:
         if not self.event_bus:
