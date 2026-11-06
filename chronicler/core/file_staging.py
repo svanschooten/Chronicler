@@ -7,6 +7,8 @@ from pathlib import Path
 
 import httpx
 
+from chronicler.core.remote import RPC_TIMEOUT
+
 
 def sanitize_stage_name(original_filename: str | None) -> str:
     """A uuid4 filename carrying only a whitelisted extension from the original name."""
@@ -81,7 +83,7 @@ class RemoteFileStager(FileStager):
 
     async def stage(self, local_path: str) -> str:
         headers = {"X-API-Key": self.api_key} if self.api_key else {}
-        client = self._client or httpx.AsyncClient()
+        client = self._client or httpx.AsyncClient(timeout=RPC_TIMEOUT)
         try:
             with open(local_path, "rb") as f:
                 files = {"file": (Path(local_path).name, f)}
