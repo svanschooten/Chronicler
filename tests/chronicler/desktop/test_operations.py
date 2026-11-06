@@ -45,14 +45,39 @@ def _chronicle(**overrides):
 
 class TestCleaning:
     @pytest.mark.asyncio
-    async def test_it_queues_a_clean_task_for_that_chronicle(self, make_operations):
+    async def test_confirming_queues_a_clean_task_for_that_chronicle(self, make_operations):
         operations, parts, _ = make_operations()
         chronicle = _chronicle()
 
-        assert await operations.clean(chronicle) is True
+        with patch("chronicler.desktop.operations.confirm", new=AsyncMock(return_value=True)):
+            assert await operations.clean(chronicle) is True
 
         parts["task_service"].queue_clean.assert_awaited_once_with(chronicle.id)
         parts["show_snackbar"].assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_cancelling_queues_nothing(self, make_operations):
+        operations, parts, _ = make_operations()
+
+        with patch(
+            "chronicler.desktop.operations.confirm", new=AsyncMock(return_value=False)
+        ) as ask:
+            assert await operations.clean(_chronicle()) is False
+
+        ask.assert_awaited_once()
+        parts["task_service"].queue_clean.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_the_confirmation_names_the_chronicle(self, make_operations):
+        operations, _, _ = make_operations()
+
+        with patch(
+            "chronicler.desktop.operations.confirm", new=AsyncMock(return_value=False)
+        ) as ask:
+            await operations.clean(_chronicle(title="Emberfall 14"))
+
+        _page, _title, message = ask.await_args.args
+        assert "Emberfall 14" in message
 
 
 class TestIdentifyingSpeakers:

@@ -195,6 +195,12 @@ MESSAGES = {
         "import_transcript": "Transkript importieren",
         "clean": "Transkript bereinigen",
         "clean_queued": "Bereinigungsaufgabe eingereiht",
+        "clean_title": "Transkript bereinigen?",
+        "clean_message": (
+            "Beim Bereinigen von '{title}' werden Füllzeilen und Wiederholungen entfernt und "
+            "aufeinanderfolgende Beiträge zusammengeführt. Vorher wird eine Kopie im Ordner "
+            "snapshots gespeichert."
+        ),
         "identify_speakers": "Sprecher erkennen",
         "speakers_found": "{count} Sprecher gefunden",
         "summarize": "Zusammenfassung erstellen",

@@ -189,6 +189,11 @@ MESSAGES = {
         "import_transcript": "Import transcript",
         "clean": "Clean transcript",
         "clean_queued": "Clean task queued",
+        "clean_title": "Clean transcript?",
+        "clean_message": (
+            "Cleaning '{title}' drops filler and repeated lines and merges consecutive turns. "
+            "A copy of the transcript is saved first, in the chronicle's snapshots folder."
+        ),
         "identify_speakers": "Identify speakers",
         "speakers_found": "Found {count} speaker(s)",
         "summarize": "Generate summary",
