@@ -150,3 +150,11 @@ def test_default_importer_logs_dropped_leading_lines(caplog):
     lines = DefaultImporter().parse("preamble\nmore\nAnna: hi")
     assert len(lines) == 1
     assert "Dropped 2 line(s)" in caplog.text
+
+
+def test_default_importer_still_parses_the_example_transcript_into_the_same_turns():
+    from pathlib import Path
+
+    example = Path(__file__).resolve().parents[4] / "examples" / "example_transcript_001.txt"
+    lines = DefaultImporter().parse(example.read_text(encoding="utf-8"))
+    assert len(lines) == 1686
