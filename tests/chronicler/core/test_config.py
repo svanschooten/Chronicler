@@ -236,17 +236,6 @@ def test_server_mode_requires_workspace_and_api_key(tmp_path):
     assert settings.validate_for_mode("server") is True
 
 
-def test_webclient_mode_requires_server_url_and_api_key(tmp_path):
-    settings = Settings(server_url=None, api_key=None)
-    assert settings.validate_for_mode("client:web") is False
-
-    settings.server_url = "http://localhost:8000"
-    assert settings.validate_for_mode("client:web") is False
-
-    settings.api_key = "some-key"
-    assert settings.validate_for_mode("client:web") is True
-
-
 def test_desktop_mode_requires_either(tmp_path):
     settings = Settings(workspace_path=None, server_url=None, api_key=None)
     assert settings.validate_for_mode("client:desktop") is False
@@ -373,3 +362,16 @@ class TestNestedSections:
         settings = Settings()
 
         assert settings.transcription.no_speech_threshold == 0.6
+
+
+def test_a_saved_web_client_mode_reads_as_unset(isolated_config):
+    """The web client is gone; its config must not stop the desktop app from starting."""
+    config_file = isolated_config / ".chronicler_config.yaml"
+    config_file.write_text(
+        yaml.dump({"mode": "client:web", "server_url": "http://server:8000", "api_key": "k"})
+    )
+
+    settings = Settings()
+
+    assert settings.mode is None
+    assert settings.validate_for_mode("client:desktop") is True

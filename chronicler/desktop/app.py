@@ -13,7 +13,7 @@ from chronicler.core.services.system_service import SystemService
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.task_events import TaskCompletedEvent, TaskEventBus
-from chronicler.core.worker_wiring import build_worker_runtime
+from chronicler.core.worker_wiring import build_worker_manager
 from chronicler.core.workers import WorkerManager
 from chronicler.desktop.components.sidebar import Sidebar
 from chronicler.desktop.runtime import DesktopRuntime
@@ -51,7 +51,6 @@ class DesktopApp:
 
         self.worker_manager: WorkerManager | None = None
         self._worker_task: asyncio.Task | None = None
-        self._worker_session: AsyncSession | None = None
         self.event_bus: TaskEventBus | None = None
         self._unsubscribe_task_events: Callable[[], None] | None = None
 
@@ -117,9 +116,7 @@ class DesktopApp:
         self.event_bus = TaskEventBus()
         self._unsubscribe_task_events = self.event_bus.subscribe(self._on_task_completed)
 
-        worker_runtime = build_worker_runtime(self.db_manager, event_bus=self.event_bus)
-        self.worker_manager = worker_runtime.manager
-        self._worker_session = worker_runtime.session
+        self.worker_manager = build_worker_manager(self.db_manager, event_bus=self.event_bus)
 
         self._worker_task = asyncio.create_task(self.worker_manager.run_forever())
 
@@ -138,9 +135,6 @@ class DesktopApp:
 
         await self._close_view_scope()
         await close_scope(self.resolver)
-        if self._worker_session is not None:
-            await self._worker_session.close()
-            self._worker_session = None
         if self.db_manager is not None:
             await self.db_manager.close_all()
 

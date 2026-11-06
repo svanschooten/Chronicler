@@ -121,25 +121,6 @@ def test_wizard_server(tmp_path):
         assert saved_settings.mode == "server"
 
 
-def test_wizard_web_client(tmp_path):
-    config_dir_patch = patch(
-        "chronicler.core.config.user_config_dir",
-        side_effect=lambda name: str(tmp_path / name),
-    )
-    with (
-        config_dir_patch,
-        patch("builtins.input", side_effect=["1", "4", "http://server:8000", "web-key"]),
-        patch("builtins.print"),
-    ):
-        wizard = ConfigWizard()
-        wizard.run()
-
-        saved_settings = Settings()
-        assert saved_settings.server_url == "http://server:8000"
-        assert saved_settings.api_key == "web-key"
-        assert saved_settings.mode == "client:web"
-
-
 def test_api_key_step_generates_on_empty_input():
     settings = Settings()
     inputs = ["2", ""]
@@ -195,20 +176,6 @@ def test_wizard_run_server_mode(mock_api, mock_ws, tmp_path):
     mock_ws.assert_called_once()
     mock_api.assert_called_once()
     assert settings.mode == "server"
-
-
-@patch("chronicler.core.wizard.RemoteServerStep.run")
-def test_wizard_run_webclient_mode(mock_remote, tmp_path):
-    with (
-        patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)),
-        patch("chronicler.core.wizard.LanguageStep.run"),
-    ):
-        settings = Settings(server_url=None)
-        wizard = ConfigWizard(settings=settings)
-        wizard.run(mode="client:web")
-
-    mock_remote.assert_called_once()
-    assert settings.mode == "client:web"
 
 
 @patch("chronicler.core.wizard.ConfigWizard._show_main_choice")

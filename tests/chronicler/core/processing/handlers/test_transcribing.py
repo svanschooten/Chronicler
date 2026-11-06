@@ -5,11 +5,17 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
 from chronicler.core.processing.handlers import WorkerHandlers
-from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
+from chronicler.core.sqlite import (
+    SQLiteAudioSourceRepository,
+    SQLiteChronicleRepository,
+    SQLiteTranscriptRepository,
+)
+from tests.chronicler.core.processing.handlers.helpers import read_chronicle
 
 
 @pytest.fixture(autouse=True)
@@ -43,7 +49,9 @@ def _fake_transcription(*segments):
     return _transcribe
 
 
-async def _make_transcribe_task(db_manager, chronicle_id, speaker_name, filename="recording.mp3"):
+async def _make_transcribe_task(
+    db_manager, chronicle_id, speaker_name, filename="recording.mp3", **extra
+):
     """
     The file must already live in the chronicle's durable sources/ directory - that's
     ChronicleService.add_audio_source's job, a separate earlier step from transcribing it
@@ -56,7 +64,7 @@ async def _make_transcribe_task(db_manager, chronicle_id, speaker_name, filename
         Task(
             type=TaskType.TRANSCRIBE,
             chronicle_id=chronicle_id,
-            data=json.dumps({"file_path": str(audio_file), "speaker_name": speaker_name}),
+            data=json.dumps({"file_path": str(audio_file), "speaker_name": speaker_name, **extra}),
         ),
         audio_file,
     )
@@ -76,7 +84,7 @@ async def test_handle_transcribe_creates_lines_for_assigned_speaker(tmp_path):
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Recording"))
 
-            handlers = WorkerHandlers(db_manager, chronicle_repo=chronicle_repo)
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
             task, audio_file = await _make_transcribe_task(db_manager, chronicle.id, "Alice")
 
             with patch(
@@ -96,7 +104,7 @@ async def test_handle_transcribe_creates_lines_for_assigned_speaker(tmp_path):
             assert [line.text for line in lines] == ["Hello there", "General Kenobi"]
             assert all(line.speaker_name == "Alice" for line in lines)
 
-            updated = await chronicle_repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.speakers_count == 1
             assert [t.name for t in updated.tags] == ["Transcript"]
             assert updated.duration == "2s"
@@ -120,7 +128,7 @@ async def test_handle_transcribe_duration_reflects_longest_track(tmp_path):
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Podcast"))
 
-            handlers = WorkerHandlers(db_manager, chronicle_repo=chronicle_repo)
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
 
             alice_task, _ = await _make_transcribe_task(
                 db_manager, chronicle.id, "Alice", "alice.mp3"
@@ -138,7 +146,7 @@ async def test_handle_transcribe_duration_reflects_longest_track(tmp_path):
             ):
                 await handlers.handle_transcribe(bob_task, _noop_progress)
 
-            updated = await chronicle_repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.duration == "1m 30s"
     finally:
         await db_manager.close_all()
@@ -154,7 +162,7 @@ async def test_handle_transcribe_does_not_overwrite_a_non_default_status(tmp_pat
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Custom", status="Archived"))
 
-            handlers = WorkerHandlers(db_manager, chronicle_repo=chronicle_repo)
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
             task, _ = await _make_transcribe_task(db_manager, chronicle.id, "Alice")
             with patch(
                 "chronicler.core.processing.transcriber.transcribe_audio",
@@ -162,15 +170,14 @@ async def test_handle_transcribe_does_not_overwrite_a_non_default_status(tmp_pat
             ):
                 await handlers.handle_transcribe(task, _noop_progress)
 
-            updated = await chronicle_repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.status == "Archived"
     finally:
         await db_manager.close_all()
 
 
 @pytest.mark.asyncio
-async def test_handle_transcribe_overwrites_only_the_assigned_speakers_lines(tmp_path):
-    """The concrete requirement: each audio source is one speaker's track."""
+async def test_handle_transcribe_keeps_other_speakers_lines(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
@@ -178,48 +185,211 @@ async def test_handle_transcribe_overwrites_only_the_assigned_speakers_lines(tmp
         async with archive_session:
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Podcast"))
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
 
-            handlers = WorkerHandlers(db_manager, chronicle_repo=chronicle_repo)
+            await _transcribe(handlers, db_manager, chronicle.id, "Alice", "alice.mp3", "Hi")
+            await _transcribe(handlers, db_manager, chronicle.id, "Bob", "bob.mp3", "Hello")
+            await _transcribe(handlers, db_manager, chronicle.id, "Alice", "alice.mp3", "Hey")
 
-            alice_task, _ = await _make_transcribe_task(
-                db_manager, chronicle.id, "Alice", "alice.mp3"
-            )
-            with patch(
-                "chronicler.core.processing.transcriber.transcribe_audio",
-                side_effect=_fake_transcription(("Alice line one", 0.0, 1.0)),
-            ):
-                await handlers.handle_transcribe(alice_task, _noop_progress)
+            assert await _texts(db_manager, chronicle.id) == {("Alice", "Hey"), ("Bob", "Hello")}
 
-            bob_task, _ = await _make_transcribe_task(db_manager, chronicle.id, "Bob", "bob.mp3")
-            with patch(
-                "chronicler.core.processing.transcriber.transcribe_audio",
-                side_effect=_fake_transcription(("Bob line one", 0.5, 1.5)),
-            ):
-                await handlers.handle_transcribe(bob_task, _noop_progress)
-
-            alice_retake_task, _ = await _make_transcribe_task(
-                db_manager, chronicle.id, "Alice", "alice_retake.mp3"
-            )
-            with patch(
-                "chronicler.core.processing.transcriber.transcribe_audio",
-                side_effect=_fake_transcription(("Alice corrected line", 0.0, 1.0)),
-            ):
-                await handlers.handle_transcribe(alice_retake_task, _noop_progress)
-
-            session = await db_manager.get_project_session(str(chronicle.id))
-            async with session:
-                repo = SQLiteTranscriptRepository(session)
-                lines = await repo.get_lines()
-
-            assert {(line.speaker_name, line.text) for line in lines} == {
-                ("Alice", "Alice corrected line"),
-                ("Bob", "Bob line one"),
-            }
-
-            updated = await chronicle_repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.speakers_count == 2
     finally:
         await db_manager.close_all()
+
+
+async def _transcribe(handlers, db_manager, chronicle_id, speaker, filename, *texts, **extra):
+    """Runs one transcribe task whose stubbed output is `texts`, one second each."""
+    task, _ = await _make_transcribe_task(db_manager, chronicle_id, speaker, filename, **extra)
+    segments = [(text, float(index), float(index + 1)) for index, text in enumerate(texts)]
+    with patch(
+        "chronicler.core.processing.transcriber.transcribe_audio",
+        side_effect=_fake_transcription(*segments),
+    ):
+        await handlers.handle_transcribe(task, _noop_progress)
+
+
+async def _lines(db_manager, chronicle_id):
+    session = await db_manager.get_project_session(str(chronicle_id))
+    async with session:
+        return await SQLiteTranscriptRepository(session).get_lines()
+
+
+async def _texts(db_manager, chronicle_id):
+    return {(line.speaker_name, line.text) for line in await _lines(db_manager, chronicle_id)}
+
+
+class TestTwoTracksForOneSpeaker:
+    @pytest.mark.asyncio
+    async def test_both_tracks_are_kept(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        handlers = WorkerHandlers(db_manager)
+        chronicle_id = uuid4()
+        try:
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "One")
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two")
+
+            assert await _texts(db_manager, chronicle_id) == {("Alice", "One"), ("Alice", "Two")}
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_rerunning_one_track_replaces_only_its_lines(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        handlers = WorkerHandlers(db_manager)
+        chronicle_id = uuid4()
+        try:
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "One")
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two")
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Again")
+
+            assert await _texts(db_manager, chronicle_id) == {
+                ("Alice", "One"),
+                ("Alice", "Again"),
+            }
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_each_line_records_its_track(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        handlers = WorkerHandlers(db_manager)
+        chronicle_id = uuid4()
+        try:
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "One")
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two")
+
+            session = await db_manager.get_project_session(str(chronicle_id))
+            async with session:
+                sources = {
+                    source.id: source.filename
+                    for source in await SQLiteAudioSourceRepository(session).list_sources()
+                }
+            lines = await _lines(db_manager, chronicle_id)
+            assert {(line.text, sources[line.source_id]) for line in lines} == {
+                ("One", "part1.wav"),
+                ("Two", "part2.wav"),
+            }
+        finally:
+            await db_manager.close_all()
+
+
+async def _forget_line_sources(db_manager, chronicle_id) -> None:
+    """Makes every line look like one written before lines recorded their track."""
+    session = await db_manager.get_project_session(str(chronicle_id))
+    async with session:
+        await session.execute(text("UPDATE transcript_lines SET source_id = NULL"))
+        await session.commit()
+
+
+async def _import_line(db_manager, chronicle_id, speaker, text) -> None:
+    """A line the way an import writes it: a speaker, but no track."""
+    session = await db_manager.get_project_session(str(chronicle_id))
+    async with session:
+        repo = SQLiteTranscriptRepository(session)
+        owner = await repo.get_or_create_speaker(speaker)
+        await repo.add_lines(
+            [TranscriptLine(speaker_id=owner.id, text=text, start_time=0, end_time=1)]
+        )
+        await session.commit()
+
+
+class TestLinesWithNoRecordedTrack:
+    @pytest.mark.asyncio
+    async def test_an_imported_line_survives_rerunning_the_speakers_only_track(self, tmp_path):
+        """Review repro: the old 'only track owns untracked lines' rule deleted this."""
+        db_manager = DatabaseManager(tmp_path)
+        handlers = WorkerHandlers(db_manager)
+        chronicle_id = uuid4()
+        try:
+            await _import_line(db_manager, chronicle_id, "Alice", "Imported")
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "alice.wav", "Heard")
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "alice.wav", "Again")
+
+            assert await _texts(db_manager, chronicle_id) == {
+                ("Alice", "Imported"),
+                ("Alice", "Again"),
+            }
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_they_are_kept_when_the_speaker_has_two_tracks(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        handlers = WorkerHandlers(db_manager)
+        chronicle_id = uuid4()
+        try:
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "One")
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two")
+            await _forget_line_sources(db_manager, chronicle_id)
+
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Again")
+
+            assert await _texts(db_manager, chronicle_id) == {
+                ("Alice", "One"),
+                ("Alice", "Two"),
+                ("Alice", "Again"),
+            }
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_an_imported_transcript_survives_a_first_transcription(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        handlers = WorkerHandlers(db_manager)
+        chronicle_id = uuid4()
+        try:
+            session = await db_manager.get_project_session(str(chronicle_id))
+            async with session:
+                repo = SQLiteTranscriptRepository(session)
+                alice = await repo.get_or_create_speaker("Alice")
+                await repo.add_lines(
+                    [TranscriptLine(speaker_id=alice.id, text="Imported", start_time=0, end_time=1)]
+                )
+                await session.commit()
+
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "alice.wav", "Heard")
+
+            assert await _texts(db_manager, chronicle_id) == {
+                ("Alice", "Imported"),
+                ("Alice", "Heard"),
+            }
+        finally:
+            await db_manager.close_all()
+
+
+class TestStartOffset:
+    @pytest.mark.asyncio
+    async def test_it_shifts_the_tracks_timestamps(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        handlers = WorkerHandlers(db_manager)
+        chronicle_id = uuid4()
+        try:
+            await _transcribe(
+                handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two", start_offset=60
+            )
+
+            (line,) = await _lines(db_manager, chronicle_id)
+            assert (line.start_time, line.end_time) == (60.0, 61.0)
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_rerun_keeps_the_stored_offset(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        handlers = WorkerHandlers(db_manager)
+        chronicle_id = uuid4()
+        try:
+            await _transcribe(
+                handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two", start_offset=60
+            )
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Again")
+
+            (line,) = await _lines(db_manager, chronicle_id)
+            assert (line.text, line.start_time) == ("Again", 60.0)
+        finally:
+            await db_manager.close_all()
 
 
 @pytest.mark.asyncio

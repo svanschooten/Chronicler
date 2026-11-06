@@ -14,7 +14,7 @@ below and leave the code clean.
 | [configuration.md](configuration.md) | Settings, config file resolution, `--config`, the setup wizard |
 | [configuration-sections.md](configuration-sections.md) | The nested `transcription` / `cleaning` / `normalization` / `llm` / `summary` / `ui` / `extras` groups |
 | [dependency-injection.md](dependency-injection.md) | `Container`, scopes, why each unit of work gets its own session |
-| [deployment-and-rpc.md](deployment-and-rpc.md) | The four modes, the explicitly-exposed HTTP API, remote proxies, the web client |
+| [deployment-and-rpc.md](deployment-and-rpc.md) | The three modes, the explicitly-exposed HTTP API, remote proxies |
 | [storage.md](storage.md) | Archive and project databases, `DatabaseManager`, Alembic without an `alembic.ini` |
 | [tasks.md](tasks.md) | Task lifecycle, atomic claiming, retries, the worker loop, task events |
 | [processing.md](processing.md) | Import, clean and transcribe handlers; importers, cleaners, the transcriber |

@@ -56,6 +56,7 @@ class TranscriptLine(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     speaker_id: uuid.UUID | None = None
     speaker_name: str | None = None
+    source_id: uuid.UUID | None = None
     chronicle_id: uuid.UUID | None = None
     start_time: float
     end_time: float
@@ -109,6 +110,7 @@ class AudioSource(BaseModel):
     size_bytes: int | None = None
     duration_seconds: float | None = None
     added_at: datetime = Field(default_factory=datetime.now)
+    start_offset: float = 0.0
     missing: bool = False
 
     speaker_id: uuid.UUID | None = None

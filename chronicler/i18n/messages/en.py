@@ -189,6 +189,11 @@ MESSAGES = {
         "import_transcript": "Import transcript",
         "clean": "Clean transcript",
         "clean_queued": "Clean task queued",
+        "clean_title": "Clean transcript?",
+        "clean_message": (
+            "Cleaning '{title}' drops filler and repeated lines and merges consecutive turns. "
+            "A copy of the transcript is saved first, in the chronicle's snapshots folder."
+        ),
         "identify_speakers": "Identify speakers",
         "speakers_found": "Found {count} speaker(s)",
         "summarize": "Generate summary",
@@ -244,6 +249,12 @@ MESSAGES = {
         "save_speaker": "Save speaker only",
         "start": "Start transcription",
         "start_again": "Transcribe again",
+        "start_offset": "Start offset (seconds)",
+        "start_offset_invalid": "Enter a number of seconds, 0 or more",
+        "replaces_edits": (
+            "This track is already transcribed. "
+            "Transcribing it again replaces its lines, including any edits made to them."
+        ),
     },
     "recording": {
         "no_devices": "No audio input devices were found. On WSL, audio input needs WSLg.",
@@ -337,8 +348,8 @@ MESSAGES = {
             "thin_client": "Thin Client",
             "thin_client_description": "Connect to a Chronicler Server that does the work.",
             "server_note": (
-                "Running Chronicler as a server or web client is set up from a terminal: "
-                "start it with the 'server' or 'web' argument."
+                "Running Chronicler as a server is set up from a terminal: "
+                "start it with the 'server' argument."
             ),
         },
         "workspace": {

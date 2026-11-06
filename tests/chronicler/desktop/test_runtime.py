@@ -71,3 +71,12 @@ def test_build_runtime_activates_the_configured_locale(tmp_path):
         assert get_locale() == "nl"
     finally:
         set_locale("en")
+
+
+def test_a_web_client_config_starts_as_a_thin_client():
+    """Ticket 026: `client:web` with a server URL used to crash `build_runtime`."""
+    settings = Settings(server_url="http://example.invalid", api_key="key", mode="client:web")
+
+    runtime = build_runtime(settings)
+
+    assert isinstance(runtime.resolver, RemoteContainer)

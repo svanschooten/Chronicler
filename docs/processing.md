@@ -9,13 +9,15 @@ operation just made stale. That shape lives in `HandlerBase`, so each handler mo
 contains only what makes it different.
 
 `WorkerHandlers` composes the three handler classes by inheritance rather than
-delegation, so they keep sharing a single `db_manager`/`chronicle_repo` pair — and
-therefore one archive session — with no forwarding boilerplate. The three classes are
-independent: they define disjoint `handle_*` methods and share only `HandlerBase`.
+delegation, so they share one `db_manager`/`archive_sessions` pair with no forwarding
+boilerplate. The three classes are independent: they define disjoint `handle_*` methods
+and share only `HandlerBase`.
 
-`chronicle_repo` is optional. Without it a handler still rewrites the transcript
-correctly; it just cannot tag the chronicle or backfill derived metadata. Tests that
-only care about transcript contents leave it out.
+`archive_sessions` is a session factory. `HandlerBase.chronicles()` opens a short session
+on it for each chronicle lookup or update, so no handler holds the archive open while it
+transcribes or summarizes. It is optional. Without it a handler still rewrites the
+transcript correctly; it just cannot tag the chronicle or backfill derived metadata.
+Tests that only care about transcript contents leave it out.
 
 ## Timestamps
 
@@ -86,16 +88,19 @@ speaker. `speaker_name` says which. One audio source is one participant's own tr
 the caller already knows whose, so this is what makes output correctly attributed
 rather than generically labelled.
 
-Timestamps are used **as-is, never offset** — the opposite of import's append mode. Each
-audio source is one participant's track from the same recording session, already
+Timestamps are used as-is plus the track's `start_offset`, which defaults to 0. Each
+audio source is usually one participant's track from the same recording session, already
 time-aligned with every other track, so the raw per-segment seconds are real positions
 on a shared timeline and sorting the combined transcript by `start_time` interleaves
-speakers correctly for free.
+speakers correctly for free. A recording split into sequential parts is the exception:
+give each later part the offset where it starts, or its lines interleave with the first
+part's. A task's `start_offset` is stored on the track, so a re-run keeps it.
 
-Re-transcribing replaces only *that speaker's* lines, via
-`delete_lines_by_speaker`, so another participant's already-transcribed track survives.
-The speaker is resolved from the task payload rather than from the transcribed lines,
-because the replacement has to happen even when the track turned out to be silent.
+Every line records the track it came from in `source_id`, and re-transcribing replaces
+only *that track's* lines, via `delete_track_lines`. Another participant's track
+survives, and so does a second track for the same speaker. The replacement happens even
+when the track turned out to be silent. Lines with no `source_id`, such as imported ones,
+are never deleted; see [audio-sources.md](audio-sources.md#lines-remember-their-track).
 
 `status` is set to `Transcribed` only if it is still the untouched `Imported` default,
 so a chronicle whose status was already something else on purpose does not get stomped

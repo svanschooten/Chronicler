@@ -137,7 +137,6 @@ class RpcServer:
 
     def build(self):
         from fastapi import Depends, FastAPI, File, HTTPException, Security, UploadFile, status
-        from fastapi.middleware.cors import CORSMiddleware
         from fastapi.security import APIKeyHeader
 
         from chronicler.core.database_manager import DatabaseManager
@@ -156,14 +155,6 @@ class RpcServer:
         self._app = FastAPI(
             title="Chronicler RPC Server",
             dependencies=[Depends(verify_api_key)],
-        )
-
-        self._app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=False,
-            allow_methods=["*"],
-            allow_headers=["*"],
         )
 
         @self._app.post("/upload")

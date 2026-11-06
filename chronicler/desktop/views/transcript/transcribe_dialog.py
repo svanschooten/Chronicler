@@ -32,6 +32,7 @@ class TranscribeChoice:
     no_speech_threshold: float
     normalize_first: bool
     transcribe: bool
+    start_offset: float = 0.0
 
 
 class TranscribeDialog:
@@ -75,6 +76,12 @@ class TranscribeDialog:
             data="no_speech_threshold",
             value=str(defaults.no_speech_threshold),
             width=140,
+        )
+        self.start_offset = ft.TextField(
+            label=t("transcribe.start_offset"),
+            data="start_offset",
+            value=f"{source.start_offset:g}",
+            width=200,
         )
         self.normalize = (
             None
@@ -127,12 +134,19 @@ class TranscribeDialog:
         return await future
 
     def _body(self) -> list[ft.Control]:
-        controls: list[ft.Control] = [
-            ft.Text(t("transcribe.message"), size=12),
+        controls: list[ft.Control] = [ft.Text(t("transcribe.message"), size=12)]
+        if self.source.is_transcribed:
+            # Re-running replaces this track's lines, hand edits included - see
+            # docs/audio-sources.md.
+            controls.append(
+                ft.Text(t("transcribe.replaces_edits"), size=12, weight=ft.FontWeight.BOLD)
+            )
+        controls += [
             self.speaker,
             self.language,
             self.model_size,
             self.threshold,
+            self.start_offset,
         ]
         if self.normalize is not None:
             controls.append(self.normalize)
@@ -147,10 +161,11 @@ class TranscribeDialog:
         """The filled-in values, or None when something is missing or unusable."""
         speaker = self._speaker_name()
         threshold = self._threshold()
+        start_offset = self._start_offset()
 
         self._mark_speaker(None if speaker else t("transcribe.speaker_required"))
-        self._refresh(self.speaker, self.threshold)
-        if not speaker or threshold is None:
+        self._refresh(self.speaker, self.threshold, self.start_offset)
+        if not speaker or threshold is None or start_offset is None:
             return None
 
         return TranscribeChoice(
@@ -160,6 +175,7 @@ class TranscribeDialog:
             no_speech_threshold=threshold,
             normalize_first=bool(self.normalize.value) if self.normalize is not None else False,
             transcribe=transcribe,
+            start_offset=start_offset,
         )
 
     def _speaker_name(self) -> str:
@@ -194,6 +210,20 @@ class TranscribeDialog:
             return None
 
         self.threshold.error = None
+        return value
+
+    def _start_offset(self) -> float | None:
+        """Seconds to shift this track's timestamps by, or None with the field marked."""
+        try:
+            value = float((self.start_offset.value or "0").strip() or "0")
+        except ValueError:
+            value = -1.0
+
+        if value < 0:
+            self.start_offset.error = t("transcribe.start_offset_invalid")
+            return None
+
+        self.start_offset.error = None
         return value
 
     @staticmethod

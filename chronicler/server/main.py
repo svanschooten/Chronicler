@@ -9,7 +9,7 @@ from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.local_container import register_local_repositories
 from chronicler.core.rpc import RpcServer
-from chronicler.core.worker_wiring import build_worker_runtime
+from chronicler.core.worker_wiring import build_worker_manager
 from chronicler.core.workers import WorkerManager
 from chronicler.core.workspace_lock import WorkspaceLockedError
 
@@ -55,7 +55,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
     app = rpc_server.build()
     logger.info(f"RPC Server API Key: {settings.api_key}")
 
-    worker_manager = build_worker_runtime(db_manager).manager
+    worker_manager = build_worker_manager(db_manager)
 
     asyncio.run(_serve_and_work(app, worker_manager, host, port))
 

@@ -92,12 +92,20 @@ sources; only speaker assignments and summaries are lost.
 `get_archive_session()` returns a new session each call. Project engines are cached per
 chronicle id, because creating one runs the migration chain.
 
-The rule that matters: **the worker loop's session is never shared with the UI or with
-HTTP request handling.** Those run as separate coroutines on the same event loop, so an
-await in either can interleave with the other's in-flight operation, and `AsyncSession`
-does not allow that on a shared instance. `build_worker_runtime` therefore hands its
-session back to the caller rather than hiding it — whoever starts the loop owns closing
-it.
+The rule that matters: **the worker holds no session across steps.** `WorkerManager` and
+the task handlers take a session factory and open a short session for each group of
+repository calls, the way the RPC layer scopes each request. Two things follow:
+
+- Nothing is shared with the UI or HTTP request handling. Those run as separate
+  coroutines on the same event loop, and `AsyncSession` does not allow interleaved
+  operations on a shared instance.
+- A `database is locked` error poisons only the session it happened on. One long-lived
+  session would need a rollback nobody issues, and every later poll would fail with
+  `PendingRollbackError`.
+
+Progress updates are best effort: a locked write is logged and skipped. A task's final
+status write retries for up to `STATUS_WRITE_TIMEOUT` (30 seconds), so a brief lock does
+not lose a finished result.
 
 ## Deleting a chronicle closes its database first
 

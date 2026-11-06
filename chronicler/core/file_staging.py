@@ -70,8 +70,8 @@ class LocalFileStager(FileStager):
 class RemoteFileStager(FileStager):
     """
     Thin-client desktop mode: the worker runs on the remote server, so the picked file has
-    to actually get there first - upload it via the same /upload endpoint the web client's
-    proxy already uses, and return the path the server reports back.
+    to actually get there first - upload it via the server's /upload endpoint, and return
+    the path the server reports back.
     """
 
     def __init__(self, base_url: str, api_key: str | None, client: httpx.AsyncClient | None = None):

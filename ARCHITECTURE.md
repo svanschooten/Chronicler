@@ -79,7 +79,7 @@ Where each part of the above actually lives.
 
 | Path | Responsibility |
 | ---- | -------------- |
-| `chronicler/__main__.py` | Argument parsing and mode dispatch (`desktop`, `server`, `web`) |
+| `chronicler/__main__.py` | Argument parsing and mode dispatch (`desktop`, `server`) |
 | `chronicler/core/config.py` | `Settings` — user configuration, including the persisted deployment mode |
 | `chronicler/core/wizard.py` | First-run configuration wizard |
 | `chronicler/core/container.py` | DI container; `create_scope()` is what gives each unit of work its own session |
@@ -99,7 +99,6 @@ Where each part of the above actually lives.
 | `chronicler/core/file_staging.py` | Getting a picked file into the workspace (copy locally, upload remotely) |
 | `chronicler/desktop/` | Flet application — `app.py` shell, `state.py` navigation, `views/`, `components/`, `theme.py`, `dialogs.py` |
 | `chronicler/server/main.py` | Headless entry point: the generated API plus a worker loop on one event loop |
-| `chronicler/webclient/` | Reverse proxy and static frontend for the browser client |
 | `chronicler/migrations/` | Two Alembic chains: `archive/` and `project/` |
 
 The test tree under `tests/chronicler/` mirrors this layout module for module.
@@ -108,7 +107,7 @@ The test tree under `tests/chronicler/` mirrors this layout module for module.
 
 # Deployment modes
 
-Chronicler supports four deployment modes.
+Chronicler supports three deployment modes.
 
 The selected mode is determined by the application configuration and the entry point used.
 
@@ -163,22 +162,6 @@ Application Services
 The Thin Client performs no local processing.
 
 All work is delegated to a remote Chronicler server.
-
----
-
-## Web Client (Server)
-
-```text
-Web Browser
-    │
-Web Client Server
-    │
-HTTP API
-    │
-Application Services
-```
-
-The Web Client is a browser-based frontend. It is served by a lightweight FastAPI server which also provides configuration for connecting to a Chronicler Server.
 
 ---
 
@@ -436,13 +419,14 @@ Handler --> Chronicle
 ```
 
 Handlers are mapped to task types in one place —
-`chronicler/core/worker_wiring.py::build_worker_runtime` — which both the desktop app (in
+`chronicler/core/worker_wiring.py::build_worker_manager` — which both the desktop app (in
 full-stack mode) and the server call. That is deliberate: a handler registered in only
 one entry point is a task type that silently never runs in the other.
 
-The worker loop gets a database session of its own. It and the UI (or HTTP request
-handling) are separate coroutines on the same event loop, and an `AsyncSession` is not
-safe to share across coroutines whose operations can interleave.
+The worker loop and its handlers open a short archive session for each step and hold none
+across a handler's run. A session is never shared with the UI or HTTP request handling,
+and a lock timeout fails one step instead of leaving the loop on a session that needs a
+rollback.
 
 **Planned — Scribes.** The target model names these workers *Scribes* and allows the
 number of concurrent Scribes to be configured per provider, so an expensive provider such
@@ -566,7 +550,7 @@ Most new functionality follows the same pattern.
    remote callers a raw dict.
 2. If background processing is required, add a `TaskType`, a handler module under
    `chronicler/core/processing/handlers/`, and register it in
-   `core/worker_wiring.py::build_worker_runtime`.
+   `core/worker_wiring.py::build_worker_manager`.
 3. If the schema changes, generate an Alembic revision in the matching chain
    (`archive` or `project`).
 4. Update the user interface if the feature needs to be reachable or configured.

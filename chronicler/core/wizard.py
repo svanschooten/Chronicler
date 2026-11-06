@@ -68,7 +68,7 @@ class WorkspaceStep(WizardStep):
 class ApiKeyStep(WizardStep):
     def run(self, settings: Settings) -> None:
         print("\n--- API Key Setup ---")
-        print("An API key is required for remote access (Thin Client or Web Client).")
+        print("An API key is required for remote access from a Thin Client.")
         print("1. Generate a new API key (recommended)")
         print("2. Enter an existing API key")
         print("3. Skip (no remote access)")
@@ -133,10 +133,6 @@ class ConfigWizard:
                 self._run_step(WorkspaceStep())
                 self._run_step(ApiKeyStep())
                 self.settings.mode = "server"
-            elif mode == "client:web":
-                self._run_step(LanguageStep())
-                self._run_step(RemoteServerStep())
-                self.settings.mode = "client:web"
             elif mode == "client:desktop":
                 self._show_main_choice()
         else:
@@ -160,10 +156,9 @@ class ConfigWizard:
         print("1. Full Stack (Local processing and storage)")
         print("2. Thin Client (Connect to a remote Chronicler Server)")
         print("3. Server (Run as a server for other clients)")
-        print("4. Web Client (Run a web server for the browser frontend)")
 
         while True:
-            choice = input("\nSelect an option (1-4) [1]: ").strip() or "1"
+            choice = input("\nSelect an option (1-3) [1]: ").strip() or "1"
             if choice == "1":
                 self._run_step(WorkspaceStep())
                 self._run_step(ApiKeyStep())
@@ -178,12 +173,8 @@ class ConfigWizard:
                 self._run_step(ApiKeyStep())
                 self.settings.mode = "server"
                 break
-            elif choice == "4":
-                self._run_step(RemoteServerStep())
-                self.settings.mode = "client:web"
-                break
             else:
-                print("Invalid choice. Please select 1, 2, 3 or 4.")
+                print("Invalid choice. Please select 1, 2 or 3.")
 
 
 def run_wizard(mode: str | None = None):

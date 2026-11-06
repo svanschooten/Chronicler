@@ -190,6 +190,11 @@ MESSAGES = {
         "import_transcript": "Transcript importeren",
         "clean": "Transcript opschonen",
         "clean_queued": "Opschoontaak in de wachtrij",
+        "clean_title": "Transcript opschonen?",
+        "clean_message": (
+            "Opschonen van '{title}' verwijdert opvulling en herhaalde regels en voegt "
+            "opeenvolgende beurten samen. Eerst wordt een kopie bewaard in de map snapshots."
+        ),
         "identify_speakers": "Sprekers herkennen",
         "speakers_found": "{count} spreker(s) gevonden",
         "summarize": "Samenvatting maken",
@@ -247,6 +252,12 @@ MESSAGES = {
         "save_speaker": "Alleen spreker opslaan",
         "start": "Transcriptie starten",
         "start_again": "Opnieuw transcriberen",
+        "start_offset": "Startverschuiving (seconden)",
+        "start_offset_invalid": "Voer een aantal seconden in, 0 of meer",
+        "replaces_edits": (
+            "Dit spoor is al getranscribeerd. "
+            "Opnieuw transcriberen vervangt de regels ervan, ook als je ze hebt bewerkt."
+        ),
     },
     "recording": {
         "no_devices": "Geen audio-invoerapparaten gevonden. Op WSL is WSLg nodig voor invoer.",
@@ -343,8 +354,8 @@ MESSAGES = {
             "thin_client": "Thin client",
             "thin_client_description": "Verbinden met een Chronicler Server die het werk doet.",
             "server_note": (
-                "Chronicler als server of webclient draaien stel je in vanaf een terminal: "
-                "start met het argument 'server' of 'web'."
+                "Chronicler als server draaien stel je in vanaf een terminal: "
+                "start met het argument 'server'."
             ),
         },
         "workspace": {

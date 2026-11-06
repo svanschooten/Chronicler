@@ -332,21 +332,6 @@ class TestFocusedReader:
         assert reader.width == DEFAULT_PAGE_WIDTH - READER_MARGIN_X
         assert reader.height == DEFAULT_PAGE_HEIGHT - READER_MARGIN_Y
 
-    def test_fullscreen_is_offered_in_the_desktop_window(self, make_view, attach_page):
-        page = attach_page(TranscriptView)
-        page.web = False
-        view = make_view()
-
-        assert view._can_go_fullscreen() is True
-
-    def test_fullscreen_is_hidden_in_a_browser_tab(self, make_view, attach_page):
-        """`page.window` is inert there, so the button would do nothing visible."""
-        page = attach_page(TranscriptView)
-        page.web = True
-        view = make_view()
-
-        assert view._can_go_fullscreen() is False
-
 
 class TestDetailPanelWidth:
     def test_a_wide_window_gets_a_share_of_it(self):

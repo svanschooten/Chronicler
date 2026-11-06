@@ -6,8 +6,8 @@ attached there is nowhere for `input()` to read from, and a windowless Windows e
 has no stdio at all. This asks the same questions through Flet instead.
 
 It covers only the two modes a desktop window can actually run in - full stack and thin
-client. Server and web-client setup stays in the console wizard, which runs from the
-terminal those modes are started from anyway.
+client. Server setup stays in the console wizard, which runs from the terminal the server
+is started from anyway.
 """
 
 import asyncio

@@ -7,7 +7,7 @@ This document provides practical guides for configuring and running Chronicler i
 When you run Chronicler for the first time without a configuration file, a configuration wizard will start automatically. Which one you get depends on how you started it:
 
 - **Desktop** (`python -m chronicler`, or double-clicking the packaged app) shows the setup wizard **in the window**. It covers the two modes a desktop window runs in — Full Stack and Thin Client — and asks for your language first, so the rest of the wizard is in it.
-- **Server and Web Client** (`python -m chronicler server` / `web`) use the **console wizard**, since those are started from a terminal anyway.
+- **Server** (`python -m chronicler server`) uses the **console wizard**, since it is started from a terminal anyway.
 
 The packaged desktop build is windowless and has no console to read from, which is why desktop setup happens on screen. The packaged app still accepts `Chronicler server` from a terminal — it borrows that terminal's console on Windows.
 
@@ -24,7 +24,7 @@ Server setup runs in the terminal you start it from.
 
 1. Run `python -m chronicler server`. The console wizard starts if nothing is configured.
 2. Enter the workspace path.
-3. Generate or enter an API key. This key will be required by any Thin Clients or Web Clients connecting to this server.
+3. Generate or enter an API key. This key will be required by any Thin Clients connecting to this server.
 
 ### Running as a Thin Client
 
@@ -32,18 +32,6 @@ Server setup runs in the terminal you start it from.
 2. Start Chronicler and pick **Thin Client** in the wizard.
 3. Enter the Server URL (e.g., `http://192.168.1.10:8000`).
 4. Enter the API key from the server. It must match the server's key, so it cannot be generated here — both fields are required.
-
-### Running the Web Client (Server)
-
-1. Ensure you have a Chronicler Server running.
-2. Run `python -m chronicler web`. The console wizard starts if nothing is configured.
-3. Enter the Server URL and API key.
-4. Open your browser at `http://localhost:8080`.
-
-The Web Client allows you to:
-- Browse your Chronicles.
-- Create new Chronicles.
-- Upload audio files or transcripts directly to the server for processing.
 
 ---
 
@@ -92,7 +80,7 @@ mode: desktop:full_stack
 dark_mode: true
 ```
 
-`mode` is one of `desktop:full_stack`, `desktop:thin_client`, `server` or `client:web`,
+`mode` is one of `desktop:full_stack`, `desktop:thin_client` or `server`,
 and is written by the wizard. A config saved before `mode` existed still works — the
 mode is inferred from whether a workspace path or a server URL is present.
 
@@ -111,8 +99,8 @@ Two features need extra dependencies, so a default install stays small:
 pip install -e ".[server]"
 ```
 
-Needed to run `python -m chronicler server` or `python -m chronicler web` (FastAPI,
-Uvicorn, multipart upload support).
+Needed to run `python -m chronicler server` (FastAPI, Uvicorn, multipart upload
+support).
 
 ```bash
 pip install -e ".[transcription]"

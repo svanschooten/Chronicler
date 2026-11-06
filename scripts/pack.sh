@@ -14,7 +14,6 @@ flet pack chronicler/__main__.py \
             --add-data "assets:assets" \
             --add-data "chronicler/migrations:chronicler/migrations" \
             --add-data "chronicler/core/services/fonts:chronicler/core/services/fonts" \
-            --add-data "chronicler/webclient/src:chronicler/webclient/src" \
             --hidden-import aiosqlite \
             --hidden-import re._parser \
             --hidden-import logging.config
