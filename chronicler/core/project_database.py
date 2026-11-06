@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -29,6 +29,8 @@ class DBTranscriptLine(ProjectBase):
     start_time: Mapped[float] = mapped_column(Float)
     end_time: Mapped[float] = mapped_column(Float)
     text: Mapped[str] = mapped_column(String)
+    # Whether the timings are line indices rather than seconds. NULL on older rows.
+    synthetic_timing: Mapped[bool | None] = mapped_column(Boolean)
 
     speaker: Mapped[DBSpeaker | None] = relationship(lazy="selectin")
 

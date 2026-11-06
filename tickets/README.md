@@ -35,7 +35,7 @@ These areas conflict when worked on at the same time, so take their tickets in t
 | Area | Order | Why |
 | ---- | ----- | --- |
 | Worker and task queue | 007 → 009 → 069 → 022 → 040 → 064 | Same files in `core/workers.py` and `task_repository.py` |
-| Project migrations | 010 → 020 → 029 → 063 | Each adds an Alembic revision on the project chain (head `f6c3a9d2b417`). Rebase `down_revision` on whatever merged last |
+| Project migrations | 010 → 020 → 029 → 063 | Each adds an Alembic revision on the project chain (head `a8e1d5c3b790`). Rebase `down_revision` on whatever merged last |
 | Archive migrations | 022 → 029 | Same for the archive chain (head `c9f2a4e17b30`) |
 | Task handlers | 010 → 011 → 032 → 040 | Same files in `core/processing/handlers/` |
 | Desktop shell | 007 → 027 → 041 | Same parts of `desktop/app.py`. Schedule 041 alone, because it conflicts with most open desktop work |
@@ -120,7 +120,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [019-M5 Every thin-client call has a 5-second timeout](019-M5_rpc_timeouts.md) · medium · XS
 
-- [ ] [020-M3 The subtitle guard stops working after a clean or a line delete](020-M3_explicit_timing_flag.md) · medium · S · after 010
+- [x] [020-M3 The subtitle guard stops working after a clean or a line delete](020-M3_explicit_timing_flag.md) · medium · S · after 010
 
 - [ ] [021-M10 Reading an unknown chronicle creates it on disk](021-M10_reads_must_not_create_chronicles.md) · medium · S
 

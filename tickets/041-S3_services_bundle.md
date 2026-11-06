@@ -38,6 +38,7 @@ class Services:
     system: SystemService
     close: Callable[[], Awaitable[None]]
 
+
 def local_services(db: DatabaseManager, settings: Settings) -> Services: ...
 def remote_services(url: str, api_key: str, client: httpx.AsyncClient) -> Services: ...
 ```

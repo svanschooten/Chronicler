@@ -70,12 +70,15 @@ class NoRealTimestampsError(ValueError):
 
 def looks_synthetic(lines: list[TranscriptLine]) -> bool:
     """
-    True when every line starts one second after the last, which is what the text importer
-    writes when a source carries no timings of its own.
+    True when the timings are line indices rather than seconds.
+
+    Lines carry a `synthetic_timing` flag, written by the importer and the transcriber and
+    kept through cleaning. Older rows have none, so when no line has a flag the fallback
+    applies: two or more lines whose start and end times are all whole numbers.
     """
+    flags = [line.synthetic_timing for line in lines]
+    if any(flag is not None for flag in flags):
+        return all(flag is not False for flag in flags)
     if len(lines) < 2:
         return False
-    return all(
-        line.start_time == float(index) and line.end_time == float(index + 1)
-        for index, line in enumerate(lines)
-    )
+    return all(line.start_time.is_integer() and line.end_time.is_integer() for line in lines)

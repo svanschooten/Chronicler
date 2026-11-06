@@ -49,6 +49,7 @@ class SQLiteTranscriptRepository(TranscriptRepository):
             start_time=line.start_time,
             end_time=line.end_time,
             text=line.text,
+            synthetic_timing=line.synthetic_timing,
         )
         self.session.add(db_line)
         await self.session.flush()
@@ -64,6 +65,7 @@ class SQLiteTranscriptRepository(TranscriptRepository):
                 start_time=line.start_time,
                 end_time=line.end_time,
                 text=line.text,
+                synthetic_timing=line.synthetic_timing,
             )
             for line in lines
         ]

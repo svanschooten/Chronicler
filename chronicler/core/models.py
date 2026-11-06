@@ -57,6 +57,8 @@ class TranscriptLine(BaseModel):
     speaker_id: uuid.UUID | None = None
     speaker_name: str | None = None
     source_id: uuid.UUID | None = None
+    # True when start/end are line indices, not seconds. None on rows older than the flag.
+    synthetic_timing: bool | None = None
     chronicle_id: uuid.UUID | None = None
     start_time: float
     end_time: float

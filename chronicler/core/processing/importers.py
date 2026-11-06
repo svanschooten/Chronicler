@@ -35,6 +35,8 @@ class RegexImporter(Importer):
     def parse(self, content: str, start_offset: float = 0.0) -> list[TranscriptLine]:
         turns = self._collect_turns(content, start_offset)
         self._assign_times(turns, start_offset)
+        for turn in turns:
+            turn.synthetic_timing = self.timestamp_group is None
         return turns
 
     def _collect_turns(self, content: str, start_offset: float) -> list[TranscriptLine]:
