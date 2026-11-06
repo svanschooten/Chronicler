@@ -364,8 +364,8 @@ MESSAGES = {
                 "Mit einem Chronicler-Server verbinden, der die Arbeit übernimmt."
             ),
             "server_note": (
-                "Chronicler als Server oder Web-Client wird im Terminal eingerichtet: "
-                "mit dem Argument 'server' oder 'web' starten."
+                "Chronicler als Server wird im Terminal eingerichtet: "
+                "mit dem Argument 'server' starten."
             ),
         },
         "workspace": {

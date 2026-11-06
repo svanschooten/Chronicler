@@ -439,7 +439,6 @@ class TranscriptView(ft.Column):
             icon=ft.Icons.FULLSCREEN,
             icon_color=self.colors.muted,
             tooltip=t("transcript.fullscreen"),
-            visible=self._can_go_fullscreen(),
         )
 
         async def toggle_fullscreen(_event):
@@ -473,13 +472,6 @@ class TranscriptView(ft.Column):
             )
 
         await await_dialog(self.page, build)
-
-    def _can_go_fullscreen(self) -> bool:
-        """
-        A browser tab has no window to resize - `page.window` is inert there, so the
-        button would do nothing visible. The web client is the one mode that hits this.
-        """
-        return not getattr(self.page, "web", False)
 
     def _size_reader(self, reader: ft.Container) -> None:
         """

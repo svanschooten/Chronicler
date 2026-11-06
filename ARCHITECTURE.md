@@ -79,7 +79,7 @@ Where each part of the above actually lives.
 
 | Path | Responsibility |
 | ---- | -------------- |
-| `chronicler/__main__.py` | Argument parsing and mode dispatch (`desktop`, `server`, `web`) |
+| `chronicler/__main__.py` | Argument parsing and mode dispatch (`desktop`, `server`) |
 | `chronicler/core/config.py` | `Settings` — user configuration, including the persisted deployment mode |
 | `chronicler/core/wizard.py` | First-run configuration wizard |
 | `chronicler/core/container.py` | DI container; `create_scope()` is what gives each unit of work its own session |
@@ -99,7 +99,6 @@ Where each part of the above actually lives.
 | `chronicler/core/file_staging.py` | Getting a picked file into the workspace (copy locally, upload remotely) |
 | `chronicler/desktop/` | Flet application — `app.py` shell, `state.py` navigation, `views/`, `components/`, `theme.py`, `dialogs.py` |
 | `chronicler/server/main.py` | Headless entry point: the generated API plus a worker loop on one event loop |
-| `chronicler/webclient/` | Reverse proxy and static frontend for the browser client |
 | `chronicler/migrations/` | Two Alembic chains: `archive/` and `project/` |
 
 The test tree under `tests/chronicler/` mirrors this layout module for module.
@@ -108,7 +107,7 @@ The test tree under `tests/chronicler/` mirrors this layout module for module.
 
 # Deployment modes
 
-Chronicler supports four deployment modes.
+Chronicler supports three deployment modes.
 
 The selected mode is determined by the application configuration and the entry point used.
 
@@ -163,22 +162,6 @@ Application Services
 The Thin Client performs no local processing.
 
 All work is delegated to a remote Chronicler server.
-
----
-
-## Web Client (Server)
-
-```text
-Web Browser
-    │
-Web Client Server
-    │
-HTTP API
-    │
-Application Services
-```
-
-The Web Client is a browser-based frontend. It is served by a lightweight FastAPI server which also provides configuration for connecting to a Chronicler Server.
 
 ---
 

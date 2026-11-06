@@ -15,7 +15,7 @@ Last re-baselined **2026-08-17** against the actual source tree.
 The core loop works end to end: create and manage Chronicles, import a transcript or an
 audio source, transcribe audio with faster-whisper, read and export the transcript as
 plain text. All three deployment modes start and function (full stack, server, thin
-client); the web client is a working reverse proxy over the server API.
+client). The web client was removed in ticket 012-S14.
 
 | Sprint | Theme | Landed |
 | ------ | ----- | ------ |
@@ -1284,6 +1284,9 @@ Future:
 ---
 
 # Phase 8 — Web Client
+
+> Removed by ticket 012-S14: it exposed the whole API with no login, for three
+> operations. The notes below are history; ticket 062 decides what to keep.
 
 * [x] Implement basic web client server
 * [x] Serve static files

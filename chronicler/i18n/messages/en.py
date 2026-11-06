@@ -348,8 +348,8 @@ MESSAGES = {
             "thin_client": "Thin Client",
             "thin_client_description": "Connect to a Chronicler Server that does the work.",
             "server_note": (
-                "Running Chronicler as a server or web client is set up from a terminal: "
-                "start it with the 'server' or 'web' argument."
+                "Running Chronicler as a server is set up from a terminal: "
+                "start it with the 'server' argument."
             ),
         },
         "workspace": {

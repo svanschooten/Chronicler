@@ -1,7 +1,6 @@
 # Deployment modes and RPC
 
-`chronicler/core/rpc.py`, `chronicler/core/remote.py`, `chronicler/webclient/main.py`,
-`chronicler/server/main.py`
+`chronicler/core/rpc.py`, `chronicler/core/remote.py`, `chronicler/server/main.py`
 
 The same application services do the work in every deployment mode. What changes is how
 a client reaches them.
@@ -13,7 +12,14 @@ a client reaches them.
 | Full stack | Local Flet | In process | Local workspace |
 | Server | None | In process | Local workspace |
 | Thin client | Local Flet | Remote, over HTTP | On the server |
-| Web client | Browser | Remote, proxied | On the server |
+
+There was a fourth, a browser client behind a reverse proxy. It was removed: it exposed
+the full API with no login of its own, for three operations. If browser access is wanted
+again, Flet's web mode over the thin client is the first thing to try. The code is in git
+history.
+
+A config still saved with `mode: client:web` reads as if no mode were set, with a warning.
+The desktop then infers thin client from its server URL instead of failing to start.
 
 ## The generated API
 
@@ -67,19 +73,10 @@ in this codebase — fell through unserialised and failed httpx's JSON encoding 
 `RemoteContainer` resolves the same service classes to proxies, so a view cannot tell
 whether it is talking to a local instance or a remote one.
 
-## CORS
+## No CORS
 
-`allow_credentials=False` with a wildcard origin is deliberate. Auth here is a
-bearer-style `X-API-Key` header, not a cookie, so browsers never attach it
-automatically the way they do credentials. `allow_credentials=True` combined with a
-wildcard origin would be both invalid — browsers reject the combination — and
-unnecessary.
-
-## The web client proxy
-
-The browser never receives the upstream API key. `/config` reports only
-`{"connected": bool}`; the `/api/...` routes inject `X-API-Key` server-side when
-forwarding. An upstream failure becomes a 502 rather than a stack trace.
+The API installs no CORS middleware, so browsers refuse cross-origin calls to it. Every
+client is a Flet app or a script, none of which needs an allowed origin.
 
 ## Server mode runs a worker too
 

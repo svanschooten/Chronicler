@@ -3,6 +3,8 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from chronicler.__main__ import attach_windows_console, main
 from chronicler.core.config import Settings
 
@@ -40,23 +42,6 @@ def test_main_server_mode():
         mock_settings.validate_for_mode.assert_called_with("server")
 
 
-def test_main_web_mode():
-    with (
-        patch("sys.argv", ["chronicler", "client:web"]),
-        patch("chronicler.core.config.is_config_initialized", return_value=True),
-        patch("chronicler.core.config.get_settings") as mock_get_settings,
-        patch("chronicler.webclient.main.run_server") as mock_run_web_server,
-    ):
-        mock_settings = MagicMock()
-        mock_settings.validate_for_mode.return_value = True
-        mock_get_settings.return_value = mock_settings
-
-        main()
-
-        mock_run_web_server.assert_called_once()
-        mock_settings.validate_for_mode.assert_called_with("client:web")
-
-
 def test_main_verbose_logging():
     with (
         patch("sys.argv", ["chronicler", "--verbose"]),
@@ -75,21 +60,13 @@ def test_main_verbose_logging():
         assert kwargs["level"] == logging.DEBUG
 
 
-def test_main_web_mode_alias():
-    with (
-        patch("sys.argv", ["chronicler", "web"]),
-        patch("chronicler.core.config.is_config_initialized", return_value=True),
-        patch("chronicler.core.config.get_settings") as mock_get_settings,
-        patch("chronicler.webclient.main.run_server") as mock_run_web_server,
-    ):
-        mock_settings = MagicMock()
-        mock_settings.validate_for_mode.return_value = True
-        mock_get_settings.return_value = mock_settings
-
+@pytest.mark.parametrize("mode", ["web", "client:web"])
+def test_the_removed_web_client_modes_are_rejected(mode, capsys):
+    with patch("sys.argv", ["chronicler", mode]), pytest.raises(SystemExit) as exit_info:
         main()
 
-        mock_run_web_server.assert_called_once()
-        mock_settings.validate_for_mode.assert_called_with("client:web")
+    assert exit_info.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
 
 
 def test_main_desktop_mode_alias():

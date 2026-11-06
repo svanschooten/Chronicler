@@ -53,10 +53,8 @@ the opposite of what a focused reading mode is for. It is now sized from `page.w
 fallback for a window that has not reported its size yet.
 
 The title row carries a full-screen toggle, which drives `page.window.full_screen` and
-swaps its own icon. The button is hidden when `page.web` is true: a browser tab has no
-window to resize, `page.window` is inert there, and a button that visibly does nothing is
-worse than no button. That is the web client; the desktop app — packaged or from source —
-always has a real window.
+swaps its own icon. The desktop app, packaged or from source, always has a real window
+to resize, so the button is always shown.
 
 ## Timings are never touched
 
