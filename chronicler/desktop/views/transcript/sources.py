@@ -205,6 +205,7 @@ class SourcesPanel(ft.Column):
             model_size=choice.model_size,
             no_speech_threshold=choice.no_speech_threshold,
             normalize_first=choice.normalize_first,
+            start_offset=choice.start_offset,
         )
         self.show_snackbar(t("tasks.queued_transcribe", name=filename, speaker=choice.speaker))
         await self.load()

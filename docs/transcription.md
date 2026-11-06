@@ -103,3 +103,15 @@ transcription.
 
 The names offered are every speaker in the workspace, not just this chronicle's — see
 [speakers.md](speakers.md).
+
+## Re-running a track
+
+Transcribing a track again replaces the lines that track produced, and nothing else.
+Other tracks, including another track for the same speaker, are left alone. Edits made
+to the replaced lines are lost, so the dialog warns before a re-run. See
+[audio-sources.md](audio-sources.md#lines-remember-their-track).
+
+The dialog's *Start offset* shifts every timestamp the track produces. Leave it at 0 for
+tracks recorded side by side. For sequential parts of one recording, set each later part
+to the second it starts at. The offset is stored on the track and reused on a re-run.
+*Save speaker only* does not save it.

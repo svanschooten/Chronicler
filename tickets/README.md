@@ -32,7 +32,7 @@ These areas conflict when worked on at the same time, so take their tickets in t
 | Area | Order | Why |
 | ---- | ----- | --- |
 | Worker and task queue | 007 → 009 → 022 → 040 → 064 | Same files in `core/workers.py` and `task_repository.py` |
-| Project migrations | 010 → 020 → 029 → 063 | Each adds an Alembic revision on the project chain (head `e5b2f70c31a8`). Rebase `down_revision` on whatever merged last |
+| Project migrations | 010 → 020 → 029 → 063 | Each adds an Alembic revision on the project chain (head `f6c3a9d2b417`). Rebase `down_revision` on whatever merged last |
 | Archive migrations | 022 → 029 | Same for the archive chain (head `c9f2a4e17b30`) |
 | Task handlers | 010 → 011 → 032 → 040 | Same files in `core/processing/handlers/` |
 | Desktop shell | 007 → 027 → 041 | Same parts of `desktop/app.py`. Schedule 041 alone, because it conflicts with most open desktop work |
@@ -93,7 +93,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [ ] [009-C4 Interrupted tasks stay WORKING forever](009-C4_task_recovery.md) · critical · S · after 007, 008
 
-- [ ] [010-C5 Transcribing a second track for a speaker deletes the first](010-C5_transcript_line_source_id.md) · critical · M
+- [x] [010-C5 Transcribing a second track for a speaker deletes the first](010-C5_transcript_line_source_id.md) · critical · M
 
 - [ ] [011-H4 Clean rewrites the transcript with no confirmation or undo](011-H4_clean_confirm_and_snapshot.md) · high · S
 

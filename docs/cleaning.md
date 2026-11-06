@@ -24,7 +24,7 @@ has to happen last so it merges only lines that survived.
 | 5 | `DropShortLines` | `min_characters` | Fragments too short to carry meaning |
 | 6 | `DropDuplicateSegments` | `drop_duplicate_segments` | The same segment emitted twice at the same time |
 | 7 | `DropRepeats` | `drop_repeats`, `repetition_window_seconds` | The model looping on silence |
-| 8 | `MergeSameSpeaker` | `merge_same_speaker` | One speaker's consecutive turns split across segments |
+| 8 | `MergeSameSpeaker` | `merge_same_speaker` | One speaker's consecutive turns split across segments. Never joins lines from different tracks |
 
 Rules 3 and 5 always run; setting `min_characters` to `0` makes rule 5 a passthrough.
 

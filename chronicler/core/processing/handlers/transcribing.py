@@ -98,16 +98,27 @@ class TranscribeHandler(NormalizeHandler):
             sources = SQLiteAudioSourceRepository(session)
             try:
                 speaker = await repo.get_or_create_speaker(speaker_name)
-                await repo.delete_lines_by_speaker(speaker.id)
-
-                await self.attach_speakers(repo, lines)
-                await repo.add_lines(lines)
-
-                await sources.register(
+                source = await sources.register(
                     resolved_path.name,
                     content_hash=fingerprint_file(resolved_path),
                     size_bytes=resolved_path.stat().st_size,
                 )
+                offset = source.start_offset
+                if "start_offset" in data:
+                    offset = float(data["start_offset"])
+                    await sources.set_start_offset(resolved_path.name, offset)
+
+                # Only this track's lines. A line with no source_id came from an import, or
+                # from before tracks were recorded and could not be attributed, and is kept.
+                await repo.delete_track_lines(source.id)
+
+                await self.attach_speakers(repo, lines)
+                for line in lines:
+                    line.source_id = source.id
+                    line.start_time += offset
+                    line.end_time += offset
+                await repo.add_lines(lines)
+
                 await sources.set_speaker(resolved_path.name, speaker.id)
                 await sources.mark_transcribed(
                     resolved_path.name,
