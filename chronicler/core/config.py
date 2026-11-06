@@ -9,7 +9,13 @@ import yaml
 from platformdirs import user_config_dir
 from pydantic import Field, ValidationError
 from pydantic.fields import FieldInfo
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    DotEnvSettingsSource,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 from chronicler.core.config_sections import (
     CleaningSettings,
@@ -106,6 +112,32 @@ class FileConfigSettingsSource(PydanticBaseSettingsSource):
         return _drop_invalid_sections(_read_config(path)) if path is not None else {}
 
 
+def _deep_merge(target: dict[str, Any], extra: dict[str, Any]) -> None:
+    for key, value in extra.items():
+        if isinstance(value, dict) and isinstance(target.get(key), dict):
+            _deep_merge(target[key], value)
+        else:
+            target[key] = value
+
+
+def _keep_file_values(
+    values: dict[str, Any], environment: dict[str, Any], existing: dict[str, Any]
+) -> None:
+    """
+    Replaces every value the environment set with what the file already had, or drops it
+    when the file had nothing, recursing into sections such as `llm`.
+    """
+    for key, env_value in environment.items():
+        current = values.get(key)
+        if isinstance(env_value, dict) and isinstance(current, dict):
+            previous = existing.get(key)
+            _keep_file_values(current, env_value, previous if isinstance(previous, dict) else {})
+        elif key in existing:
+            values[key] = existing[key]
+        else:
+            values.pop(key, None)
+
+
 class Settings(BaseSettings):
     app_name: str = "Chronicler"
     workspace_path: Path | None = None
@@ -149,12 +181,35 @@ class Settings(BaseSettings):
         return True
 
     def save(self) -> Path:
+        """
+        Writes the configuration, leaving out anything set through the environment or a
+        `.env` file: those are usually secrets, and saving them would copy them into a
+        plain file the first time anything changed. The file keeps whatever it already
+        had for those settings. See docs/configuration.md.
+        """
         config_file = self.save_path()
         config_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_file, "w") as f:
-            yaml.dump(json.loads(self.model_dump_json()), f, default_flow_style=False)
+
+        values = json.loads(self.model_dump_json())
+        existing = _read_config(config_file) if config_file.exists() else {}
+        _keep_file_values(values, self._environment_values(), existing)
+
+        # Owner-only: the file can hold API keys. Windows has no equivalent mode bits.
+        descriptor = os.open(config_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w") as f:
+            yaml.dump(values, f, default_flow_style=False)
+        if os.name == "posix":
+            config_file.chmod(0o600)
 
         return config_file
+
+    @classmethod
+    def _environment_values(cls) -> dict[str, Any]:
+        """What the environment and `.env` set, nested the way the settings are."""
+        values: dict[str, Any] = {}
+        for source in (DotEnvSettingsSource(cls), EnvSettingsSource(cls)):
+            _deep_merge(values, source())
+        return values
 
     def save_path(self) -> Path:
         """Where `save()` will write."""
