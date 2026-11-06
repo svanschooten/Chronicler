@@ -6,6 +6,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.config import Settings
+from chronicler.core.models import ModelCheck
 from chronicler.desktop.app import DesktopApp
 from chronicler.desktop.runtime import build_runtime
 from chronicler.desktop.state import ViewType
@@ -383,7 +384,7 @@ async def test_refresh_models_caches_the_provider_listing(tmp_path):
     app = DesktopApp(runtime)
 
     system = AsyncMock()
-    system.list_models.return_value = ["qwen3", "llama3"]
+    system.list_models.return_value = ModelCheck(models=["qwen3", "llama3"])
     runtime.resolver.register_instance(SystemService, system)
 
     await app.refresh_models()
@@ -392,9 +393,9 @@ async def test_refresh_models_caches_the_provider_listing(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_on_llm_change_bypasses_the_model_cache(tmp_path):
+async def test_on_llm_change_asks_again(tmp_path):
     """
-    The configuration just changed, so a five-minute-old listing is known to be wrong.
+    The configuration just changed, so the listing is asked for again.
     """
     from unittest.mock import AsyncMock
 
@@ -404,13 +405,12 @@ async def test_on_llm_change_bypasses_the_model_cache(tmp_path):
     app = DesktopApp(runtime)
 
     system = AsyncMock()
-    system.list_models.return_value = ["qwen3"]
-    system.model_error.return_value = None
+    system.list_models.return_value = ModelCheck(models=["qwen3"])
     runtime.resolver.register_instance(SystemService, system)
 
     check = await app.on_llm_change()
 
-    system.list_models.assert_awaited_once_with(refresh=True)
+    system.list_models.assert_awaited_once_with()
     assert check.models == ["qwen3"]
     assert check.reachable
 
@@ -431,7 +431,7 @@ async def test_on_llm_change_re_reads_the_capabilities(tmp_path):
     app.capabilities = {"import"}
 
     system = AsyncMock()
-    system.list_models.return_value = []
+    system.list_models.return_value = ModelCheck()
     system.get_server_info.return_value = ServerInfo(
         version="1.0.0", capabilities=["import", "summarize"]
     )
@@ -494,7 +494,7 @@ async def test_refresh_models_also_learns_what_the_server_can_do(tmp_path):
     app = DesktopApp(runtime)
 
     system = AsyncMock()
-    system.list_models.return_value = []
+    system.list_models.return_value = ModelCheck()
     system.get_server_info.return_value = ServerInfo(
         version="9.9.9", capabilities=["import", "summarize"]
     )
@@ -516,7 +516,7 @@ async def test_unreachable_capabilities_leave_every_action_offered(tmp_path):
     app = DesktopApp(runtime)
 
     system = AsyncMock()
-    system.list_models.return_value = []
+    system.list_models.return_value = ModelCheck()
     system.get_server_info.side_effect = RuntimeError("connection refused")
     runtime.resolver.register_instance(SystemService, system)
 
