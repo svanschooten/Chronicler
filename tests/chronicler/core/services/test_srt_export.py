@@ -123,3 +123,36 @@ class TestSyntheticTimingFlag:
     def test_unflagged_rows_fall_back_to_whole_number_times(self):
         with pytest.raises(NoRealTimestampsError):
             format_srt([line("a", 0.0, 1.0), line("b", 5.0, 6.0)], require_real_timestamps=True)
+
+
+@pytest.mark.asyncio
+async def test_flag_survives_the_database_and_a_delete_so_srt_is_still_refused(tmp_path):
+    from chronicler.core.database_manager import DatabaseManager
+    from chronicler.core.sqlite import SQLiteTranscriptRepository
+
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    try:
+        session = await db_manager.get_project_session("c1")
+        async with session:
+            repo = SQLiteTranscriptRepository(session)
+            await repo.add_lines(
+                [
+                    TranscriptLine(
+                        text=str(i), start_time=float(i), end_time=i + 1.0, synthetic_timing=True
+                    )
+                    for i in range(4)
+                ]
+            )
+            await session.commit()
+            first = (await repo.get_lines())[1]
+            await repo.delete_line(first.id)
+            await session.commit()
+
+            remaining = await repo.get_lines()
+
+        assert [line.synthetic_timing for line in remaining] == [True, True, True]
+        with pytest.raises(NoRealTimestampsError):
+            format_srt(remaining, require_real_timestamps=True)
+    finally:
+        await db_manager.close_all()

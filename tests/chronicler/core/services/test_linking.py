@@ -243,3 +243,38 @@ class TestExternalSources:
         finally:
             await session.close()
             await db_manager.close_all()
+
+
+class TestHydrationDuration:
+    @pytest.mark.asyncio
+    async def test_flagged_synthetic_lines_give_no_duration(self, tmp_path):
+        db_manager, session, service, _ = await _workspace(tmp_path)
+        try:
+            lines = [_line("Nyx", "a", 0.0, 1.0), _line("Vale", "b", 7.0, 8.0)]
+            for line in lines:
+                line.synthetic_timing = True
+            project_db = await _external_project(db_manager, tmp_path, lines)
+
+            chronicle = await service.link_external_chronicle(str(project_db))
+
+            assert chronicle.status == "Transcribed"
+            assert chronicle.duration in (None, "")
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_flagged_real_lines_give_a_duration(self, tmp_path):
+        db_manager, session, service, _ = await _workspace(tmp_path)
+        try:
+            lines = [_line("Nyx", "a", 0.0, 61.5), _line("Vale", "b", 61.5, 125.0)]
+            for line in lines:
+                line.synthetic_timing = False
+            project_db = await _external_project(db_manager, tmp_path, lines)
+
+            chronicle = await service.link_external_chronicle(str(project_db))
+
+            assert chronicle.duration
+        finally:
+            await session.close()
+            await db_manager.close_all()
