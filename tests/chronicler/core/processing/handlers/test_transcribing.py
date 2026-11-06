@@ -283,19 +283,34 @@ async def _forget_line_sources(db_manager, chronicle_id) -> None:
         await session.commit()
 
 
+async def _import_line(db_manager, chronicle_id, speaker, text) -> None:
+    """A line the way an import writes it: a speaker, but no track."""
+    session = await db_manager.get_project_session(str(chronicle_id))
+    async with session:
+        repo = SQLiteTranscriptRepository(session)
+        owner = await repo.get_or_create_speaker(speaker)
+        await repo.add_lines(
+            [TranscriptLine(speaker_id=owner.id, text=text, start_time=0, end_time=1)]
+        )
+        await session.commit()
+
+
 class TestLinesWithNoRecordedTrack:
     @pytest.mark.asyncio
-    async def test_the_speakers_only_track_replaces_them(self, tmp_path):
+    async def test_an_imported_line_survives_rerunning_the_speakers_only_track(self, tmp_path):
+        """Review repro: the old 'only track owns untracked lines' rule deleted this."""
         db_manager = DatabaseManager(tmp_path)
         handlers = WorkerHandlers(db_manager)
         chronicle_id = uuid4()
         try:
-            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "alice.wav", "Old")
-            await _forget_line_sources(db_manager, chronicle_id)
+            await _import_line(db_manager, chronicle_id, "Alice", "Imported")
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "alice.wav", "Heard")
+            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "alice.wav", "Again")
 
-            await _transcribe(handlers, db_manager, chronicle_id, "Alice", "alice.wav", "New")
-
-            assert await _texts(db_manager, chronicle_id) == {("Alice", "New")}
+            assert await _texts(db_manager, chronicle_id) == {
+                ("Alice", "Imported"),
+                ("Alice", "Again"),
+            }
         finally:
             await db_manager.close_all()
 

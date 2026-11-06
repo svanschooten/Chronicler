@@ -1,7 +1,7 @@
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
 from sqlalchemy import delete as sa_delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.models import Speaker, TranscriptLine
@@ -108,19 +108,10 @@ class SQLiteTranscriptRepository(TranscriptRepository):
     async def delete_all_lines(self) -> None:
         await self.session.execute(sa_delete(DBTranscriptLine))
 
-    async def delete_track_lines(
-        self, source_id: UUID, unsourced_speaker_id: UUID | None = None
-    ) -> None:
-        belongs_to_track = DBTranscriptLine.source_id == str(source_id)
-        if unsourced_speaker_id is not None:
-            belongs_to_track = or_(
-                belongs_to_track,
-                and_(
-                    DBTranscriptLine.source_id.is_(None),
-                    DBTranscriptLine.speaker_id == str(unsourced_speaker_id),
-                ),
-            )
-        await self.session.execute(sa_delete(DBTranscriptLine).where(belongs_to_track))
+    async def delete_track_lines(self, source_id: UUID) -> None:
+        await self.session.execute(
+            sa_delete(DBTranscriptLine).where(DBTranscriptLine.source_id == str(source_id))
+        )
 
     async def search(self, query: str) -> list[TranscriptLine]:
         raise NotImplementedError("Transcript full-text search is not implemented yet")

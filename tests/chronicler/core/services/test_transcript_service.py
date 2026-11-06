@@ -154,9 +154,9 @@ async def test_delete_track_lines_removes_only_that_tracks_lines(tmp_path):
             await session.commit()
             assert [line.text for line in await repo.get_lines()] == ["2", "untracked"]
 
-            await repo.delete_track_lines(part2.id, unsourced_speaker_id=alice.id)
+            await repo.delete_track_lines(part2.id)
             await session.commit()
-            assert await repo.get_lines() == []
+            assert [line.text for line in await repo.get_lines()] == ["untracked"]
     finally:
         await db_manager.close_all()
 

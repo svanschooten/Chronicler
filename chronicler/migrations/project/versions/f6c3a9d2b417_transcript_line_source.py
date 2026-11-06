@@ -4,8 +4,10 @@ Revision ID: f6c3a9d2b417
 Revises: e5b2f70c31a8
 Create Date: 2026-11-06
 
-Existing lines keep a NULL source_id: nothing records which track they came from. See
-docs/audio-sources.md for how the transcribe handler treats them.
+Existing lines are attributed once, here: a speaker with exactly one transcribed track
+gets that track on all their lines. Every other existing line keeps a NULL source_id,
+and from then on NULL means "not from a track" and is never deleted by a re-run. See
+docs/audio-sources.md.
 """
 from typing import Sequence, Union
 
@@ -29,6 +31,24 @@ def upgrade() -> None:
         batch.add_column(
             sa.Column('start_offset', sa.Float(), nullable=False, server_default='0')
         )
+
+    op.execute(
+        """
+        UPDATE transcript_lines
+        SET source_id = (
+            SELECT audio_sources.id FROM audio_sources
+            WHERE audio_sources.speaker_id = transcript_lines.speaker_id
+              AND audio_sources.transcription_state = 'DONE'
+        )
+        WHERE source_id IS NULL
+          AND speaker_id IN (
+            SELECT speaker_id FROM audio_sources
+            WHERE transcription_state = 'DONE' AND speaker_id IS NOT NULL
+            GROUP BY speaker_id
+            HAVING COUNT(*) = 1
+          )
+        """
+    )
 
 
 def downgrade() -> None:

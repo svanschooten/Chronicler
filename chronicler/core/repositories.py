@@ -147,13 +147,10 @@ class TranscriptRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete_track_lines(
-        self, source_id: UUID, unsourced_speaker_id: UUID | None = None
-    ) -> None:
+    async def delete_track_lines(self, source_id: UUID) -> None:
         """
-        Deletes the lines one audio source produced, before re-transcribing it. With
-        `unsourced_speaker_id`, also deletes that speaker's lines that record no source:
-        the caller passes it only when those lines can only have come from this track.
+        Deletes the lines one audio source produced, before re-transcribing it. Lines with
+        no source are never touched: they were imported, or predate source tracking.
         """
 
     @abstractmethod

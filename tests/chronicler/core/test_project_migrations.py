@@ -59,3 +59,54 @@ async def test_lines_and_sources_survive_the_source_id_migration(tmp_path):
         assert {row[2] for row in foreign_keys} == {"speakers", "audio_sources"}
     finally:
         await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_the_migration_attributes_lines_only_where_one_track_is_certain(tmp_path):
+    """
+    A speaker with exactly one transcribed track gets that track on their lines. Two
+    transcribed tracks, none, or one that never finished leave the lines untracked.
+    """
+    project_db = tmp_path / "project.db"
+    _project_db_at(project_db, BEFORE_SOURCE_IDS)
+
+    def uid(n: int) -> str:
+        return f"00000000-0000-0000-0000-{n:012d}"
+
+    speakers = {"Alice": uid(11), "Bob": uid(12), "Carol": uid(13), "Dave": uid(14)}
+    tracks = [
+        (uid(21), "alice.wav", "Alice", "DONE"),
+        (uid(22), "bob-1.wav", "Bob", "DONE"),
+        (uid(23), "bob-2.wav", "Bob", "DONE"),
+        (uid(24), "dave.wav", "Dave", "PENDING"),
+    ]
+    with sqlite3.connect(project_db) as connection:
+        for index, (name, speaker_id) in enumerate(speakers.items()):
+            connection.execute("INSERT INTO speakers (id, name) VALUES (?, ?)", (speaker_id, name))
+            connection.execute(
+                "INSERT INTO transcript_lines (id, speaker_id, start_time, end_time, text) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (uid(31 + index), speaker_id, float(index), float(index + 1), name),
+            )
+        for track_id, filename, speaker, state in tracks:
+            connection.execute(
+                "INSERT INTO audio_sources (id, filename, added_at, speaker_id, "
+                "transcription_state, normalization_state) "
+                "VALUES (?, ?, '2026-01-01', ?, ?, 'PENDING')",
+                (track_id, filename, speakers[speaker], state),
+            )
+
+    db_manager = DatabaseManager(tmp_path / "workspace")
+    try:
+        session = await db_manager.get_project_session("legacy", custom_path=project_db)
+        async with session:
+            lines = await SQLiteTranscriptRepository(session).get_lines()
+    finally:
+        await db_manager.close_all()
+
+    assert {line.text: line.source_id and str(line.source_id) for line in lines} == {
+        "Alice": uid(21),
+        "Bob": None,
+        "Carol": None,
+        "Dave": None,
+    }
