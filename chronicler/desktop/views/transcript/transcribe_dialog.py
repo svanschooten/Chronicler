@@ -138,7 +138,9 @@ class TranscribeDialog:
         if self.source.is_transcribed:
             # Re-running replaces this track's lines, hand edits included - see
             # docs/audio-sources.md.
-            controls.append(ft.Text(t("transcribe.replaces_edits"), size=12, weight="bold"))
+            controls.append(
+                ft.Text(t("transcribe.replaces_edits"), size=12, weight=ft.FontWeight.BOLD)
+            )
         controls += [
             self.speaker,
             self.language,
