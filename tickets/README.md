@@ -110,7 +110,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [015-H3 The API key is logged, and secrets from the environment get saved to disk](015-H3_protect_api_keys.md) · high · S
 
-- [ ] [016-H1 Released binaries ship without server mode](016-H1_server_component_for_binaries.md) · high · S · after 001, 012
+- [x] [016-H1 Released binaries ship without server mode](016-H1_server_component_for_binaries.md) · high · S · after 001, 012
 
 ### Wave 4: wrong output and robustness
 
