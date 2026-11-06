@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from chronicler.core.workspace_lock import WorkspaceLock
+
 logger = logging.getLogger(__name__)
 
 _MIGRATIONS_ROOT = Path(__file__).resolve().parent.parent / "migrations"
@@ -47,13 +49,22 @@ class DatabaseManager:
         )
         self._project_engines: dict[str, AsyncEngine] = {}
         self._migration_lock = asyncio.Lock()
+        self._workspace_lock = WorkspaceLock(workspace_path)
 
     async def init_archive(self):
-        self.workspace_path.mkdir(parents=True, exist_ok=True)
+        """
+        Opens the workspace for this process. Raises WorkspaceLockedError if another
+        process has it open: one workspace belongs to one process. See docs/storage.md.
+        """
+        self._workspace_lock.acquire()
         (self.workspace_path / "imports").mkdir(parents=True, exist_ok=True)
-        async with self._migration_lock:
-            async with self.archive_engine.begin() as conn:
-                await conn.run_sync(_run_alembic_upgrade, "archive")
+        try:
+            async with self._migration_lock:
+                async with self.archive_engine.begin() as conn:
+                    await conn.run_sync(_run_alembic_upgrade, "archive")
+        except Exception:
+            self._workspace_lock.release()
+            raise
 
     def get_imports_path(self) -> Path:
         path = self.workspace_path / "imports"
@@ -170,3 +181,4 @@ class DatabaseManager:
         for engine in self._project_engines.values():
             await engine.dispose()
         self._project_engines.clear()
+        self._workspace_lock.release()

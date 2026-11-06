@@ -7,6 +7,7 @@ import flet as ft
 
 from chronicler.core.config import get_settings
 from chronicler.core.handshake import HandshakeError, perform_handshake
+from chronicler.core.workspace_lock import WorkspaceLockedError
 from chronicler.desktop.app import DesktopApp
 from chronicler.desktop.runtime import DesktopRuntime, build_runtime
 from chronicler.desktop.theme import theme_colors
@@ -85,6 +86,15 @@ async def start(page: ft.Page) -> None:
         logger.error(str(error))
         show_startup_failure(page, settings.dark_mode, str(error))
         return
+    except WorkspaceLockedError as error:
+        logger.error(str(error))
+        show_startup_failure(
+            page,
+            settings.dark_mode,
+            t("startup.workspace_locked", path=error.workspace_path),
+            hint=t("startup.workspace_locked_hint"),
+        )
+        return
 
     page.clean()
     await DesktopApp(runtime).main(page)
@@ -100,7 +110,9 @@ async def open_services(runtime: DesktopRuntime) -> None:
     await perform_handshake(runtime.resolver)
 
 
-def show_startup_failure(page: ft.Page, dark_mode: bool, message: str) -> None:
+def show_startup_failure(
+    page: ft.Page, dark_mode: bool, message: str, hint: str | None = None
+) -> None:
     """
     A handshake failure used to `sys.exit(1)`, which in a windowless build is a window that
     flashes and vanishes with nothing said. This leaves the reason on screen instead.
@@ -124,7 +136,7 @@ def show_startup_failure(page: ft.Page, dark_mode: bool, message: str) -> None:
                         color=colors.text,
                     ),
                     ft.Text(message, color=colors.muted, text_align=ft.TextAlign.CENTER),
-                    ft.Text(t("startup.hint"), size=12, color=colors.muted),
+                    ft.Text(hint or t("startup.hint"), size=12, color=colors.muted),
                 ],
                 spacing=12,
                 alignment=ft.MainAxisAlignment.CENTER,

@@ -8,6 +8,7 @@ from sqlalchemy.exc import OperationalError
 from chronicler.core.database import DBChronicle
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.project_database import DBSpeaker
+from chronicler.core.workspace_lock import WorkspaceLockedError
 
 
 @pytest.mark.asyncio
@@ -337,3 +338,28 @@ async def test_a_second_writer_fails_fast_while_the_first_holds_the_lock(two_ses
     await two_sessions.first.commit()
     titles = (await two_sessions.second.execute(select(DBChronicle.title))).scalars().all()
     assert titles == ["held"]
+
+
+class TestWorkspaceLock:
+    @pytest.mark.asyncio
+    async def test_a_second_manager_cannot_open_an_open_workspace(self, tmp_path):
+        """One workspace belongs to one process; see docs/storage.md."""
+        first = DatabaseManager(tmp_path)
+        await first.init_archive()
+        second = DatabaseManager(tmp_path)
+        try:
+            with pytest.raises(WorkspaceLockedError):
+                await second.init_archive()
+        finally:
+            await second.close_all()
+            await first.close_all()
+
+    @pytest.mark.asyncio
+    async def test_close_all_frees_the_workspace(self, tmp_path):
+        first = DatabaseManager(tmp_path)
+        await first.init_archive()
+        await first.close_all()
+
+        second = DatabaseManager(tmp_path)
+        await second.init_archive()
+        await second.close_all()

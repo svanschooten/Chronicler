@@ -63,9 +63,10 @@ entry points that run tasks — the desktop app in full-stack mode and the serve
 identical wiring, and a handler registered in only one of them is a task type that
 silently never runs in the other.
 
-`worker_id` identifies a `WorkerManager` instance for the `claimed_by` column. It
-matters when more than one process (desktop plus server) points at the same workspace,
-and for any future stale-claim recovery.
+`worker_id` identifies a `WorkerManager` instance for the `claimed_by` column, for
+logs and debugging. Only one process can open a workspace at a time (see
+[storage.md](storage.md#one-process-per-workspace)), so it never has to tell two live
+workers apart.
 
 ## Task events
 

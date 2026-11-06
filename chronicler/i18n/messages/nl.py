@@ -389,5 +389,10 @@ MESSAGES = {
             "Controleer de verbindingsinstellingen in je configuratiebestand en start "
             "Chronicler opnieuw."
         ),
+        "workspace_locked": (
+            "De werkruimte in {path} is al geopend in een ander Chronicler-venster of een "
+            "andere server."
+        ),
+        "workspace_locked_hint": "Sluit die eerst en start Chronicler daarna opnieuw.",
     },
 }

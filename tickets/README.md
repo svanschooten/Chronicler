@@ -89,7 +89,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [ ] [007-C2 One lock timeout stops all background work until restart](007-C2_worker_session_per_step.md) · critical · S · after 002
 
-- [ ] [008-A1 Nothing stops two processes from sharing a workspace](008-A1_single_process_workspace_lock.md) · high · S
+- [x] [008-A1 Nothing stops two processes from sharing a workspace](008-A1_single_process_workspace_lock.md) · high · S
 
 - [ ] [009-C4 Interrupted tasks stay WORKING forever](009-C4_task_recovery.md) · critical · S · after 007, 008
 

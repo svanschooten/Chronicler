@@ -382,5 +382,9 @@ MESSAGES = {
         "hint": (
             "Check the connection settings in your configuration file, then start Chronicler again."
         ),
+        "workspace_locked": (
+            "The workspace at {path} is already open in another Chronicler window or server."
+        ),
+        "workspace_locked_hint": "Close the other one, then start Chronicler again.",
     },
 }

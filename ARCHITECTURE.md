@@ -390,9 +390,10 @@ Waiting to be claimed. Also where a failed-but-retryable task returns to.
 ## WORKING
 
 Claimed and executing. Claiming is a single conditional
-`UPDATE ... WHERE status='PENDING'` with a rowcount check, so it is atomic — two
-processes pointed at one workspace never both run the same task. The claiming worker
-stamps `claimed_by` and `claimed_at`.
+`UPDATE ... WHERE status='PENDING'` with a rowcount check, so it is atomic. The claiming
+worker stamps `claimed_by` and `claimed_at`. Only one process can open a workspace at a
+time, enforced by a lock file (see [docs/storage.md](docs/storage.md#one-process-per-workspace)),
+so a task in WORKING always belongs to the process that has the workspace open.
 
 There is deliberately no separate "claimed but still acquiring resources" state: a
 handler that needs to download a model or wait for a GPU does so inside WORKING and
