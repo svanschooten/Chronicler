@@ -31,7 +31,7 @@ dependencies = [
     "aiosqlite>=0.20,<1",
     "PyYAML>=6.0.3,<7",
     "alembic>=1.19.1,<2",
-    "FPDF2>=1.7.2"
+    "fpdf2>=2.8.8,<3",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +40,7 @@ dev = [
     "pytest>=9.1.1,<10",
     "pytest-asyncio",
     "pytest-cov>=7.1.0,<8",
+    "pypdf>=6,<7",
     "mypy>=2.2.0,<3",
     "ruff>=0.16.3,<1",
     "types-PyYAML",
