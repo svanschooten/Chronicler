@@ -436,13 +436,14 @@ Handler --> Chronicle
 ```
 
 Handlers are mapped to task types in one place —
-`chronicler/core/worker_wiring.py::build_worker_runtime` — which both the desktop app (in
+`chronicler/core/worker_wiring.py::build_worker_manager` — which both the desktop app (in
 full-stack mode) and the server call. That is deliberate: a handler registered in only
 one entry point is a task type that silently never runs in the other.
 
-The worker loop gets a database session of its own. It and the UI (or HTTP request
-handling) are separate coroutines on the same event loop, and an `AsyncSession` is not
-safe to share across coroutines whose operations can interleave.
+The worker loop and its handlers open a short archive session for each step and hold none
+across a handler's run. A session is never shared with the UI or HTTP request handling,
+and a lock timeout fails one step instead of leaving the loop on a session that needs a
+rollback.
 
 **Planned — Scribes.** The target model names these workers *Scribes* and allows the
 number of concurrent Scribes to be configured per provider, so an expensive provider such
@@ -566,7 +567,7 @@ Most new functionality follows the same pattern.
    remote callers a raw dict.
 2. If background processing is required, add a `TaskType`, a handler module under
    `chronicler/core/processing/handlers/`, and register it in
-   `core/worker_wiring.py::build_worker_runtime`.
+   `core/worker_wiring.py::build_worker_manager`.
 3. If the schema changes, generate an Alembic revision in the matching chain
    (`archive` or `project`).
 4. Update the user interface if the feature needs to be reachable or configured.

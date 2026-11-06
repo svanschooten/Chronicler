@@ -12,6 +12,7 @@ from chronicler.core.models import Chronicle, Task, TaskType
 from chronicler.core.processing.handlers import WorkerHandlers
 from chronicler.core.processing.importers import RegexImporter
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
+from tests.chronicler.core.processing.handlers.helpers import read_chronicle
 
 
 async def _noop_progress(_progress: int) -> None:
@@ -182,7 +183,7 @@ async def test_handle_import_tags_chronicle_and_backfills_speaker_count(tmp_path
             chronicle = await chronicle_repo.create(Chronicle(title="Test Chronicle"))
             assert chronicle.speakers_count == 0
 
-            handlers = WorkerHandlers(db_manager, chronicle_repo=chronicle_repo)
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
             imports_dir = db_manager.get_imports_path()
             transcript_file = imports_dir / "transcript.txt"
             transcript_file.write_text("Alice: Hello\nBob: Hi\nAlice: How are you?\n")
@@ -194,7 +195,7 @@ async def test_handle_import_tags_chronicle_and_backfills_speaker_count(tmp_path
             )
             await handlers.handle_import(task, _noop_progress)
 
-            updated = await chronicle_repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.speakers_count == 2
             assert [t.name for t in updated.tags] == ["Transcript"]
     finally:

@@ -58,7 +58,7 @@ through repeated claim/no-handler/reclaim cycles.
 
 ## Worker wiring
 
-`build_worker_runtime` is the one place that maps `TaskType` to handler methods. Both
+`build_worker_manager` is the one place that maps `TaskType` to handler methods. Both
 entry points that run tasks — the desktop app in full-stack mode and the server — need
 identical wiring, and a handler registered in only one of them is a task type that
 silently never runs in the other.

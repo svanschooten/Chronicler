@@ -96,11 +96,12 @@ class SummarizeHandler(HandlerBase):
         return summary
 
     async def _mark_summarized(self, chronicle_id, total: int) -> None:
-        if not self.chronicle_repo:
+        if not self.archive_sessions:
             return
-        chronicle = await self.chronicle_repo.get_by_id(chronicle_id)
-        if chronicle and chronicle.status in ("Imported", "Transcribed", "Cleaned"):
-            chronicle.status = "Summarized"
-            await self.chronicle_repo.update(chronicle)
-        await self.chronicle_repo.add_tag(chronicle_id, "Summarized")
+        async with self.chronicles() as chronicles:
+            chronicle = await chronicles.get_by_id(chronicle_id)
+            if chronicle and chronicle.status in ("Imported", "Transcribed", "Cleaned"):
+                chronicle.status = "Summarized"
+                await chronicles.update(chronicle)
+            await chronicles.add_tag(chronicle_id, "Summarized")
         logger.debug(f"Chronicle {chronicle_id} now has {total} summaries")
