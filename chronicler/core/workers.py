@@ -94,13 +94,18 @@ class WorkerManager:
             logger.warning(f"Task {task.id} ({task.type.value}) was interrupted, {outcome}")
             if task.status != TaskStatus.FAILED:
                 continue
+            # The rows are committed, so a retry would find nothing to recover: one task's
+            # failure here must not cost the tasks after it their cleanup.
             cleanup = self.cleanups.get(task.type)
             if cleanup is not None:
                 try:
                     await cleanup(task)
                 except Exception:
                     logger.exception(f"Cleaning up after interrupted task {task.id} failed")
-            await self._publish_completion(task.id)
+            try:
+                await self._publish_completion(task.id)
+            except Exception:
+                logger.exception(f"Could not announce that interrupted task {task.id} failed")
 
     @asynccontextmanager
     async def _tasks(self) -> AsyncIterator[SQLiteTaskRepository]:

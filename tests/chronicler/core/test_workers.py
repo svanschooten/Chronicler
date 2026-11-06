@@ -576,3 +576,28 @@ async def test_a_stop_that_cannot_requeue_leaves_the_task_to_recovery(two_sessio
 
     await WorkerManager(sessions).recover_interrupted()
     assert (await tasks.get_by_id(task.id)).status == TaskStatus.PENDING
+
+
+@pytest.mark.asyncio
+async def test_a_failed_announcement_does_not_skip_the_next_tasks_cleanup(tasks, caplog):
+    """The rows are already committed, so a retry would never get back to these."""
+    first = await _interrupted(tasks, attempts=2, max_attempts=3)
+    second = await _interrupted(tasks, attempts=2, max_attempts=3)
+    cleanup = AsyncMock()
+
+    manager = WorkerManager(tasks.sessions, event_bus=TaskEventBus())
+    manager.register_cleanup(TaskType.IMPORT, cleanup)
+    real_publish = manager._publish_completion
+    announced = []
+
+    async def flaky_publish(task_id):
+        if not announced:
+            announced.append(None)
+            raise OperationalError("SELECT", {}, Exception("database is locked"))
+        await real_publish(task_id)
+
+    with patch.object(manager, "_publish_completion", flaky_publish):
+        await manager.recover_interrupted()
+
+    assert {call.args[0].id for call in cleanup.await_args_list} == {first.id, second.id}
+    assert "Could not announce that interrupted task" in caplog.text
