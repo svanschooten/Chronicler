@@ -108,7 +108,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [014-M8 Audio uploads from the web client always fail](014-M8_web_audio_upload_fails.md) · medium · closed by 012
 
-- [ ] [015-H3 The API key is logged, and secrets from the environment get saved to disk](015-H3_protect_api_keys.md) · high · S
+- [x] [015-H3 The API key is logged, and secrets from the environment get saved to disk](015-H3_protect_api_keys.md) · high · S
 
 - [ ] [016-H1 Released binaries ship without server mode](016-H1_server_component_for_binaries.md) · high · S · after 001, 012
 

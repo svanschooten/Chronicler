@@ -79,6 +79,13 @@ by any other caller.
 An `X-API-Key` header, compared with `secrets.compare_digest`. `RpcServer` generates a
 key if none is configured, so it is never accidentally unauthenticated.
 
+The key is never logged. At startup the server logs only its last four characters, which
+is enough to tell which key it expects. A server started with no key configured generates
+one and saves it to the config file, because a key that existed only in the process
+could not be handed to any client. Keys set through the environment are not copied
+into the config file, and that file is owner-only on POSIX. See
+[configuration.md](configuration.md#environment-values-are-not-saved).
+
 There is no browser client and no CORS middleware. The web client this replaced was a
 reverse proxy that answered every request with the server's key and asked for no login
 of its own, so anyone who could reach it had the whole API.

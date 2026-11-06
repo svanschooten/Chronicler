@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+import yaml
 
 from chronicler.core.config import Settings
 from chronicler.core.database_manager import DatabaseManager
@@ -94,3 +95,39 @@ def test_a_server_on_a_workspace_open_elsewhere_exits_with_the_reason(
         holder.release()
 
     assert "already open in another Chronicler process" in str(exit_info.value.code)
+
+
+def test_startup_does_not_log_the_api_key(tmp_path, isolated_config, monkeypatch, caplog):
+    monkeypatch.setattr(
+        "chronicler.server.main.get_settings",
+        lambda: Settings(workspace_path=tmp_path, api_key="super-secret-key-1234"),
+    )
+    with (
+        patch("chronicler.server.main.asyncio.run", side_effect=lambda coro: coro.close()),
+        caplog.at_level("DEBUG"),
+    ):
+        run_server()
+
+    assert "super-secret-key" not in caplog.text
+    assert "1234" in caplog.text
+
+
+def test_a_generated_key_is_saved_so_clients_can_use_it(
+    tmp_path, isolated_config, monkeypatch, caplog
+):
+    """Review repro: a key generated at startup was only ever logged as `...weSU`."""
+    config_file = isolated_config / "settings.yaml"
+    monkeypatch.setenv("CHRONICLER_CONFIG_FILE", str(config_file))
+    monkeypatch.setattr(
+        "chronicler.server.main.get_settings", lambda: Settings(workspace_path=tmp_path)
+    )
+    with (
+        patch("chronicler.server.main.asyncio.run", side_effect=lambda coro: coro.close()),
+        caplog.at_level("INFO"),
+    ):
+        run_server()
+
+    saved_key = yaml.safe_load(config_file.read_text())["api_key"]
+    assert saved_key
+    assert saved_key not in caplog.text
+    assert f"...{saved_key[-4:]}" in caplog.text

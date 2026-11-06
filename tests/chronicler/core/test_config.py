@@ -1,6 +1,8 @@
 import json
 import os
+import stat
 import sys
+from pathlib import Path
 
 import pytest
 import yaml
@@ -362,6 +364,99 @@ class TestNestedSections:
         settings = Settings()
 
         assert settings.transcription.no_speech_threshold == 0.6
+
+
+class TestSecretsOnSave:
+    """Values set through the environment stay out of the config file."""
+
+    def test_an_api_key_from_the_environment_is_not_written(self, isolated_config, monkeypatch):
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(isolated_config / "settings.yaml"))
+        monkeypatch.setenv("CHRONICLER_API_KEY", "env-secret")
+        settings = Settings()
+        settings.dark_mode = False
+
+        config_file = settings.save()
+
+        assert "env-secret" not in config_file.read_text()
+        assert yaml.safe_load(config_file.read_text())["dark_mode"] is False
+
+    def test_a_nested_secret_from_the_environment_is_not_written(
+        self, isolated_config, monkeypatch
+    ):
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(isolated_config / "settings.yaml"))
+        monkeypatch.setenv("CHRONICLER_LLM__API_KEY", "llm-secret")
+        settings = Settings()
+        settings.llm.model = "qwen3"
+
+        config_file = settings.save()
+
+        saved = yaml.safe_load(config_file.read_text())
+        assert "llm-secret" not in config_file.read_text()
+        assert saved["llm"]["model"] == "qwen3"
+
+    def test_the_file_keeps_its_own_value_for_an_overridden_setting(
+        self, isolated_config, monkeypatch
+    ):
+        config_file = isolated_config / "settings.yaml"
+        config_file.write_text(yaml.dump({"api_key": "file-key"}))
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+        monkeypatch.setenv("CHRONICLER_API_KEY", "env-secret")
+
+        Settings().save()
+
+        assert yaml.safe_load(config_file.read_text())["api_key"] == "file-key"
+
+    def test_a_key_set_in_the_app_is_still_saved(self, isolated_config, monkeypatch):
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(isolated_config / "settings.yaml"))
+
+        config_file = Settings(api_key="typed-in").save()
+
+        assert yaml.safe_load(config_file.read_text())["api_key"] == "typed-in"
+
+    def test_a_secret_leaked_by_an_earlier_save_is_removed(self, isolated_config, monkeypatch):
+        """The old save copied the environment's key into the file; this one takes it out."""
+        config_file = isolated_config / "settings.yaml"
+        config_file.write_text(yaml.dump({"api_key": "env-secret", "dark_mode": False}))
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+        monkeypatch.setenv("CHRONICLER_API_KEY", "env-secret")
+
+        Settings().save()
+
+        assert "env-secret" not in config_file.read_text()
+        assert yaml.safe_load(config_file.read_text())["dark_mode"] is False
+
+    @pytest.mark.skipif(os.name != "posix", reason="file modes are POSIX-only")
+    def test_an_existing_file_is_restricted_before_it_is_written(
+        self, isolated_config, monkeypatch
+    ):
+        config_file = isolated_config / "settings.yaml"
+        config_file.write_text("app_name: Chronicler\n")
+        config_file.chmod(0o644)
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+        modes_when_opened = []
+        real_open = os.open
+
+        def recording_open(path, flags, *args):
+            if Path(path) == config_file:
+                modes_when_opened.append(stat.S_IMODE(config_file.stat().st_mode))
+            return real_open(path, flags, *args)
+
+        monkeypatch.setattr("chronicler.core.config.os.open", recording_open)
+
+        Settings(api_key="typed-in").save()
+
+        assert modes_when_opened == [0o600]
+
+    @pytest.mark.skipif(os.name != "posix", reason="file modes are POSIX-only")
+    def test_the_file_is_readable_by_its_owner_only(self, isolated_config, monkeypatch):
+        config_file = isolated_config / "settings.yaml"
+        config_file.write_text("app_name: Chronicler\n")
+        config_file.chmod(0o644)
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+
+        Settings().save()
+
+        assert stat.S_IMODE(config_file.stat().st_mode) == 0o600
 
 
 def test_a_saved_web_client_mode_reads_as_unset(isolated_config):
