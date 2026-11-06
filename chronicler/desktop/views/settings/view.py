@@ -5,8 +5,8 @@ import flet as ft
 
 from chronicler.core.config import Settings
 from chronicler.core.config_sections import WHISPER_MODEL_SIZES, language_choices
+from chronicler.core.models import ModelCheck
 from chronicler.desktop.reveal import describe_desktop_integration_error
-from chronicler.desktop.state import ModelCheck
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.settings.editor import SettingsEditor
 from chronicler.desktop.widgets import amber_button

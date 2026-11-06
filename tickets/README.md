@@ -128,7 +128,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [023-S7 Replace the model registry cache with one call](023-S7_model_list_single_call.md) · medium · S
 
-- [ ] [024-M4 Thin clients never see model errors](024-M4_thin_client_model_errors.md) · medium · closed by 023
+- [x] [024-M4 Thin clients never see model errors](024-M4_thin_client_model_errors.md) · medium · closed by 023
 
 - [ ] [025-S9 Replace the three mode vocabularies with one enum](025-S9_single_mode_enum.md) · medium · S · after 012
 

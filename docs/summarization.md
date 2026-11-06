@@ -137,7 +137,9 @@ arithmetic. The rename is the fix; there is no behaviour change.
 
 ## When the model list is empty
 
-`ModelRegistry` records why discovery failed, and `SystemService.model_error` reports it.
-The summary dialog shows it on the model field when the list came back empty — before
-that, an unreachable gateway and a correctly-configured provider with no models looked
+`SystemService.list_models` returns a `ModelCheck`: the model ids and, when discovery
+failed, why. They travel in one response, so a thin client sees the same error a local
+run does. Nothing is cached - the desktop asks at startup and after the configuration
+changes. The summary dialog shows the error on the model field when the list came back
+empty — before that, an unreachable gateway and a correctly-configured provider with no models looked
 identical.

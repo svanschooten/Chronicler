@@ -10,7 +10,7 @@ from chronicler.core.llm.client import (
     OpenAiCompatibleClient,
     build_client,
 )
-from chronicler.core.llm.registry import ModelRegistry
+from chronicler.core.llm.registry import discover_models
 
 __all__ = [
     "Completion",
@@ -19,7 +19,7 @@ __all__ = [
     "LlmError",
     "LlmNotConfiguredError",
     "ModelInfo",
-    "ModelRegistry",
     "OpenAiCompatibleClient",
     "build_client",
+    "discover_models",
 ]
