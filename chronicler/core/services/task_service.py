@@ -7,7 +7,6 @@ from chronicler.core.processing.regex_guard import assert_safe_pattern
 from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import service
 
-
 # A rerun of a transcription is expensive and a manual retry exists, so it is not repeated
 # automatically. Every other type keeps the model's default.
 MAX_ATTEMPTS: dict[TaskType, int] = {TaskType.TRANSCRIBE: 1}
