@@ -52,6 +52,7 @@ mypy chronicler tests
 pytest --cov=chronicler --cov-report=term --cov-fail-under=80
 ```
 
+The tests run on Ubuntu and Windows; the other checks run once, on Ubuntu.
 All of them are blocking, with no per-module exemptions. Prefer a narrow
 `# type: ignore[code]` over widening the configuration. Run `ruff format chronicler tests`
 before pushing to clear a formatting failure.
