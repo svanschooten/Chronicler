@@ -101,9 +101,9 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [012-S14 Remove the web client](012-S14_remove_web_client.md) · high · S
 
-- [ ] [013-H2 The web client exposes the full API with no login](013-H2_web_client_open_proxy.md) · high · closed by 012
+- [x] [013-H2 The web client exposes the full API with no login](013-H2_web_client_open_proxy.md) · high · closed by 012
 
-- [ ] [014-M8 Audio uploads from the web client always fail](014-M8_web_audio_upload_fails.md) · medium · closed by 012
+- [x] [014-M8 Audio uploads from the web client always fail](014-M8_web_audio_upload_fails.md) · medium · closed by 012
 
 - [ ] [015-H3 The API key is logged, and secrets from the environment get saved to disk](015-H3_protect_api_keys.md) · high · S
 
