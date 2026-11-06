@@ -110,3 +110,20 @@ async def test_the_migration_attributes_lines_only_where_one_track_is_certain(tm
         "Carol": None,
         "Dave": None,
     }
+
+
+def test_synthetic_timing_column_is_added_and_old_rows_stay_null(tmp_path):
+    project_db = tmp_path / "project.db"
+    _project_db_at(project_db, "f6c3a9d2b417")
+    with sqlite3.connect(project_db) as connection:
+        connection.execute(
+            "INSERT INTO transcript_lines (id, start_time, end_time, text) "
+            "VALUES (?, 0.0, 1.0, 'Hello')",
+            (LINE,),
+        )
+
+    _project_db_at(project_db, "head")
+
+    with sqlite3.connect(project_db) as connection:
+        row = connection.execute("SELECT synthetic_timing FROM transcript_lines").fetchone()
+    assert row == (None,)

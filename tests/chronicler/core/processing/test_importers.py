@@ -135,6 +135,14 @@ def test_regex_importer_start_offset_defaults_to_zero():
     assert [line.start_time for line in importer.parse(content)] == [0.0, 1.0]
 
 
+def test_importer_flags_timing_as_synthetic_only_without_timestamps():
+    plain = DefaultImporter().parse("A: one\nB: two")
+    assert all(line.synthetic_timing is True for line in plain)
+
+    stamped = RegexImporter(r"^\[(.+?)\] (\w+): (.*)$", 2, 3, 1).parse("[00:05] A: one")
+    assert stamped[0].synthetic_timing is False
+
+
 def test_default_importer_unicode_speakers():
     content = "Anna: hallo\nJürgen: guten Tag\nJosé: hola\nAnna: tot ziens"
     lines = DefaultImporter().parse(content)

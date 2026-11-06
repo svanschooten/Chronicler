@@ -64,8 +64,16 @@ timestamps and a blank line, which is not worth a dependency.
 It passes `require_real_timestamps=True`, which refuses a transcript whose timings are
 synthetic line indices (`0→1`, `1→2`, `2→3` …) rather than real seconds. That is what the
 text importer writes when a source carries no timings of its own, and subtitles built
-from it would be silently meaningless. A single-line transcript is never judged
-synthetic — there is no pattern to detect.
+from it would be silently meaningless.
+
+Each line records this in a nullable `synthetic_timing` column: the importer sets it
+when it has no timestamps, the transcriber clears it, and cleaning or deleting lines
+keeps it. Rows older than the column have `NULL`, and for those a transcript of two or
+more lines counts as synthetic when every start and end time is a whole number.
+That fallback can wrongly refuse an old text import whose real timestamps were all whole
+seconds. A flagged single line is judged by its flag, so a one-line text import is refused
+too. A chronicle that mixes text-imported and transcribed lines counts as real as soon as
+one line is flagged `false`, so its SRT can include index-based cues.
 
 Cues with a zero or reversed duration are given a half-second minimum so players do not
 skip them.

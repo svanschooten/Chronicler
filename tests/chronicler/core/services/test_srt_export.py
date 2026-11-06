@@ -100,3 +100,59 @@ class TestSyntheticTimestampGuard:
         lines = [line("One", 0.0, 1.0), line("Two", 1.0, 2.0), line("Three", 2.0, 3.0)]
 
         assert format_srt(lines)
+
+
+class TestSyntheticTimingFlag:
+    def flagged(self, start, end, synthetic):
+        return TranscriptLine(
+            speaker_name="GM", text="x", start_time=start, end_time=end, synthetic_timing=synthetic
+        )
+
+    def test_flagged_lines_are_refused_after_cleaning_broke_the_index_pattern(self):
+        # A clean or a delete leaves gaps, so the 0, 1, 2 pattern no longer holds.
+        lines = [self.flagged(0.0, 1.0, True), self.flagged(4.0, 5.0, True)]
+
+        with pytest.raises(NoRealTimestampsError):
+            format_srt(lines, require_real_timestamps=True)
+
+    def test_flagged_transcription_with_whole_second_times_is_accepted(self):
+        lines = [self.flagged(0.0, 2.0, False), self.flagged(2.0, 4.0, False)]
+
+        assert format_srt(lines, require_real_timestamps=True)
+
+    def test_unflagged_rows_fall_back_to_whole_number_times(self):
+        with pytest.raises(NoRealTimestampsError):
+            format_srt([line("a", 0.0, 1.0), line("b", 5.0, 6.0)], require_real_timestamps=True)
+
+
+@pytest.mark.asyncio
+async def test_flag_survives_the_database_and_a_delete_so_srt_is_still_refused(tmp_path):
+    from chronicler.core.database_manager import DatabaseManager
+    from chronicler.core.sqlite import SQLiteTranscriptRepository
+
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    try:
+        session = await db_manager.get_project_session("c1")
+        async with session:
+            repo = SQLiteTranscriptRepository(session)
+            await repo.add_lines(
+                [
+                    TranscriptLine(
+                        text=str(i), start_time=float(i), end_time=i + 1.0, synthetic_timing=True
+                    )
+                    for i in range(4)
+                ]
+            )
+            await session.commit()
+            first = (await repo.get_lines())[1]
+            await repo.delete_line(first.id)
+            await session.commit()
+
+            remaining = await repo.get_lines()
+
+        assert [line.synthetic_timing for line in remaining] == [True, True, True]
+        with pytest.raises(NoRealTimestampsError):
+            format_srt(remaining, require_real_timestamps=True)
+    finally:
+        await db_manager.close_all()
