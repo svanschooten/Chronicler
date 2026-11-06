@@ -74,7 +74,9 @@ and enum values into plain YAML scalars rather than Python object tags.
 
 A setting that came from the environment (`CHRONICLER_API_KEY`,
 `CHRONICLER_LLM__API_KEY`, ...) or from a `.env` file is left out of what `save()` writes.
-The file keeps whatever value it already had for that setting, or none. Before this, the
+The file keeps whatever value it already had for that setting, or none. A file value
+equal to the environment's is dropped as well: that is a secret an earlier version leaked
+into the file, and the environment still supplies it. Before this, the
 first save after any change, even toggling dark mode, copied environment secrets into the
 file in plain text.
 
@@ -82,7 +84,7 @@ The consequence: a setting the environment overrides cannot be changed from the 
 Unset the variable first.
 
 The file is written with mode 600 on POSIX, because it can hold `api_key` and
-`llm.api_key`.
+`llm.api_key`. An existing file is restricted before anything is written to it.
 
 ## The two wizards
 
