@@ -1,7 +1,7 @@
 from uuid import UUID
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.models import Speaker, TranscriptLine
@@ -45,6 +45,7 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         db_line = DBTranscriptLine(
             id=str(line.id),
             speaker_id=str(line.speaker_id) if line.speaker_id else None,
+            source_id=str(line.source_id) if line.source_id else None,
             start_time=line.start_time,
             end_time=line.end_time,
             text=line.text,
@@ -59,6 +60,7 @@ class SQLiteTranscriptRepository(TranscriptRepository):
             DBTranscriptLine(
                 id=str(line.id),
                 speaker_id=str(line.speaker_id) if line.speaker_id else None,
+                source_id=str(line.source_id) if line.source_id else None,
                 start_time=line.start_time,
                 end_time=line.end_time,
                 text=line.text,
@@ -106,10 +108,19 @@ class SQLiteTranscriptRepository(TranscriptRepository):
     async def delete_all_lines(self) -> None:
         await self.session.execute(sa_delete(DBTranscriptLine))
 
-    async def delete_lines_by_speaker(self, speaker_id: UUID) -> None:
-        await self.session.execute(
-            sa_delete(DBTranscriptLine).where(DBTranscriptLine.speaker_id == str(speaker_id))
-        )
+    async def delete_track_lines(
+        self, source_id: UUID, unsourced_speaker_id: UUID | None = None
+    ) -> None:
+        belongs_to_track = DBTranscriptLine.source_id == str(source_id)
+        if unsourced_speaker_id is not None:
+            belongs_to_track = or_(
+                belongs_to_track,
+                and_(
+                    DBTranscriptLine.source_id.is_(None),
+                    DBTranscriptLine.speaker_id == str(unsourced_speaker_id),
+                ),
+            )
+        await self.session.execute(sa_delete(DBTranscriptLine).where(belongs_to_track))
 
     async def search(self, query: str) -> list[TranscriptLine]:
         raise NotImplementedError("Transcript full-text search is not implemented yet")

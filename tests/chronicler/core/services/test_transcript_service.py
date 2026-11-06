@@ -5,7 +5,11 @@ import pytest
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.transcript_service import TranscriptService
-from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
+from chronicler.core.sqlite import (
+    SQLiteAudioSourceRepository,
+    SQLiteChronicleRepository,
+    SQLiteTranscriptRepository,
+)
 
 
 async def _noop_progress(_progress: int) -> None:
@@ -119,33 +123,40 @@ async def test_refresh_speaker_count_backfills_from_project_db(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_delete_lines_by_speaker_leaves_other_speakers_untouched(tmp_path):
+async def test_delete_track_lines_removes_only_that_tracks_lines(tmp_path):
     """
-    The concrete requirement behind re-transcribing a single-speaker audio source:
-    overwriting one speaker's track must not wipe another speaker's lines the way
-    delete_all_lines() would.
+    Re-transcribing one track must leave every other track alone, including another
+    track for the same speaker.
     """
     db_manager = DatabaseManager(tmp_path)
     try:
         session = await db_manager.get_project_session("chronicle-1")
         async with session:
             repo = SQLiteTranscriptRepository(session)
+            sources = SQLiteAudioSourceRepository(session)
+            part1 = await sources.register("part1.wav")
+            part2 = await sources.register("part2.wav")
             alice = await repo.get_or_create_speaker("Alice")
-            bob = await repo.get_or_create_speaker("Bob")
             await repo.add_lines(
                 [
-                    TranscriptLine(speaker_id=alice.id, start_time=0.0, end_time=1.0, text="Hi"),
-                    TranscriptLine(speaker_id=bob.id, start_time=0.5, end_time=1.5, text="Hello"),
+                    TranscriptLine(
+                        speaker_id=alice.id, source_id=part1.id, start_time=0, end_time=1, text="1"
+                    ),
+                    TranscriptLine(
+                        speaker_id=alice.id, source_id=part2.id, start_time=1, end_time=2, text="2"
+                    ),
+                    TranscriptLine(speaker_id=alice.id, start_time=2, end_time=3, text="untracked"),
                 ]
             )
             await session.commit()
 
-            await repo.delete_lines_by_speaker(alice.id)
+            await repo.delete_track_lines(part1.id)
             await session.commit()
+            assert [line.text for line in await repo.get_lines()] == ["2", "untracked"]
 
-            remaining = await repo.get_lines()
-            assert [line.text for line in remaining] == ["Hello"]
-            assert remaining[0].speaker_name == "Bob"
+            await repo.delete_track_lines(part2.id, unsourced_speaker_id=alice.id)
+            await session.commit()
+            assert await repo.get_lines() == []
     finally:
         await db_manager.close_all()
 

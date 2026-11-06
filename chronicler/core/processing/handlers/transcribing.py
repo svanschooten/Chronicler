@@ -98,16 +98,28 @@ class TranscribeHandler(NormalizeHandler):
             sources = SQLiteAudioSourceRepository(session)
             try:
                 speaker = await repo.get_or_create_speaker(speaker_name)
-                await repo.delete_lines_by_speaker(speaker.id)
-
-                await self.attach_speakers(repo, lines)
-                await repo.add_lines(lines)
-
-                await sources.register(
+                source = await sources.register(
                     resolved_path.name,
                     content_hash=fingerprint_file(resolved_path),
                     size_bytes=resolved_path.stat().st_size,
                 )
+                offset = source.start_offset
+                if "start_offset" in data:
+                    offset = float(data["start_offset"])
+                    await sources.set_start_offset(resolved_path.name, offset)
+
+                owns_unsourced = await self._owns_unsourced_lines(sources, source.id, speaker.id)
+                await repo.delete_track_lines(
+                    source.id, unsourced_speaker_id=speaker.id if owns_unsourced else None
+                )
+
+                await self.attach_speakers(repo, lines)
+                for line in lines:
+                    line.source_id = source.id
+                    line.start_time += offset
+                    line.end_time += offset
+                await repo.add_lines(lines)
+
                 await sources.set_speaker(resolved_path.name, speaker.id)
                 await sources.mark_transcribed(
                     resolved_path.name,
@@ -132,6 +144,22 @@ class TranscribeHandler(NormalizeHandler):
             f"Transcription finished for chronicle {chronicle_id}: "
             f"{len(lines)} segments for speaker '{speaker_name}'"
         )
+
+    @staticmethod
+    async def _owns_unsourced_lines(
+        sources: SQLiteAudioSourceRepository, source_id: UUID, speaker_id: UUID
+    ) -> bool:
+        """
+        Lines written before tracks were recorded have no source. They can only have come
+        from this track when it is the speaker's one transcribed track; otherwise there is
+        no telling, so they are kept. See docs/audio-sources.md.
+        """
+        transcribed = [
+            source
+            for source in await sources.list_sources()
+            if source.speaker_id == speaker_id and source.transcribed_at is not None
+        ]
+        return [source.id for source in transcribed] == [source_id]
 
     async def _register_source(self, chronicle_id: UUID, filename: str, speaker_name: str) -> None:
         path = (await self.sources_root_for(chronicle_id)) / filename
