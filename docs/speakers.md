@@ -33,6 +33,10 @@ Registration is best-effort: if the registry write fails, the assignment still s
 and the failure is logged. A suggestion list is a convenience, and losing it should never
 block attributing a track.
 
+`register` commits its own write and rolls back on failure. A bare flush would hold the
+workspace write lock until something else committed the session, and the name was lost
+when nothing did.
+
 ## Why not fan out across project databases
 
 Answering "every speaker in this workspace" by opening every `project.db` is O(chronicles)
