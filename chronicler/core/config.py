@@ -126,13 +126,17 @@ def _keep_file_values(
     """
     Replaces every value the environment set with what the file already had, or drops it
     when the file had nothing, recursing into sections such as `llm`.
+
+    A file value equal to the environment's is dropped too: that is how an earlier
+    version's save leaked environment secrets into the file, and the environment still
+    supplies it.
     """
     for key, env_value in environment.items():
         current = values.get(key)
         if isinstance(env_value, dict) and isinstance(current, dict):
             previous = existing.get(key)
             _keep_file_values(current, env_value, previous if isinstance(previous, dict) else {})
-        elif key in existing:
+        elif key in existing and existing[key] != env_value:
             values[key] = existing[key]
         else:
             values.pop(key, None)
@@ -194,12 +198,13 @@ class Settings(BaseSettings):
         existing = _read_config(config_file) if config_file.exists() else {}
         _keep_file_values(values, self._environment_values(), existing)
 
-        # Owner-only: the file can hold API keys. Windows has no equivalent mode bits.
+        # Owner-only, before anything is written: the file can hold API keys. A new file is
+        # created 600; an existing one is restricted first. Windows has no such mode bits.
+        if os.name == "posix" and config_file.exists():
+            config_file.chmod(0o600)
         descriptor = os.open(config_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(descriptor, "w") as f:
             yaml.dump(values, f, default_flow_style=False)
-        if os.name == "posix":
-            config_file.chmod(0o600)
 
         return config_file
 
