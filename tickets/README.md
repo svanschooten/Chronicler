@@ -99,7 +99,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 ### Wave 3: close the security exposure
 
-- [ ] [012-S14 Remove the web client](012-S14_remove_web_client.md) · high · S
+- [x] [012-S14 Remove the web client](012-S14_remove_web_client.md) · high · S
 
 - [ ] [013-H2 The web client exposes the full API with no login](013-H2_web_client_open_proxy.md) · high · closed by 012
 
