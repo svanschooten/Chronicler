@@ -8,9 +8,13 @@ from uuid import uuid4
 import pytest
 
 from chronicler.core.database_manager import DatabaseManager
-from chronicler.core.models import Chronicle, Task, TaskType
+from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
 from chronicler.core.processing.handlers import WorkerHandlers
-from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
+from chronicler.core.sqlite import (
+    SQLiteAudioSourceRepository,
+    SQLiteChronicleRepository,
+    SQLiteTranscriptRepository,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -67,6 +71,55 @@ async def test_handle_clean_preserves_speaker_ids_across_runs(tmp_path):
             speakers_after = {s.name: s.id for s in await repo.get_speakers()}
 
         assert speakers_after == speakers_before
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_handle_clean_keeps_each_lines_track(tmp_path):
+    """Cleaning rewrites every line, and must not drop which track each one came from."""
+    db_manager = DatabaseManager(tmp_path)
+    try:
+        handlers = WorkerHandlers(db_manager)
+        chronicle_id = uuid4()
+        session = await db_manager.get_project_session(str(chronicle_id))
+        async with session:
+            repo = SQLiteTranscriptRepository(session)
+            sources = SQLiteAudioSourceRepository(session)
+            part1 = await sources.register("part1.wav")
+            part2 = await sources.register("part2.wav")
+            alice = await repo.get_or_create_speaker("Alice")
+            await repo.add_lines(
+                [
+                    TranscriptLine(
+                        speaker_id=alice.id,
+                        source_id=part1.id,
+                        text="One",
+                        start_time=0,
+                        end_time=1,
+                    ),
+                    TranscriptLine(
+                        speaker_id=alice.id,
+                        source_id=part2.id,
+                        text="Two",
+                        start_time=1,
+                        end_time=2,
+                    ),
+                ]
+            )
+            await session.commit()
+
+        await handlers.handle_clean(
+            Task(type=TaskType.CLEAN, chronicle_id=chronicle_id), _noop_progress
+        )
+
+        session = await db_manager.get_project_session(str(chronicle_id))
+        async with session:
+            lines = await SQLiteTranscriptRepository(session).get_lines()
+        assert [(line.text, line.source_id) for line in lines] == [
+            ("One", part1.id),
+            ("Two", part2.id),
+        ]
     finally:
         await db_manager.close_all()
 
