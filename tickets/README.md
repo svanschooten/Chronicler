@@ -124,7 +124,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [ ] [021-M10 Reading an unknown chronicle creates it on disk](021-M10_reads_must_not_create_chronicles.md) · medium · S
 
-- [ ] [022-M6 Retries run about one second apart](022-M6_retry_backoff.md) · medium · S · after 009
+- [x] [022-M6 Retries run about one second apart](022-M6_retry_backoff.md) · medium · S · after 009
 
 - [ ] [023-S7 Replace the model registry cache with one call](023-S7_model_list_single_call.md) · medium · S
 
