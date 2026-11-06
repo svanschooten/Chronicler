@@ -96,6 +96,25 @@ class SQLiteTaskRepository(TaskRepository):
                 db_task.status = TaskStatus.FAILED
             await self.session.commit()
 
+    async def recover_interrupted(self, error: str) -> list[Task]:
+        rows = (
+            (await self.session.execute(select(DBTask).where(DBTask.status == TaskStatus.WORKING)))
+            .scalars()
+            .all()
+        )
+        for row in rows:
+            row.attempts += 1
+            row.error = error
+            row.claimed_by = None
+            row.claimed_at = None
+            row.progress = 0
+            if row.attempts < row.max_attempts:
+                row.status = TaskStatus.PENDING
+            else:
+                row.status = TaskStatus.FAILED
+        await self.session.commit()
+        return [Task.model_validate(row) for row in rows]
+
     async def update_status(self, task_id: UUID, status: str, error: str | None = None) -> None:
         result = await self.session.execute(select(DBTask).where(DBTask.id == str(task_id)))
         db_task = result.scalar_one_or_none()

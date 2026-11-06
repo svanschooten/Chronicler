@@ -362,7 +362,11 @@ PENDING --> WORKING : claim_next()
 WORKING --> DONE
 WORKING --> FAILED : no attempts left
 WORKING --> PENDING : attempts remain
+WORKING --> PENDING : worker stopped
 ```
+
+A task still WORKING when the worker starts was interrupted, and is put back to PENDING,
+or FAILED once its attempts are used up. See [docs/tasks.md](docs/tasks.md#interrupted-tasks).
 
 ## PENDING
 

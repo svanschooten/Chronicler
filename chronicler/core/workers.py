@@ -20,6 +20,11 @@ SessionFactory = Callable[[], AsyncSession]
 STATUS_WRITE_TIMEOUT = 30.0
 """Seconds a task's final status write keeps retrying while the database is locked."""
 
+INTERRUPTED = "Interrupted before finishing"
+"""The error recorded on a task found WORKING when the worker starts."""
+
+Cleanup = Callable[[Task], Awaitable[None]]
+
 
 class WorkerManager:
     """
@@ -38,6 +43,8 @@ class WorkerManager:
         self.sessions = sessions
         self.worker_id = worker_id or str(uuid.uuid4())
         self.handlers: dict[TaskType, Callable[[Task, Callable[[int], Any]], Any]] = {}
+        self.cleanups: dict[TaskType, Cleanup] = {}
+        self._recovered = False
         self._running = False
         self.event_bus = event_bus
         self.status_write_timeout = status_write_timeout
@@ -47,11 +54,23 @@ class WorkerManager:
     ):
         self.handlers[task_type] = handler
 
+    def register_cleanup(self, task_type: TaskType, cleanup: Cleanup):
+        """
+        Runs for a task that recovery fails, the one failure its handler never saw, so the
+        handler's own failure path did not run either.
+        """
+        self.cleanups[task_type] = cleanup
+
     async def run_forever(self, interval: float = 1.0):
         self._running = True
         logger.info("Worker manager started")
         while self._running:
             try:
+                # Nothing is claimed until this has worked once: a task this worker claimed
+                # would otherwise look interrupted to it.
+                if not self._recovered:
+                    await self.recover_interrupted()
+                    self._recovered = True
                 await self.process_tasks()
             except Exception:
                 logger.exception("Error in worker manager loop")
@@ -60,6 +79,33 @@ class WorkerManager:
     def stop(self):
         self._running = False
         logger.info("Worker manager stopped")
+
+    async def recover_interrupted(self) -> None:
+        """
+        A task still WORKING when the worker starts was cut off by a crash, or by a status
+        write that never got through. Only this process can have the workspace open, so
+        none of them is running. Each one costs an attempt, so a task that takes the
+        process down every time it runs still ends up FAILED. See docs/tasks.md.
+        """
+        async with self._tasks() as tasks:
+            recovered = await tasks.recover_interrupted(INTERRUPTED)
+        for task in recovered:
+            outcome = "failed" if task.status == TaskStatus.FAILED else "returned to the queue"
+            logger.warning(f"Task {task.id} ({task.type.value}) was interrupted, {outcome}")
+            if task.status != TaskStatus.FAILED:
+                continue
+            # The rows are committed, so a retry would find nothing to recover: one task's
+            # failure here must not cost the tasks after it their cleanup.
+            cleanup = self.cleanups.get(task.type)
+            if cleanup is not None:
+                try:
+                    await cleanup(task)
+                except Exception:
+                    logger.exception(f"Cleaning up after interrupted task {task.id} failed")
+            try:
+                await self._publish_completion(task.id)
+            except Exception:
+                logger.exception(f"Could not announce that interrupted task {task.id} failed")
 
     @asynccontextmanager
     async def _tasks(self) -> AsyncIterator[SQLiteTaskRepository]:
@@ -102,6 +148,9 @@ class WorkerManager:
                 await handler(task, update_progress)
             else:
                 handler(task, update_progress)
+        except asyncio.CancelledError:
+            await self._return_to_queue(task)
+            raise
         except Exception as e:
             logger.exception(f"Task {task.id} ({task.type.value}) failed")
             error = str(e)
@@ -110,6 +159,20 @@ class WorkerManager:
             await self._record_outcome(lambda tasks: tasks.update_status(task.id, TaskStatus.DONE))
             logger.info(f"Task {task.id} ({task.type.value}) completed")
         await self._publish_completion(task.id)
+
+    async def _return_to_queue(self, task: Task) -> None:
+        """
+        The worker is being stopped. The task did nothing wrong, so it goes back to
+        PENDING without using an attempt. One try only, so a locked database holds up
+        shutdown for at most its busy timeout; if it fails, recovery at the next start
+        picks the task up instead.
+        """
+        logger.info(f"Task {task.id} ({task.type.value}) stopped, returning it to the queue")
+        try:
+            async with self._tasks() as tasks:
+                await tasks.update_status(task.id, TaskStatus.PENDING)
+        except Exception:
+            logger.warning(f"Task {task.id}: could not return it to the queue", exc_info=True)
 
     async def _record_outcome(
         self, write: Callable[[SQLiteTaskRepository], Awaitable[None]]
@@ -120,17 +183,34 @@ class WorkerManager:
         """
         deadline = time.monotonic() + self.status_write_timeout
         delay = 0.1
-        while True:
-            try:
-                async with self._tasks() as tasks:
-                    await write(tasks)
-                return
-            except OperationalError:
-                if time.monotonic() + delay > deadline:
-                    raise
-                logger.warning(f"Database busy, retrying a task status write in {delay:.1f}s")
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, 2.0)
+        try:
+            while True:
+                try:
+                    async with self._tasks() as tasks:
+                        await write(tasks)
+                    return
+                except OperationalError:
+                    if time.monotonic() + delay > deadline:
+                        raise
+                    logger.warning(f"Database busy, retrying a task status write in {delay:.1f}s")
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, 2.0)
+        except asyncio.CancelledError:
+            # Stopped while waiting out a lock. The work itself is finished, so one last
+            # try is worth making: without it, recovery runs the task again next start.
+            await self._last_try(write)
+            raise
+
+    async def _last_try(self, write: Callable[[SQLiteTaskRepository], Awaitable[None]]) -> None:
+        try:
+            async with self._tasks() as tasks:
+                await write(tasks)
+        except Exception:
+            logger.warning(
+                "Could not record a finished task's outcome before stopping; "
+                "it will run again after the next start",
+                exc_info=True,
+            )
 
     async def _publish_completion(self, task_id: uuid.UUID) -> None:
         if not self.event_bus:

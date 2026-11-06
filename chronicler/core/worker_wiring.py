@@ -26,4 +26,6 @@ def build_worker_manager(
     manager.register_handler(TaskType.TRANSCRIBE, handlers.handle_transcribe)
     manager.register_handler(TaskType.NORMALIZE, handlers.handle_normalize)
     manager.register_handler(TaskType.SUMMARIZE, handlers.handle_summarize)
+    manager.register_cleanup(TaskType.TRANSCRIBE, handlers.abandon_transcribe)
+    manager.register_cleanup(TaskType.NORMALIZE, handlers.abandon_normalize)
     return manager

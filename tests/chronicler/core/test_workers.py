@@ -382,3 +382,281 @@ async def test_progress_is_best_effort_while_the_database_is_locked(two_sessions
 
     assert reached_the_end
     assert (await tasks.get_by_id(task.id)).status == TaskStatus.DONE
+
+
+async def _interrupted(tasks: Tasks, **fields) -> Task:
+    """A task a crashed worker claimed and never finished."""
+    task = await tasks.create(Task(type=TaskType.IMPORT, **fields))
+    async with tasks.sessions() as session:
+        assert await SQLiteTaskRepository(session).claim_next("crashed-worker") is not None
+    return task
+
+
+async def _run_until(manager: WorkerManager, done: asyncio.Event) -> None:
+    runner = asyncio.create_task(manager.run_forever(interval=0.01))
+    try:
+        await asyncio.wait_for(done.wait(), timeout=5)
+    finally:
+        manager.stop()
+        await asyncio.wait_for(runner, timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_a_task_interrupted_by_a_crash_runs_again_on_the_next_start(tasks):
+    task = await _interrupted(tasks)
+    ran = asyncio.Event()
+
+    async def handler(_task, _progress):
+        ran.set()
+
+    manager = WorkerManager(tasks.sessions)
+    manager.register_handler(TaskType.IMPORT, handler)
+    await _run_until(manager, ran)
+
+    fetched = await tasks.get_by_id(task.id)
+    assert fetched.status == TaskStatus.DONE
+    assert fetched.attempts == 1, "the interrupted run counts as an attempt"
+
+
+@pytest.mark.asyncio
+async def test_recovery_fails_an_interrupted_task_with_no_attempts_left(tasks):
+    task = await _interrupted(tasks, attempts=2, max_attempts=3)
+    cleanup = AsyncMock()
+    bus = TaskEventBus()
+    events = []
+    bus.subscribe(lambda event: events.append(event))
+
+    manager = WorkerManager(tasks.sessions, event_bus=bus)
+    handler = AsyncMock()
+    manager.register_handler(TaskType.IMPORT, handler)
+    manager.register_cleanup(TaskType.IMPORT, cleanup)
+    await manager.recover_interrupted()
+    await manager.process_tasks()
+
+    fetched = await tasks.get_by_id(task.id)
+    assert fetched.status == TaskStatus.FAILED
+    assert fetched.error == "Interrupted before finishing"
+    handler.assert_not_called()
+    cleanup.assert_awaited_once()
+    assert cleanup.await_args.args[0].id == task.id
+    assert [(event.task_id, event.status) for event in events] == [(task.id, TaskStatus.FAILED)]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_only_runs_for_a_task_recovery_failed(tasks):
+    await _interrupted(tasks)
+    cleanup = AsyncMock()
+
+    manager = WorkerManager(tasks.sessions)
+    manager.register_cleanup(TaskType.IMPORT, cleanup)
+    await manager.recover_interrupted()
+
+    cleanup.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_failing_cleanup_does_not_stop_recovery(tasks, caplog):
+    first = await _interrupted(tasks, attempts=2, max_attempts=3)
+    second = await _interrupted(tasks, attempts=2, max_attempts=3)
+    cleanup = AsyncMock(side_effect=RuntimeError("project database is gone"))
+
+    manager = WorkerManager(tasks.sessions)
+    manager.register_cleanup(TaskType.IMPORT, cleanup)
+    await manager.recover_interrupted()
+
+    assert cleanup.await_count == 2
+    for task in (first, second):
+        assert (await tasks.get_by_id(task.id)).status == TaskStatus.FAILED
+    assert "Cleaning up after interrupted task" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_nothing_is_claimed_until_recovery_has_worked(tasks):
+    """
+    A task claimed before recovery ran would look interrupted to it, and be reset while
+    it was running.
+    """
+    await tasks.create(Task(type=TaskType.IMPORT))
+    ran = asyncio.Event()
+
+    async def handler(_task, _progress):
+        ran.set()
+
+    manager = WorkerManager(tasks.sessions)
+    manager.register_handler(TaskType.IMPORT, handler)
+    real_recover = manager.recover_interrupted
+    calls = 0
+
+    async def flaky_recover():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OperationalError("UPDATE", {}, Exception("database is locked"))
+        assert not ran.is_set()
+        await real_recover()
+
+    with patch.object(manager, "recover_interrupted", flaky_recover):
+        await _run_until(manager, ran)
+
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_recovery_runs_once_per_start(tasks):
+    manager = WorkerManager(tasks.sessions)
+    recover = AsyncMock()
+    cycles = 0
+    enough = asyncio.Event()
+
+    async def count_cycles():
+        nonlocal cycles
+        cycles += 1
+        if cycles == 3:
+            enough.set()
+
+    with (
+        patch.object(manager, "recover_interrupted", recover),
+        patch.object(manager, "process_tasks", count_cycles),
+    ):
+        await _run_until(manager, enough)
+
+    recover.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_stopping_the_worker_mid_task_leaves_the_task_pending(tasks):
+    """What closing the app during a transcription does."""
+    task = await tasks.create(Task(type=TaskType.IMPORT))
+    started = asyncio.Event()
+
+    async def handler(_task, _progress):
+        started.set()
+        await asyncio.Event().wait()
+
+    manager = WorkerManager(tasks.sessions)
+    manager.register_handler(TaskType.IMPORT, handler)
+    runner = asyncio.create_task(manager.run_forever(interval=0.01))
+    await asyncio.wait_for(started.wait(), timeout=5)
+    manager.stop()
+    runner.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await runner
+
+    fetched = await tasks.get_by_id(task.id)
+    assert fetched.status == TaskStatus.PENDING
+    assert fetched.attempts == 0, "being stopped is not the task's failure"
+    assert fetched.claimed_by is None
+    assert fetched.error is None
+
+
+@pytest.mark.asyncio
+async def test_a_stop_that_cannot_requeue_leaves_the_task_to_recovery(two_sessions, caplog):
+    """Shutdown must not wait on a locked database; the next start's recovery covers it."""
+    sessions = two_sessions.db_manager.get_archive_session
+    tasks = Tasks(sessions)
+    task = await tasks.create(Task(type=TaskType.IMPORT))
+    started = asyncio.Event()
+
+    async def handler(_task, _progress):
+        started.set()
+        await asyncio.Event().wait()
+
+    manager = WorkerManager(sessions)
+    manager.register_handler(TaskType.IMPORT, handler)
+    runner = asyncio.create_task(manager.run_forever(interval=0.01))
+    await asyncio.wait_for(started.wait(), timeout=5)
+    await _hold_the_write_lock(two_sessions.first)
+    runner.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await runner
+    await two_sessions.first.rollback()
+
+    assert (await tasks.get_by_id(task.id)).status == TaskStatus.WORKING
+    assert "could not return it to the queue" in caplog.text
+
+    await WorkerManager(sessions).recover_interrupted()
+    assert (await tasks.get_by_id(task.id)).status == TaskStatus.PENDING
+
+
+@pytest.mark.asyncio
+async def test_stopping_while_the_outcome_waits_on_a_lock_still_records_it(two_sessions, caplog):
+    """The work is finished; being stopped then must not make the next start redo it."""
+    sessions = two_sessions.db_manager.get_archive_session
+    tasks = Tasks(sessions)
+    blocker = two_sessions.first
+    task = await tasks.create(Task(type=TaskType.IMPORT))
+
+    async def handler(_task, _progress):
+        await _hold_the_write_lock(blocker)
+
+    manager = WorkerManager(sessions, status_write_timeout=30.0)
+    manager.register_handler(TaskType.IMPORT, handler)
+    runner = asyncio.create_task(manager.run_forever(interval=0.01))
+
+    async def retrying_for_a_while():
+        # The second retry sleeps 0.2 s, long enough for the stop to land inside it.
+        while caplog.text.count("retrying a task status write") < 2:
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(retrying_for_a_while(), timeout=10)
+    await blocker.rollback()
+    runner.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await runner
+
+    fetched = await tasks.get_by_id(task.id)
+    assert fetched.status == TaskStatus.DONE
+    assert fetched.attempts == 0
+
+
+@pytest.mark.asyncio
+async def test_a_stop_whose_last_try_is_locked_leaves_the_task_to_recovery(two_sessions, caplog):
+    sessions = two_sessions.db_manager.get_archive_session
+    tasks = Tasks(sessions)
+    blocker = two_sessions.first
+    task = await tasks.create(Task(type=TaskType.IMPORT))
+
+    async def handler(_task, _progress):
+        await _hold_the_write_lock(blocker)
+
+    manager = WorkerManager(sessions, status_write_timeout=30.0)
+    manager.register_handler(TaskType.IMPORT, handler)
+    runner = asyncio.create_task(manager.run_forever(interval=0.01))
+
+    async def retrying():
+        while "retrying a task status write" not in caplog.text:
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(retrying(), timeout=10)
+    runner.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await runner
+    await blocker.rollback()
+
+    assert (await tasks.get_by_id(task.id)).status == TaskStatus.WORKING
+    assert "it will run again after the next start" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_failed_announcement_does_not_skip_the_next_tasks_cleanup(tasks, caplog):
+    """The rows are already committed, so a retry would never get back to these."""
+    first = await _interrupted(tasks, attempts=2, max_attempts=3)
+    second = await _interrupted(tasks, attempts=2, max_attempts=3)
+    cleanup = AsyncMock()
+
+    manager = WorkerManager(tasks.sessions, event_bus=TaskEventBus())
+    manager.register_cleanup(TaskType.IMPORT, cleanup)
+    real_publish = manager._publish_completion
+    announced = []
+
+    async def flaky_publish(task_id):
+        if not announced:
+            announced.append(None)
+            raise OperationalError("SELECT", {}, Exception("database is locked"))
+        await real_publish(task_id)
+
+    with patch.object(manager, "_publish_completion", flaky_publish):
+        await manager.recover_interrupted()
+
+    assert {call.args[0].id for call in cleanup.await_args_list} == {first.id, second.id}
+    assert "Could not announce that interrupted task" in caplog.text
