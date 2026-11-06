@@ -85,9 +85,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install ".[transcription,normalization,recording,server]" flet-cli pyinstaller
 
+      # `import sounddevice` also calls Pa_Initialize, which fails on a headless runner with
+      # no sound server (PortAudioError: PulseAudio_Initialize: Can't connect to server).
+      # That is a runtime audio-device problem, not a packaging one, so it is tolerated here:
+      # a missing PortAudio library raises OSError instead, which still fails the job.
       - name: Verify the app and extras import
         shell: bash
-        run: python -c "import chronicler.desktop.main, chronicler.server.main, av, sounddevice, faster_whisper; print('imports ok')"
+        run: |
+          python - <<'PY'
+          import chronicler.desktop.main, chronicler.server.main, av, faster_whisper
+          try:
+              import sounddevice
+          except OSError:
+              raise  # PortAudio itself is missing
+          except Exception as exc:  # PortAudioError: library loaded, no audio server
+              print(f"sounddevice: PortAudio present, no audio device on this runner ({exc})")
+          print("imports ok")
+          PY
 
       - name: Build with PyInstaller
         run: pyinstaller Chronicler.spec
