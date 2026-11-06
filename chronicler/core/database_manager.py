@@ -85,14 +85,21 @@ class DatabaseManager:
         workspace. A linked chronicle's files were never in the workspace, so looking
         there made every one of its sources read as missing. See docs/storage.md.
         """
-        root = (
-            project_path.parent
-            if project_path is not None
-            else self.workspace_path / "chronicles" / chronicle_id
-        )
-        path = root / "sources"
+        path = self._chronicle_root(chronicle_id, project_path) / "sources"
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def snapshots_path_for(self, chronicle_id: str, project_path: Path | None = None) -> Path:
+        """Where copies of a chronicle's database go before a destructive change."""
+        path = self._chronicle_root(chronicle_id, project_path) / "snapshots"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _chronicle_root(self, chronicle_id: str, project_path: Path | None) -> Path:
+        """The directory a chronicle's project.db lives in, linked or not."""
+        if project_path is not None:
+            return project_path.parent
+        return self.workspace_path / "chronicles" / chronicle_id
 
     def get_archive_session(self) -> AsyncSession:
         return self.archive_session_factory()

@@ -10,6 +10,26 @@ of those.
 Every rule is individually switchable and parameterised, and the defaults work with no
 configuration at all.
 
+## Cleaning asks first and keeps a copy
+
+Cleaning drops and merges lines, and the text it removes cannot be regenerated. On the
+example transcript, 1,686 turns became 1,242. So:
+
+* `ChronicleOperations.clean`, behind both the archive card and the chronicle view, asks
+  for confirmation before queueing the task.
+* `handle_clean` first writes `snapshots/before-clean-<id>-<time>.db` beside the chronicle's
+  `project.db`, through `DatabaseManager.snapshot_project`. A linked chronicle keeps its
+  snapshots beside its external `project.db`. The snapshot is taken before the
+  transaction opens, because `VACUUM INTO` cannot run inside one. If it fails, the task
+  fails and nothing is rewritten.
+* Three snapshots per chronicle are kept (`SNAPSHOTS_KEPT`): the oldest, which holds
+  the transcript as it was before any clean, and the two newest. The chronicle id in the
+  name keeps linked chronicles whose databases share a folder from pruning each other's
+  copies.
+
+There is no restore button yet; that is ticket 065. Until then a snapshot can be put
+back by hand: close Chronicler and copy it over `project.db`.
+
 ## The pipeline
 
 Order is fixed and matters — normalisation has to happen before matching, and merging

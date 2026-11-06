@@ -190,6 +190,11 @@ MESSAGES = {
         "import_transcript": "Transcript importeren",
         "clean": "Transcript opschonen",
         "clean_queued": "Opschoontaak in de wachtrij",
+        "clean_title": "Transcript opschonen?",
+        "clean_message": (
+            "Opschonen van '{title}' verwijdert opvulling en herhaalde regels en voegt "
+            "opeenvolgende beurten samen. Eerst wordt een kopie bewaard in de map snapshots."
+        ),
         "identify_speakers": "Sprekers herkennen",
         "speakers_found": "{count} spreker(s) gevonden",
         "summarize": "Samenvatting maken",
