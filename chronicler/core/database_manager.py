@@ -32,6 +32,19 @@ def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
     command.upgrade(cfg, "head")
 
 
+def ensure_project_available(chronicle: object | None, chronicle_id: object) -> None:
+    """
+    Reading a chronicle must never create its database. Raises LookupError when there is
+    no such chronicle, and FileNotFoundError when a linked one's project.db has moved -
+    opening it anyway would silently start a new empty database at the old path.
+    """
+    if chronicle is None:
+        raise LookupError(f"No chronicle {chronicle_id}")
+    project_path = getattr(chronicle, "project_path", None)
+    if project_path and not Path(project_path).is_file():
+        raise FileNotFoundError(f"The linked project database {project_path} no longer exists")
+
+
 class DatabaseManager:
     def __init__(self, workspace_path: Path, busy_timeout: float = 5.0):
         """
@@ -77,15 +90,21 @@ class DatabaseManager:
         get_imports_path()'s shared scratch space, which a worker is free to
         overwrite/lose).
         """
-        return self.sources_path_for(chronicle_id)
+        return self.ensure_sources_path_for(chronicle_id)
 
     def sources_path_for(self, chronicle_id: str, project_path: Path | None = None) -> Path:
         """
         A chronicle's audio directory: beside a linked project.db, otherwise in the
         workspace. A linked chronicle's files were never in the workspace, so looking
         there made every one of its sources read as missing. See docs/storage.md.
+
+        A pure lookup: reading must not create folders. Use `ensure_sources_path_for`
+        when about to write audio.
         """
-        path = self._chronicle_root(chronicle_id, project_path) / "sources"
+        return self._chronicle_root(chronicle_id, project_path) / "sources"
+
+    def ensure_sources_path_for(self, chronicle_id: str, project_path: Path | None = None) -> Path:
+        path = self.sources_path_for(chronicle_id, project_path)
         path.mkdir(parents=True, exist_ok=True)
         return path
 

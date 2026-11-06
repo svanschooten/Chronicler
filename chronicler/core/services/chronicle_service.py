@@ -125,7 +125,7 @@ class ChronicleService:
         TranscriptService.list_audio_sources) is actually readable.
         """
         chronicle = await self.repository.get_by_id(chronicle_id)
-        sources_dir = self.db_manager.sources_path_for(
+        sources_dir = self.db_manager.ensure_sources_path_for(
             str(chronicle_id),
             Path(chronicle.project_path) if chronicle and chronicle.project_path else None,
         )

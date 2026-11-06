@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.database_manager import DatabaseManager, ensure_project_available
 from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import AudioSource, Summary, TranscriptLine
 from chronicler.core.processing.fingerprint import fingerprint_file
@@ -72,7 +72,7 @@ class TranscriptService:
     async def _get_repository(
         self, chronicle_id: UUID
     ) -> tuple[AsyncSession, SQLiteTranscriptRepository]:
-        custom_path = await self._project_path(chronicle_id)
+        custom_path = await self._project_path(chronicle_id, must_exist=True)
         session = await self.db_manager.get_project_session(
             str(chronicle_id), custom_path=custom_path
         )
@@ -156,8 +156,14 @@ class TranscriptService:
                 )
         return "\n".join(formatted)
 
-    async def _project_path(self, chronicle_id: UUID) -> Path | None:
+    async def _project_path(self, chronicle_id: UUID, must_exist: bool = False) -> Path | None:
+        """
+        A linked chronicle's project.db. With `must_exist`, an unknown chronicle or a
+        linked file that has moved raises instead of getting a fresh empty database.
+        """
         chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
+        if must_exist:
+            ensure_project_available(chronicle, chronicle_id)
         if chronicle and chronicle.project_path:
             return Path(chronicle.project_path)
         return None
@@ -171,10 +177,14 @@ class TranscriptService:
     async def source_path(self, chronicle_id: UUID, filename: str) -> Path:
         return (await self.sources_dir(chronicle_id)) / filename
 
+    async def _source_files(self, chronicle_id: UUID) -> list[Path]:
+        directory = await self.sources_dir(chronicle_id)
+        return list(directory.iterdir()) if directory.is_dir() else []
+
     async def _on_disk(self, chronicle_id: UUID) -> list[Path]:
         return sorted(
             path
-            for path in (await self.sources_dir(chronicle_id)).iterdir()
+            for path in await self._source_files(chronicle_id)
             if path.is_file() and not path.name.endswith(NORMALIZED_SUFFIX)
         )
 
