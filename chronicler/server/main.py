@@ -53,7 +53,9 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
         api_key=settings.api_key,
     )
     app = rpc_server.build()
-    logger.info(f"RPC Server API Key: {settings.api_key}")
+    # Never the key itself: logs get shared. The last characters are enough to tell which
+    # key a server expects. See docs/security.md.
+    logger.info(f"RPC server API key configured (ends in ...{rpc_server.api_key[-4:]})")
 
     worker_manager = build_worker_runtime(db_manager).manager
 

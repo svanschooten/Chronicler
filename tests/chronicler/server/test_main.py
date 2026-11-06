@@ -97,3 +97,18 @@ def test_a_server_on_a_workspace_open_elsewhere_exits_with_the_reason(
         holder.release()
 
     assert "already open in another Chronicler process" in str(exit_info.value.code)
+
+
+def test_startup_does_not_log_the_api_key(tmp_path, isolated_config, monkeypatch, caplog):
+    monkeypatch.setattr(
+        "chronicler.server.main.get_settings",
+        lambda: Settings(workspace_path=tmp_path, api_key="super-secret-key-1234"),
+    )
+    with (
+        patch("chronicler.server.main.asyncio.run", side_effect=lambda coro: coro.close()),
+        caplog.at_level("DEBUG"),
+    ):
+        run_server()
+
+    assert "super-secret-key" not in caplog.text
+    assert "1234" in caplog.text
