@@ -366,9 +366,10 @@ class TestSnapshotBeforeCleaning:
                     db_manager, chronicle.id, "We ride.", custom_path=project_db
                 )
 
-                await WorkerHandlers(db_manager, chronicle_repo=chronicle_repo).handle_clean(
-                    Task(type=TaskType.CLEAN, chronicle_id=chronicle.id), _noop_progress
-                )
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            await handlers.handle_clean(
+                Task(type=TaskType.CLEAN, chronicle_id=chronicle.id), _noop_progress
+            )
 
             assert len(list((project_db.parent / "snapshots").glob("before-clean-*.db"))) == 1
             assert not (tmp_path / "workspace" / "chronicles" / str(chronicle.id)).exists()
