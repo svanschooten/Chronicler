@@ -19,7 +19,10 @@ from chronicler.core.sqlite import SQLiteTranscriptRepository
 logger = logging.getLogger(__name__)
 
 SNAPSHOTS_KEPT = 3
-"""How many before-clean snapshots a chronicle keeps; older ones are deleted."""
+"""
+How many before-clean snapshots a chronicle keeps: the oldest, which holds the
+transcript as it was before any clean, and the newest of the rest.
+"""
 
 
 class CleanHandler(HandlerBase):
@@ -77,17 +80,23 @@ class CleanHandler(HandlerBase):
 
     async def snapshot_before_clean(self, chronicle_id: UUID) -> Path:
         """
-        Copies the chronicle's database to `snapshots/before-clean-<time>.db` beside its
-        project.db, keeping the newest `SNAPSHOTS_KEPT`. Cleaning drops and merges lines,
-        and the text it removes cannot be regenerated. See docs/cleaning.md.
+        Copies the chronicle's database to `snapshots/before-clean-<id>-<time>.db` beside
+        its project.db. Cleaning drops and merges lines, and the text it removes cannot
+        be regenerated. See docs/cleaning.md.
+
+        The name carries the chronicle id because linked chronicles whose databases share
+        a folder share its `snapshots/`, and pruning one must not touch another's copies.
         """
         project_path = await self.project_path_for(chronicle_id)
         directory = self.db_manager.snapshots_path_for(str(chronicle_id), project_path)
-        destination = directory / f"before-clean-{datetime.now():%Y%m%d-%H%M%S-%f}.db"
+        prefix = f"before-clean-{chronicle_id}-"
+        destination = directory / f"{prefix}{datetime.now():%Y%m%d-%H%M%S-%f}.db"
         await self.db_manager.snapshot_project(
             str(chronicle_id), destination, custom_path=project_path
         )
 
-        for old in sorted(directory.glob("before-clean-*.db"))[:-SNAPSHOTS_KEPT]:
+        snapshots = sorted(directory.glob(f"{prefix}*.db"))
+        oldest, rest = snapshots[:1], snapshots[1:]
+        for old in rest[: max(len(rest) - (SNAPSHOTS_KEPT - len(oldest)), 0)]:
             old.unlink()
         return destination

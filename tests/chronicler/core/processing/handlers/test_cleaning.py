@@ -333,7 +333,8 @@ class TestSnapshotBeforeCleaning:
             await db_manager.close_all()
 
     @pytest.mark.asyncio
-    async def test_only_the_newest_three_are_kept(self, tmp_path):
+    async def test_the_oldest_and_the_two_newest_are_kept(self, tmp_path):
+        """The oldest holds the transcript before any clean: the copy most worth keeping."""
         db_manager = DatabaseManager(tmp_path)
         try:
             chronicle_id = uuid4()
@@ -341,11 +342,11 @@ class TestSnapshotBeforeCleaning:
             handlers = WorkerHandlers(db_manager)
 
             made = []
-            for _ in range(4):
+            for _ in range(5):
                 made.append(await handlers.snapshot_before_clean(chronicle_id))
 
             kept = sorted(db_manager.snapshots_path_for(str(chronicle_id)).iterdir())
-            assert kept == made[1:]
+            assert kept == [made[0], made[3], made[4]]
         finally:
             await db_manager.close_all()
 
@@ -373,5 +374,36 @@ class TestSnapshotBeforeCleaning:
 
             assert len(list((project_db.parent / "snapshots").glob("before-clean-*.db"))) == 1
             assert not (tmp_path / "workspace" / "chronicles" / str(chronicle.id)).exists()
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_chronicles_sharing_a_folder_keep_their_own_snapshots(self, tmp_path):
+        """Two linked databases in one folder share `snapshots/`; pruning stays per chronicle."""
+        db_manager = DatabaseManager(tmp_path / "workspace")
+        await db_manager.init_archive()
+        try:
+            folder = tmp_path / "campaigns"
+            folder.mkdir()
+            ids = []
+            async with db_manager.get_archive_session() as archive_session:
+                chronicles = SQLiteChronicleRepository(archive_session)
+                for name in ("one", "two"):
+                    chronicle = await chronicles.create(
+                        Chronicle(title=name, project_path=str(folder / f"{name}.db"))
+                    )
+                    await _chronicle_with_lines(
+                        db_manager, chronicle.id, "We ride.", custom_path=folder / f"{name}.db"
+                    )
+                    ids.append(chronicle.id)
+
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            first = await handlers.snapshot_before_clean(ids[0])
+            for _ in range(5):
+                await handlers.snapshot_before_clean(ids[1])
+
+            snapshots = list((folder / "snapshots").iterdir())
+            assert first in snapshots
+            assert len([path for path in snapshots if str(ids[1]) in path.name]) == 3
         finally:
             await db_manager.close_all()
