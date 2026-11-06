@@ -78,9 +78,25 @@ the Sources panel would show the track as transcribing for good. A source alread
 Stopping the worker is different. Closing the desktop app or stopping the server cancels
 the running task, and `_execute_task` catches the `CancelledError`, returns the task to
 `PENDING` without using an attempt, and re-raises. The task did nothing wrong. That write
-is tried once, so a locked database cannot hold up shutdown; if it fails, the task is
-still `WORKING` and the next start's recovery picks it up, at the cost of an attempt. The
-source of a stopped transcription keeps saying `RUNNING` until the task runs again.
+is tried once, so a locked database holds up shutdown for at most its busy timeout (5 s);
+if it fails, the task is still `WORKING` and the next start's recovery picks it up, at the
+cost of an attempt. The source of a stopped transcription keeps saying `RUNNING` until the
+task runs again.
+
+A stop can also land after the handler finished, while `_record_outcome` is waiting out a
+lock to write `DONE` or the failure. The work is done by then, so instead of giving up it
+makes one last direct try at that write before stopping. Only if that fails too does the
+task stay `WORKING` and run again after the next start: harmless for an import or a
+transcription, which replace their lines, but a summary pays for its model call twice.
+
+Cancelling does not stop work running in a thread. A transcription is
+`asyncio.to_thread`, so Whisper carries on in the background and its result is thrown
+away, and closing the app waits for the interpreter to finish that thread. Real cancel is
+[064-F2](../tickets/064-F2_progress_and_cancel.md).
+
+Recovery commits every row first, then runs each failed task's cleanup and publishes its
+event. One task's cleanup or event failing is logged and does not stop the next one's: a
+second recovery would find nothing left `WORKING` to retry them with.
 
 The Tasks view does not offer retry on `WORKING`. With recovery in place, a `WORKING` row
 really is running, and retrying it would run it twice.
