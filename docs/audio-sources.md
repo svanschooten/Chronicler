@@ -65,6 +65,26 @@ pre-selects it, and assigning a speaker is its own action, separate from transcr
 This is the flexible version of the prototype's `voice_mapping` config, which mapped
 filename fragments to names and could not cope with a name it had not been told about.
 
+## Lines remember their track
+
+Each transcript line has a `source_id` pointing at the row that produced it. Without it,
+re-transcribing could only delete by speaker, so a second track for one speaker (a split
+recording, a Discord user who rejoined, a repeat in-app recording) wiped the first.
+
+Re-transcribing a track replaces its lines, hand edits included. The transcribe dialog
+says so before a re-run.
+
+Lines from before this column existed have no `source_id`, and neither do imported
+transcripts. A re-run claims a speaker's untracked lines only when this track is that
+speaker's one transcribed track, because then they can only have come from it. With two
+or more transcribed tracks there is no telling, so they are kept.
+
+`MergeSameSpeaker` never joins lines from different tracks, so a merged line can always
+be replaced along with the one track it came from.
+
+`start_offset` is seconds added to every timestamp the track produces. It is set in the
+transcribe dialog and stored on the row.
+
 ## Where a chronicle's audio lives
 
 `DatabaseManager.sources_path_for(chronicle_id, project_path)` is the single answer:
