@@ -91,6 +91,7 @@ async def test_thin_client_shares_one_long_timeout_client():
     client = runtime.http_client
 
     assert client is not None
+    assert client.timeout.connect == 10
     assert client.timeout.read == 600
     assert client.timeout.write == 600
     assert runtime.file_stager._client is client
