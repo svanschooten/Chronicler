@@ -113,9 +113,11 @@ class WorkerManager:
             yield SQLiteTaskRepository(session)
 
     async def process_tasks(self):
-        async with self._tasks() as tasks:
-            pending_count = len(await tasks.get_pending())
-        for _ in range(pending_count):
+        """
+        Runs every task that is due. A failed task waits out its `not_before` before it can
+        be claimed again, so this loop cannot spin on it.
+        """
+        while True:
             async with self._tasks() as tasks:
                 task = await tasks.claim_next(self.worker_id)
             if task is None:

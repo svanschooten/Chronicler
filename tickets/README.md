@@ -36,7 +36,7 @@ These areas conflict when worked on at the same time, so take their tickets in t
 | ---- | ----- | --- |
 | Worker and task queue | 007 → 009 → 069 → 022 → 040 → 064 | Same files in `core/workers.py` and `task_repository.py` |
 | Project migrations | 010 → 020 → 029 → 063 | Each adds an Alembic revision on the project chain (head `f6c3a9d2b417`). Rebase `down_revision` on whatever merged last |
-| Archive migrations | 022 → 029 | Same for the archive chain (head `c9f2a4e17b30`) |
+| Archive migrations | 022 → 029 | Same for the archive chain (head `b4d7e2a9c156`) |
 | Task handlers | 010 → 011 → 032 → 040 | Same files in `core/processing/handlers/` |
 | Desktop shell | 007 → 027 → 041 | Same parts of `desktop/app.py`. Schedule 041 alone, because it conflicts with most open desktop work |
 | Runtime locks | 016, 035, 067 | Each regenerates `scripts/runtime/locks/`. Merge one, then regenerate on top of it |

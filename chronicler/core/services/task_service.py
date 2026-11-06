@@ -8,6 +8,11 @@ from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import service
 
 
+# A rerun of a transcription is expensive and a manual retry exists, so it is not repeated
+# automatically. Every other type keeps the model's default.
+MAX_ATTEMPTS: dict[TaskType, int] = {TaskType.TRANSCRIBE: 1}
+
+
 @service(
     expose=[
         "list_tasks",
@@ -93,6 +98,7 @@ class TaskService:
             type=TaskType.TRANSCRIBE,
             chronicle_id=chronicle_id,
             data=json.dumps(data),
+            max_attempts=MAX_ATTEMPTS[TaskType.TRANSCRIBE],
         )
         return await self.repository.create(task)
 

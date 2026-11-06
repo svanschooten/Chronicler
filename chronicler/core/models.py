@@ -98,6 +98,8 @@ class Task(BaseModel):
     claimed_at: datetime | None = None
     attempts: int = 0
     max_attempts: int = 3
+    # A retrying task is not claimed before this moment. None means claimable now.
+    not_before: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

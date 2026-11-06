@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 from uuid import UUID
 
@@ -141,6 +142,12 @@ class TasksView(ft.Column):
     @staticmethod
     def _timestamps(task: Task) -> str:
         parts = [f"Created {task.created_at.strftime(TIMESTAMP_FORMAT)}"]
+        if (
+            task.status == TaskStatus.PENDING
+            and task.not_before
+            and task.not_before > datetime.now()
+        ):
+            parts.append(f"Next attempt {task.not_before.strftime(TIMESTAMP_FORMAT)}")
         if task.claimed_at:
             parts.append(f"Started {task.claimed_at.strftime(TIMESTAMP_FORMAT)}")
         if task.status in (TaskStatus.DONE, TaskStatus.FAILED):
