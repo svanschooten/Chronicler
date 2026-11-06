@@ -4,9 +4,9 @@
 
 A second release format next to the PyInstaller build. Instead of freezing everything into
 one binary, a [PyApp](https://github.com/ofek/pyapp) launcher embeds a small, real Python
-installation with only the base dependencies. Transcription, normalisation and recording
-are **components**: downloaded later, from PyPI, pinned by hash to exactly what this build
-was tested with.
+installation with only the base dependencies. Transcription, normalisation, recording and
+the server are **components**: downloaded later, from PyPI, pinned by hash to exactly what
+this build was tested with.
 
 | | PyInstaller build | Embedded runtime |
 | - | ----------------- | ---------------- |
@@ -76,9 +76,17 @@ feature; an OpenAI-compatible server such as Ollama needs nothing.
 Until the component manager is part of the app, installing is a command line:
 
 ```bash
-./Chronicler-modular components install transcription normalization recording
+./Chronicler-modular components install transcription normalization recording server
 ./Chronicler-modular components where
 ```
+
+`server` holds FastAPI, Uvicorn and python-multipart, which `Chronicler-modular server`
+needs. Without it, server mode exits with the command to install it rather than a
+traceback.
+
+The command installs exactly the set it is given, and that set becomes the active one. So
+name every component you use: `components install server` on its own leaves the server
+running without transcription.
 
 The set of requested components is installed with pip `--target` into a staging directory
 named after a hash of their locks, and only renamed into place when pip succeeded - so a
@@ -140,13 +148,15 @@ uv run --no-project --python 3.12 python scripts/runtime/smoke.py dist/runtime/C
 
 Needs `uv` and `cargo` on PATH, and has to run on the platform it builds for.
 `smoke.py` launches the binary, checks it found its Flet client, installs every component
-and transcribes a pinned 16-second sample with the tiny Whisper model. The release
-workflow runs the same script before attaching anything.
+and transcribes a pinned 16-second sample with the tiny Whisper model. It then starts
+`server` on a free port, with a throwaway config and workspace, and waits for
+`/system/ping` to answer. The release workflow runs the same script before attaching
+anything.
 
 ## Testing
 
 `tests/scripts/runtime/` covers lock parsing and rendering, the staleness check, the
 committed locks themselves (every requirement hashed, no component repeating the base, the
-locked `flet-desktop` matching the shipped client, no `llama-cpp-python`), the pins, and
-the PE subsystem reader. `tests/chronicler/core/test_extras.py` and
-`tests/chronicler/desktop/test_main.py` cover the embedded-runtime behaviour in the app.
+locked `flet-desktop` matching the shipped client, no `llama-cpp-python`), the pins, the
+PE subsystem reader, and the smoke test's server step run against a source install.
+`tests/chronicler/core/test_extras.py` and `tests/chronicler/desktop/test_main.py` cover the embedded-runtime behaviour in the app.
