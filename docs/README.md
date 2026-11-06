@@ -27,7 +27,7 @@ below and leave the code clean.
 | [audio-normalization.md](audio-normalization.md) | The loudness pipeline, why the source is never touched, LUFS vs dBFS |
 | [summarization.md](summarization.md) | LLM providers, model discovery, two-stage summarisation, numbered outputs |
 | [recording.md](recording.md) | In-app capture, and why it needs no new RPC in thin-client mode |
-| [optional-extras.md](optional-extras.md) | The four extras, install-on-demand, and what pip cannot fix |
+| [optional-extras.md](optional-extras.md) | The five extras, install-on-demand, and what pip cannot fix |
 | [i18n.md](i18n.md) | Message maps, `t()`, and the tests that keep translations honest |
 | [security.md](security.md) | Path confinement, filename sanitisation, regex safety, API-key auth, upload limits |
 | [desktop.md](desktop.md) | Flet views, theming, dialog patterns, chronicle actions, the transcribe dialog |
