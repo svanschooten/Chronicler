@@ -244,6 +244,12 @@ MESSAGES = {
         "save_speaker": "Save speaker only",
         "start": "Start transcription",
         "start_again": "Transcribe again",
+        "start_offset": "Start offset (seconds)",
+        "start_offset_invalid": "Enter a number of seconds, 0 or more",
+        "replaces_edits": (
+            "This track is already transcribed. "
+            "Transcribing it again replaces its lines, including any edits made to them."
+        ),
     },
     "recording": {
         "no_devices": "No audio input devices were found. On WSL, audio input needs WSLg.",

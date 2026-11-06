@@ -247,6 +247,12 @@ MESSAGES = {
         "save_speaker": "Alleen spreker opslaan",
         "start": "Transcriptie starten",
         "start_again": "Opnieuw transcriberen",
+        "start_offset": "Startverschuiving (seconden)",
+        "start_offset_invalid": "Voer een aantal seconden in, 0 of meer",
+        "replaces_edits": (
+            "Dit spoor is al getranscribeerd. "
+            "Opnieuw transcriberen vervangt de regels ervan, ook als je ze hebt bewerkt."
+        ),
     },
     "recording": {
         "no_devices": "Geen audio-invoerapparaten gevonden. Op WSL is WSLg nodig voor invoer.",

@@ -71,8 +71,12 @@ class TaskService:
         no_speech_threshold: float | None = None,
         model_size: str | None = None,
         normalize_first: bool | None = None,
+        start_offset: float | None = None,
     ) -> Task:
-        """Queues one track. Omitted parameters fall back to the configured defaults."""
+        """
+        Queues one track. Omitted parameters fall back to the configured defaults, and an
+        omitted `start_offset` keeps the one stored on the track.
+        """
         data: dict[str, Any] = {"file_path": file_path, "speaker_name": speaker_name}
         if language is not None:
             data["language"] = language
@@ -82,6 +86,8 @@ class TaskService:
             data["model_size"] = model_size
         if normalize_first is not None:
             data["normalize_first"] = normalize_first
+        if start_offset is not None:
+            data["start_offset"] = start_offset
 
         task = Task(
             type=TaskType.TRANSCRIBE,

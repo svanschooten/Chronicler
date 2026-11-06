@@ -253,6 +253,12 @@ MESSAGES = {
         "save_speaker": "Nur Sprecher speichern",
         "start": "Transkription starten",
         "start_again": "Erneut transkribieren",
+        "start_offset": "Startversatz (Sekunden)",
+        "start_offset_invalid": "Eine Anzahl Sekunden eingeben, 0 oder mehr",
+        "replaces_edits": (
+            "Diese Spur ist bereits transkribiert. "
+            "Erneutes Transkribieren ersetzt ihre Zeilen, auch bearbeitete."
+        ),
     },
     "recording": {
         "no_devices": "Keine Audioeingabegeräte gefunden. Unter WSL wird dafür WSLg benötigt.",
