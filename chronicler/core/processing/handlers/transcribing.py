@@ -144,6 +144,10 @@ class TranscribeHandler(NormalizeHandler):
             f"{len(lines)} segments for speaker '{speaker_name}'"
         )
 
+    async def abandon_transcribe(self, task: Task) -> None:
+        """Recovery failed this task, so its source must stop showing as transcribing."""
+        await self.release_source(task, transcription=True)
+
     async def _register_source(self, chronicle_id: UUID, filename: str, speaker_name: str) -> None:
         path = (await self.sources_root_for(chronicle_id)) / filename
         session = await self.project_session(chronicle_id)
