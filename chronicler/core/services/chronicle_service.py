@@ -6,7 +6,7 @@ from uuid import UUID
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.file_staging import confine_to_directory, safe_display_name
-from chronicler.core.formatting import format_duration
+from chronicler.core.formatting import format_duration, looks_synthetic
 from chronicler.core.models import Chronicle
 from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.rpc import service
@@ -79,8 +79,9 @@ class ChronicleService:
 
         chronicle = await self.repository.get_by_id(chronicle_id) or chronicle
         chronicle.speakers_count = speakers
-        if lines:
+        if lines and not looks_synthetic(lines):
             chronicle.duration = format_duration(max(line.end_time for line in lines))
+        if lines:
             chronicle.status = "Transcribed"
         logger.info(f"Hydrated chronicle {chronicle_id}: {speakers} speakers, {len(lines)} lines")
         return await self.repository.update(chronicle)
