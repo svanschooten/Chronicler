@@ -195,6 +195,12 @@ MESSAGES = {
         "import_transcript": "Transkript importieren",
         "clean": "Transkript bereinigen",
         "clean_queued": "Bereinigungsaufgabe eingereiht",
+        "clean_title": "Transkript bereinigen?",
+        "clean_message": (
+            "Beim Bereinigen von '{title}' werden Füllzeilen und Wiederholungen entfernt und "
+            "aufeinanderfolgende Beiträge zusammengeführt. Vorher wird eine Kopie im Ordner "
+            "snapshots gespeichert."
+        ),
         "identify_speakers": "Sprecher erkennen",
         "speakers_found": "{count} Sprecher gefunden",
         "summarize": "Zusammenfassung erstellen",
@@ -253,6 +259,12 @@ MESSAGES = {
         "save_speaker": "Nur Sprecher speichern",
         "start": "Transkription starten",
         "start_again": "Erneut transkribieren",
+        "start_offset": "Startversatz (Sekunden)",
+        "start_offset_invalid": "Eine Anzahl Sekunden eingeben, 0 oder mehr",
+        "replaces_edits": (
+            "Diese Spur ist bereits transkribiert. "
+            "Erneutes Transkribieren ersetzt ihre Zeilen, auch bearbeitete."
+        ),
     },
     "recording": {
         "no_devices": "Keine Audioeingabegeräte gefunden. Unter WSL wird dafür WSLg benötigt.",
@@ -352,8 +364,8 @@ MESSAGES = {
                 "Mit einem Chronicler-Server verbinden, der die Arbeit übernimmt."
             ),
             "server_note": (
-                "Chronicler als Server oder Web-Client wird im Terminal eingerichtet: "
-                "mit dem Argument 'server' oder 'web' starten."
+                "Chronicler als Server wird im Terminal eingerichtet: "
+                "mit dem Argument 'server' starten."
             ),
         },
         "workspace": {

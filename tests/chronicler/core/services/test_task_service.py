@@ -153,6 +153,18 @@ class TestTranscribeParameters:
         assert data["model_size"] == "small"
 
     @pytest.mark.asyncio
+    async def test_a_start_offset_is_carried_and_an_omitted_one_is_absent(self):
+        repo = MagicMock(spec=TaskRepository)
+        repo.create = AsyncMock(side_effect=lambda task: task)
+        service = TaskService(repo)
+
+        with_offset = await service.queue_transcribe(uuid4(), "/s/a.wav", "GM", start_offset=90)
+        without = await service.queue_transcribe(uuid4(), "/s/a.wav", "GM")
+
+        assert json.loads(with_offset.data)["start_offset"] == 90
+        assert "start_offset" not in json.loads(without.data)
+
+    @pytest.mark.asyncio
     async def test_omitted_parameters_are_absent_so_settings_apply(self):
         repo = MagicMock(spec=TaskRepository)
         repo.create = AsyncMock(side_effect=lambda task: task)

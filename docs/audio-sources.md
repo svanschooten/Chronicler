@@ -65,6 +65,38 @@ pre-selects it, and assigning a speaker is its own action, separate from transcr
 This is the flexible version of the prototype's `voice_mapping` config, which mapped
 filename fragments to names and could not cope with a name it had not been told about.
 
+## Lines remember their track
+
+Each transcript line has a `source_id` pointing at the row that produced it. Without it,
+re-transcribing could only delete by speaker, so a second track for one speaker (a split
+recording, a Discord user who rejoined, a repeat in-app recording) wiped the first.
+
+Re-transcribing a track replaces its lines, hand edits included. The transcribe dialog
+says so before a re-run.
+
+A line with no `source_id` is never deleted by a re-run. Imported transcripts have none,
+and neither do lines from before this column existed that could not be attributed.
+
+The attribution happens once, in migration `f6c3a9d2b417`: a speaker with exactly one
+transcribed track gets that track on all their lines. An earlier version did this on
+every re-run instead, and so deleted a speaker's imported lines whenever they also had
+one transcribed track.
+
+Two consequences of attributing only when it is certain:
+
+* A legacy chronicle in which one speaker had two transcribed tracks keeps those lines
+  untracked. Re-running either track adds its new lines next to the old ones, so the
+  chronicle ends up with duplicates to delete by hand.
+* A legacy chronicle that mixed imported lines with one transcribed track for the same
+  speaker gets the imported lines attributed to that track too. Nothing recorded the
+  difference, and the old code deleted them on a re-run anyway.
+
+`MergeSameSpeaker` never joins lines from different tracks, so a merged line can always
+be replaced along with the one track it came from.
+
+`start_offset` is seconds added to every timestamp the track produces. It is set in the
+transcribe dialog and stored on the row.
+
 ## Where a chronicle's audio lives
 
 `DatabaseManager.sources_path_for(chronicle_id, project_path)` is the single answer:

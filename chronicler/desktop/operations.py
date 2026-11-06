@@ -72,6 +72,15 @@ class ChronicleOperations:
     # -- tasks ----------------------------------------------------------------
 
     async def clean(self, chronicle: Chronicle) -> bool:
+        """Asks first: cleaning drops and merges lines, and dropped text cannot be regenerated."""
+        if not await confirm(
+            self.get_page(),
+            t("actions.clean_title"),
+            t("actions.clean_message", title=chronicle.title),
+            confirm_label=t("actions.clean"),
+        ):
+            return False
+
         await self.task_service.queue_clean(chronicle.id)
         self.show_snackbar(t("actions.clean_queued"))
         return True

@@ -4,6 +4,9 @@ project database.
 """
 
 import logging
+from datetime import datetime
+from pathlib import Path
+from uuid import UUID
 
 from pydantic import ValidationError
 
@@ -14,6 +17,12 @@ from chronicler.core.processing.handlers.base import HandlerBase, ProgressCallba
 from chronicler.core.sqlite import SQLiteTranscriptRepository
 
 logger = logging.getLogger(__name__)
+
+SNAPSHOTS_KEPT = 3
+"""
+How many before-clean snapshots a chronicle keeps: the oldest, which holds the
+transcript as it was before any clean, and the newest of the rest.
+"""
 
 
 class CleanHandler(HandlerBase):
@@ -33,6 +42,11 @@ class CleanHandler(HandlerBase):
         chronicle_id = self.require_chronicle_id(task)
         cleaning = self.cleaning_settings(task)
         logger.info(f"Cleaning transcript for chronicle {chronicle_id}")
+
+        # Before the transaction: VACUUM INTO cannot run inside one. A failed snapshot
+        # fails the task, so nothing is rewritten without a copy to go back to.
+        snapshot = await self.snapshot_before_clean(chronicle_id)
+        logger.info(f"Saved the transcript before cleaning to {snapshot}")
 
         session = await self.project_session(chronicle_id)
         async with session:
@@ -63,3 +77,26 @@ class CleanHandler(HandlerBase):
             f"Transcript clean finished for chronicle {chronicle_id}: "
             f"{len(cleaned_lines)} lines, {speakers_count} speakers"
         )
+
+    async def snapshot_before_clean(self, chronicle_id: UUID) -> Path:
+        """
+        Copies the chronicle's database to `snapshots/before-clean-<id>-<time>.db` beside
+        its project.db. Cleaning drops and merges lines, and the text it removes cannot
+        be regenerated. See docs/cleaning.md.
+
+        The name carries the chronicle id because linked chronicles whose databases share
+        a folder share its `snapshots/`, and pruning one must not touch another's copies.
+        """
+        project_path = await self.project_path_for(chronicle_id)
+        directory = self.db_manager.snapshots_path_for(str(chronicle_id), project_path)
+        prefix = f"before-clean-{chronicle_id}-"
+        destination = directory / f"{prefix}{datetime.now():%Y%m%d-%H%M%S-%f}.db"
+        await self.db_manager.snapshot_project(
+            str(chronicle_id), destination, custom_path=project_path
+        )
+
+        snapshots = sorted(directory.glob(f"{prefix}*.db"))
+        oldest, rest = snapshots[:1], snapshots[1:]
+        for old in rest[: max(len(rest) - (SNAPSHOTS_KEPT - len(oldest)), 0)]:
+            old.unlink()
+        return destination

@@ -91,19 +91,11 @@ async def test_optional_parameters_stay_optional_over_rpc():
         assert resp.json()["name"] == "c (urgent)"
 
 
-def test_cors_does_not_combine_wildcard_with_credentials():
-    """
-    allow_origins=['*'] together with allow_credentials=True is an invalid, unsafe
-    combination that browsers reject outright - and unnecessary here anyway, since auth is a
-    bearer-style X-API-Key header that browsers never attach automatically.
-    """
-    container = Container()
-    server = RpcServer(container, services=[], api_key="test-key")
-    app = server.build()
+def test_no_cors_middleware_is_installed():
+    """No browser calls the API since the web client was removed, so no origin is allowed."""
+    app = RpcServer(Container(), services=[], api_key="test-key").build()
 
-    cors_middlewares = [m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"]
-    assert len(cors_middlewares) == 1
-    assert cors_middlewares[0].kwargs["allow_credentials"] is False
+    assert not [m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"]
 
 
 @pytest.mark.asyncio

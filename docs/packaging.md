@@ -38,9 +38,9 @@ not calling `run_wizard` for `client:desktop` at all; `desktop.main.start()` dec
 using the same `Settings.validate_for_mode` gate the other modes use.
 
 The Flet wizard deliberately covers **only** the two modes a desktop window can run in —
-full stack and thin client. Server and web client are started from a terminal, which is
-exactly where the console wizard works, so they keep it and the desktop wizard does not
-duplicate them.
+full stack and thin client. The server is started from a terminal, which is exactly
+where the console wizard works, so it keeps it and the desktop wizard does not duplicate
+it.
 
 ### `chronicler server` borrows the calling terminal
 

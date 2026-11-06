@@ -406,3 +406,71 @@ class TestLabelling:
 
         await dialog.actions[0].on_click(MagicMock())
         await asyncio.wait_for(task, timeout=1)
+
+
+class TestStartOffset:
+    @pytest.mark.asyncio
+    async def test_it_starts_at_the_tracks_stored_offset(self, ask):
+        task, dialog, _ = await ask(source=_source(start_offset=90.0))
+
+        assert _fields(dialog)["start_offset"].value == "90"
+
+        await dialog.actions[0].on_click(MagicMock())
+        await asyncio.wait_for(task, timeout=1)
+
+    @pytest.mark.asyncio
+    async def test_the_chosen_offset_is_returned(self, ask):
+        task, dialog, _ = await ask()
+        fields = _fields(dialog)
+        fields["speaker"].value = "Alice"
+        fields["start_offset"].value = "12.5"
+
+        await dialog.actions[2].on_click(MagicMock())
+        choice = await asyncio.wait_for(task, timeout=1)
+
+        assert choice.start_offset == 12.5
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("value", ["banana", "-3"])
+    async def test_an_unusable_offset_is_refused(self, ask, value):
+        task, dialog, _ = await ask()
+        fields = _fields(dialog)
+        fields["speaker"].value = "Alice"
+        fields["start_offset"].value = value
+
+        await dialog.actions[2].on_click(MagicMock())
+        await asyncio.sleep(0)
+
+        assert not task.done()
+        assert fields["start_offset"].error
+
+        await dialog.actions[0].on_click(MagicMock())
+        await asyncio.wait_for(task, timeout=1)
+
+
+class TestRerunWarning:
+    @staticmethod
+    def _texts(dialog) -> list[str]:
+        return [
+            control.value for control in dialog.content.controls if isinstance(control, ft.Text)
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_transcribed_track_warns_that_edits_are_replaced(self, ask):
+        source = _source(content_hash="h", transcribed_hash="h")
+        source.transcription_state = "DONE"
+        task, dialog, _ = await ask(source=source)
+
+        assert any("edits" in text for text in self._texts(dialog))
+
+        await dialog.actions[0].on_click(MagicMock())
+        await asyncio.wait_for(task, timeout=1)
+
+    @pytest.mark.asyncio
+    async def test_a_new_track_has_no_warning(self, ask):
+        task, dialog, _ = await ask()
+
+        assert not any("edits" in text for text in self._texts(dialog))
+
+        await dialog.actions[0].on_click(MagicMock())
+        await asyncio.wait_for(task, timeout=1)

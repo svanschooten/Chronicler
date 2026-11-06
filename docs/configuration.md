@@ -55,8 +55,8 @@ called it directly.
 
 ## `Settings.mode`
 
-One of `server`, `client:web`, `desktop:full_stack`, `desktop:thin_client`, set by
-`ConfigWizard` once it knows which of the four concrete setups was chosen.
+One of `server`, `desktop:full_stack`, `desktop:thin_client`, set by `ConfigWizard`
+once it knows which of the three concrete setups was chosen.
 
 It is recorded rather than re-derived because desktop's two sub-modes are not otherwise
 distinguishable from settings alone — both can have `workspace_path` and `server_url`
@@ -94,7 +94,7 @@ console to ask questions through.
 | Mode | Wizard | Where |
 | ---- | ------ | ----- |
 | `client:desktop` | `FletSetupWizard` | `desktop/views/wizard.py`, on screen |
-| `server`, `client:web` | `ConfigWizard` | `core/wizard.py`, on stdin |
+| `server` | `ConfigWizard` | `core/wizard.py`, on stdin |
 
 The split exists because the packaged desktop build is windowless and has no stdin at
 all — see [packaging.md](packaging.md). `__main__.main()` simply does not call

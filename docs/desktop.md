@@ -42,7 +42,7 @@ is why `accent` differs per theme.
 Each navigation gets a fresh `Container` scope, closed when navigating away, rather
 than one held for the app's lifetime. Sequential reuse within one view visit is fine —
 Flet handlers run one at a time. What is not safe is sharing it with the background
-worker loop, which gets its own session.
+worker loop, which opens its own short sessions.
 
 Scope creation is per-branch rather than unconditional: `SettingsView` does not touch
 the database, so it should not cause a session to be opened and immediately closed for

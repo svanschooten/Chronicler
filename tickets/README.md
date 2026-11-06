@@ -32,7 +32,7 @@ These areas conflict when worked on at the same time, so take their tickets in t
 | Area | Order | Why |
 | ---- | ----- | --- |
 | Worker and task queue | 007 → 009 → 022 → 040 → 064 | Same files in `core/workers.py` and `task_repository.py` |
-| Project migrations | 010 → 020 → 029 → 063 | Each adds an Alembic revision on the project chain (head `e5b2f70c31a8`). Rebase `down_revision` on whatever merged last |
+| Project migrations | 010 → 020 → 029 → 063 | Each adds an Alembic revision on the project chain (head `f6c3a9d2b417`). Rebase `down_revision` on whatever merged last |
 | Archive migrations | 022 → 029 | Same for the archive chain (head `c9f2a4e17b30`) |
 | Task handlers | 010 → 011 → 032 → 040 | Same files in `core/processing/handlers/` |
 | Desktop shell | 007 → 027 → 041 | Same parts of `desktop/app.py`. Schedule 041 alone, because it conflicts with most open desktop work |
@@ -87,23 +87,23 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [006-C3 Saving a speaker locks the workspace database, then loses the write](006-C3_speaker_registry_commit.md) · critical · XS · after 002
 
-- [ ] [007-C2 One lock timeout stops all background work until restart](007-C2_worker_session_per_step.md) · critical · S · after 002
+- [x] [007-C2 One lock timeout stops all background work until restart](007-C2_worker_session_per_step.md) · critical · S · after 002
 
 - [x] [008-A1 Nothing stops two processes from sharing a workspace](008-A1_single_process_workspace_lock.md) · high · S
 
 - [ ] [009-C4 Interrupted tasks stay WORKING forever](009-C4_task_recovery.md) · critical · S · after 007, 008
 
-- [ ] [010-C5 Transcribing a second track for a speaker deletes the first](010-C5_transcript_line_source_id.md) · critical · M
+- [x] [010-C5 Transcribing a second track for a speaker deletes the first](010-C5_transcript_line_source_id.md) · critical · M
 
-- [ ] [011-H4 Clean rewrites the transcript with no confirmation or undo](011-H4_clean_confirm_and_snapshot.md) · high · S
+- [x] [011-H4 Clean rewrites the transcript with no confirmation or undo](011-H4_clean_confirm_and_snapshot.md) · high · S
 
 ### Wave 3: close the security exposure
 
-- [ ] [012-S14 Remove the web client](012-S14_remove_web_client.md) · high · S
+- [x] [012-S14 Remove the web client](012-S14_remove_web_client.md) · high · S
 
-- [ ] [013-H2 The web client exposes the full API with no login](013-H2_web_client_open_proxy.md) · high · closed by 012
+- [x] [013-H2 The web client exposes the full API with no login](013-H2_web_client_open_proxy.md) · high · closed by 012
 
-- [ ] [014-M8 Audio uploads from the web client always fail](014-M8_web_audio_upload_fails.md) · medium · closed by 012
+- [x] [014-M8 Audio uploads from the web client always fail](014-M8_web_audio_upload_fails.md) · medium · closed by 012
 
 - [x] [015-H3 The API key is logged, and secrets from the environment get saved to disk](015-H3_protect_api_keys.md) · high · S
 

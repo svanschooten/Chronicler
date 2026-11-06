@@ -266,12 +266,12 @@ async def test_thin_client_full_flow_via_remote_container(tmp_path):
     instead of a Task (fixed in task_service.py).
     """
     from chronicler.core.remote import RemoteContainer
-    from chronicler.core.worker_wiring import build_worker_runtime
+    from chronicler.core.worker_wiring import build_worker_manager
 
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
     try:
         await db_manager.init_archive()
-        worker_runtime = build_worker_runtime(db_manager)
+        worker_manager = build_worker_manager(db_manager)
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -285,13 +285,12 @@ async def test_thin_client_full_flow_via_remote_container(tmp_path):
             task = await task_service.queue_clean(chronicle.id)
             assert task.status.value == "PENDING"
 
-            await worker_runtime.manager.process_tasks()
+            await worker_manager.process_tasks()
 
             tasks = await task_service.list_tasks()
             (updated_task,) = [t for t in tasks if t.id == task.id]
             assert updated_task.status.value == "DONE"
     finally:
-        await worker_runtime.session.close()
         await db_manager.close_all()
 
 

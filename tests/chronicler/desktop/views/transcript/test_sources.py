@@ -248,6 +248,7 @@ class TestTranscribing:
                 no_speech_threshold=0.4,
                 normalize_first=True,
                 transcribe=True,
+                start_offset=90.0,
             )
         )
         await panel.load()
@@ -261,6 +262,7 @@ class TestTranscribing:
             "model_size": "medium",
             "no_speech_threshold": 0.4,
             "normalize_first": True,
+            "start_offset": 90.0,
         }
 
     @pytest.mark.asyncio

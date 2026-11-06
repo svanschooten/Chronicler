@@ -21,6 +21,11 @@ class DBTranscriptLine(ProjectBase):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     speaker_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("speakers.id"))
+    # The track these lines were transcribed from. NULL for imported transcripts and for
+    # lines written before tracks were recorded - see docs/audio-sources.md.
+    source_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("audio_sources.id", name="fk_transcript_lines_source_id")
+    )
     start_time: Mapped[float] = mapped_column(Float)
     end_time: Mapped[float] = mapped_column(Float)
     text: Mapped[str] = mapped_column(String)
@@ -37,6 +42,9 @@ class DBAudioSource(ProjectBase):
     size_bytes: Mapped[int | None] = mapped_column(Integer)
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    # Seconds added to every timestamp this track produces, so sequential parts of one
+    # recording line up instead of interleaving.
+    start_offset: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
 
     speaker_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("speakers.id"))
 

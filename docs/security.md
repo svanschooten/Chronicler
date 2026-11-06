@@ -86,8 +86,9 @@ could not be handed to any client. Keys set through the environment are not copi
 into the config file, and that file is owner-only on POSIX. See
 [configuration.md](configuration.md#environment-values-are-not-saved).
 
-The web client never hands the browser the upstream key. `/config` returns only
-`{"connected": bool}`, and the `/api/...` proxy routes inject the header server-side.
+There is no browser client and no CORS middleware. The web client this replaced was a
+reverse proxy that answered every request with the server's key and asked for no login
+of its own, so anyone who could reach it had the whole API.
 
 ## Uploads
 
