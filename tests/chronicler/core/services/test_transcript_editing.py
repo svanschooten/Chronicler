@@ -42,6 +42,12 @@ async def _service(tmp_path, lines=2):
     return db_manager, session, service, chronicle
 
 
+async def _registry_names(db_manager):
+    """The registry as another connection sees it, so an uncommitted write does not count."""
+    async with db_manager.get_archive_session() as other:
+        return await SQLiteKnownSpeakerRepository(other).list_names()
+
+
 class TestEditingText:
     @pytest.mark.asyncio
     async def test_a_corrected_word_is_persisted(self, tmp_path):
@@ -110,7 +116,7 @@ class TestReassigningASpeaker:
 
             await service.update_line(chronicle.id, original.id, speaker_name="Vale")
 
-            assert "Vale" in await service.list_known_speakers()
+            assert "Vale" in await _registry_names(db_manager)
         finally:
             await session.close()
             await db_manager.close_all()
