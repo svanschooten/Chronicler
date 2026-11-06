@@ -214,4 +214,6 @@ and a per-row fetch would be a query per task. A failure there is not worth fail
 whole view over; rows fall back to showing no chronicle name.
 
 `RETRYABLE_STATUSES` excludes `WORKING` on purpose: it is already running, and
-re-queueing it would let a second worker claim it while the first is still going.
+re-queueing it would let a second worker claim it while the first is still going. A row
+left WORKING by a crash is reset when the worker next starts (see
+[tasks.md](tasks.md#interrupted-tasks)), so a WORKING row is never stuck.
