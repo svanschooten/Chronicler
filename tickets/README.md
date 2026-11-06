@@ -85,7 +85,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 ### Wave 2: stop losing work
 
-- [ ] [006-C3 Saving a speaker locks the workspace database, then loses the write](006-C3_speaker_registry_commit.md) · critical · XS · after 002
+- [x] [006-C3 Saving a speaker locks the workspace database, then loses the write](006-C3_speaker_registry_commit.md) · critical · XS · after 002
 
 - [ ] [007-C2 One lock timeout stops all background work until restart](007-C2_worker_session_per_step.md) · critical · S · after 002
 

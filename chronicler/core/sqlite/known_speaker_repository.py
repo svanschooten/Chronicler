@@ -23,25 +23,31 @@ class SQLiteKnownSpeakerRepository(KnownSpeakerRepository):
             return None
 
         normalized = normalize_speaker_name(cleaned)
-        result = await self.session.execute(
-            select(DBKnownSpeaker).where(DBKnownSpeaker.normalized_name == normalized)
-        )
-        row = result.scalar_one_or_none()
-
-        if row is None:
-            row = DBKnownSpeaker(
-                name=cleaned,
-                normalized_name=normalized,
-                uses=1,
-                first_seen=datetime.now(),
-                last_used=datetime.now(),
+        try:
+            result = await self.session.execute(
+                select(DBKnownSpeaker).where(DBKnownSpeaker.normalized_name == normalized)
             )
-            self.session.add(row)
-        else:
-            row.uses += 1
-            row.last_used = datetime.now()
+            row = result.scalar_one_or_none()
 
-        await self.session.flush()
+            if row is None:
+                row = DBKnownSpeaker(
+                    name=cleaned,
+                    normalized_name=normalized,
+                    uses=1,
+                    first_seen=datetime.now(),
+                    last_used=datetime.now(),
+                )
+                self.session.add(row)
+            else:
+                row.uses += 1
+                row.last_used = datetime.now()
+
+            # Commit here: a flush alone holds the workspace write lock until something
+            # else happens to commit this session, and is lost if nothing does.
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
         await self.session.refresh(row)
         return KnownSpeaker.model_validate(row)
 
