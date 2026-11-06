@@ -80,6 +80,10 @@ def smoke(binary: Path, cache: Path) -> None:
     ping_server([str(binary)])
 
 
+class PingRefused(Exception):
+    """The server answered, with an HTTP error: asking again will not change that."""
+
+
 def free_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -87,7 +91,11 @@ def free_port() -> int:
 
 
 def ping(port: int, api_key: str) -> str | None:
-    """The server's answer to /system/ping, or None while it is not listening yet."""
+    """
+    The server's answer to /system/ping, or None while it is not listening yet. An HTTP
+    error raises PingRefused: a server that rejects the key or fails the call will not
+    start answering by being asked again.
+    """
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}/system/ping",
         data=b"{}",
@@ -98,9 +106,15 @@ def ping(port: int, api_key: str) -> str | None:
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(request, timeout=5) as response:
-            return json.loads(response.read())
+            body = response.read()
+    except urllib.error.HTTPError as error:
+        raise PingRefused(f"HTTP {error.code}") from error
     except (urllib.error.URLError, ConnectionError, TimeoutError):
         return None
+    try:
+        return json.loads(body)
+    except ValueError:
+        return body.decode("utf-8", errors="replace")
 
 
 def ping_server(command: list[str], timeout: float = SERVER_START_TIMEOUT) -> None:
@@ -128,13 +142,18 @@ def ping_server(command: list[str], timeout: float = SERVER_START_TIMEOUT) -> No
                 stderr=subprocess.STDOUT,
             )
             try:
-                answer, started = None, time.monotonic()
+                answer: str | None = None
+                started = time.monotonic()
                 while answer is None and server.poll() is None:
                     if time.monotonic() - started > timeout:
                         break
-                    answer = ping(port, api_key)
+                    try:
+                        answer = ping(port, api_key)
+                    except PingRefused as refusal:
+                        answer = str(refusal)
                     if answer is None:
                         time.sleep(0.5)
+                took = time.monotonic() - started
             finally:
                 server.terminate()
                 try:
@@ -146,7 +165,7 @@ def ping_server(command: list[str], timeout: float = SERVER_START_TIMEOUT) -> No
 
     if answer != "ok":
         raise SystemExit(f"The server did not answer /system/ping (got {answer!r})")
-    print(f"server answered ping in {time.monotonic() - started:.1f}s", flush=True)
+    print(f"server answered ping in {took:.1f}s", flush=True)
 
 
 def main() -> None:

@@ -36,3 +36,38 @@ def test_a_server_that_exits_fails_the_check_straight_away():
 
 def test_nothing_listening_is_not_an_answer():
     assert smoke.ping(smoke.free_port(), "key") is None
+
+
+def test_a_rejected_key_fails_at_once_rather_than_waiting_out_the_timeout(monkeypatch):
+    """A 403 will not turn into an answer by asking again."""
+    started = time.monotonic()
+    real_ping = smoke.ping
+
+    def wrong_key(port, _api_key):
+        return real_ping(port, "not-the-key")
+
+    monkeypatch.setattr(smoke, "ping", wrong_key)
+    with pytest.raises(SystemExit, match="HTTP 403"):
+        smoke.ping_server(SOURCE, timeout=60)
+
+    assert time.monotonic() - started < 30
+
+
+def test_an_answer_that_is_not_json_is_reported_as_it_is(monkeypatch):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return b"<html>proxy error</html>"
+
+    class Opener:
+        def open(self, *_args, **_kwargs):
+            return Response()
+
+    monkeypatch.setattr(smoke.urllib.request, "build_opener", lambda *_: Opener())
+
+    assert smoke.ping(1, "key") == "<html>proxy error</html>"
