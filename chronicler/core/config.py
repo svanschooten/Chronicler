@@ -138,8 +138,6 @@ class Settings(BaseSettings):
         """Validate if settings are complete for a given mode."""
         if mode == "server":
             return self.workspace_path is not None and bool(self.api_key)
-        if mode == "client:web":
-            return bool(self.server_url) and bool(self.api_key)
         if mode == "client:desktop":
             if self.workspace_path:
                 return True

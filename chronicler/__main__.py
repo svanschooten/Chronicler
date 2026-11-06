@@ -46,8 +46,8 @@ def main():
 
     Setup is split by where each mode can actually ask a question. Desktop collects its
     configuration on screen, in `desktop.views.wizard`, because the packaged build is
-    windowless and has nothing for `input()` to read from. Server and web client keep the
-    console wizard in `core.wizard`, since a terminal is where they are started anyway.
+    windowless and has nothing for `input()` to read from. The server keeps the console
+    wizard in `core.wizard`, since a terminal is where it is started anyway.
     See docs/configuration.md.
     """
     attach_windows_console()
@@ -57,18 +57,18 @@ def main():
         "mode",
         nargs="?",
         default="desktop",
-        choices=["desktop", "server", "web", "client:web", "client:desktop"],
+        choices=["desktop", "server", "client:desktop"],
         help="Run mode (default: %(default)s)",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
     parser.add_argument(
         "--host",
-        help="Address to bind when running as a server or web client (default: 0.0.0.0)",
+        help="Address to bind when running as a server (default: 0.0.0.0)",
     )
     parser.add_argument(
         "--port",
         type=int,
-        help="Port to bind when running as a server or web client",
+        help="Port to bind when running as a server",
     )
     parser.add_argument(
         "--config",
@@ -94,9 +94,7 @@ def main():
 
     mode_map = {
         "desktop": "client:desktop",
-        "web": "client:web",
         "server": "server",
-        "client:web": "client:web",
         "client:desktop": "client:desktop",
     }
     mode = mode_map.get(args.mode, args.mode)
@@ -111,19 +109,9 @@ def main():
         server_main(host=args.host, port=args.port)
         return
 
-    if mode == "client:web":
-        webclient_main(host=args.host, port=args.port)
-        return
-
     from chronicler.desktop.main import run_desktop
 
     run_desktop()
-
-
-def webclient_main(host: str | None = None, port: int | None = None):
-    from chronicler.webclient.main import run_server
-
-    run_server(**_binding(host, port, default_port=8080))
 
 
 def server_main(host: str | None = None, port: int | None = None):

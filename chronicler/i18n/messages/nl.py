@@ -343,8 +343,8 @@ MESSAGES = {
             "thin_client": "Thin client",
             "thin_client_description": "Verbinden met een Chronicler Server die het werk doet.",
             "server_note": (
-                "Chronicler als server of webclient draaien stel je in vanaf een terminal: "
-                "start met het argument 'server' of 'web'."
+                "Chronicler als server draaien stel je in vanaf een terminal: "
+                "start met het argument 'server'."
             ),
         },
         "workspace": {
