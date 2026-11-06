@@ -21,6 +21,14 @@ CJK fonts run to tens of megabytes, too large to bundle. `format_pdf` looks for 
 operating system already has (Microsoft YaHei and friends on Windows, PingFang and
 Hiragino on macOS, Noto CJK or WenQuanYi on Linux) and registers it as a fallback.
 
+It does so only when the transcript has characters DejaVu cannot draw. Loading the 17 MB
+WenQuanYi collection made a 300-line all-Latin export take about a second instead of a
+fifth of one, and exports still run on the UI event loop (ticket 028).
+
+Subsetting a system font makes fontTools warn about tables it drops, such as the bitmap
+`BDF` table in WenQuanYi. The output is unaffected, so `format_pdf` silences
+`fontTools.subset` below ERROR while it writes.
+
 Anything neither font can draw is listed at the top of the document as code points
 (`U+4F60`), and logged. The note uses code points because it is set in the same font
 that lacks those characters.
