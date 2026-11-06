@@ -116,9 +116,9 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [017-M1 PDF export removes every question mark and all non-Latin-1 text](017-M1_pdf_text_loss.md) · medium · S
 
-- [ ] [018-M2 The default importer folds non-ASCII speakers into the previous turn](018-M2_unicode_speaker_names.md) · medium · XS
+- [x] [018-M2 The default importer folds non-ASCII speakers into the previous turn](018-M2_unicode_speaker_names.md) · medium · XS
 
-- [ ] [019-M5 Every thin-client call has a 5-second timeout](019-M5_rpc_timeouts.md) · medium · XS
+- [x] [019-M5 Every thin-client call has a 5-second timeout](019-M5_rpc_timeouts.md) · medium · XS
 
 - [x] [020-M3 The subtitle guard stops working after a clean or a line delete](020-M3_explicit_timing_flag.md) · medium · S · after 010
 

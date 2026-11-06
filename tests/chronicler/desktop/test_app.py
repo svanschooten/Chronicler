@@ -597,3 +597,15 @@ async def test_cleanup_stops_the_worker_task_rather_than_only_flagging_it(tmp_pa
     await app.cleanup(None)
 
     assert app._worker_task is None or app._worker_task.done()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_closes_the_shared_http_client(desktop_app):
+    import httpx
+
+    client = httpx.AsyncClient()
+    desktop_app.runtime.http_client = client
+
+    await desktop_app.cleanup(None)
+
+    assert client.is_closed
