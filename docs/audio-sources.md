@@ -104,6 +104,11 @@ transcribe dialog and stored on the row.
 * **normal chronicle** — `<workspace>/chronicles/<id>/sources/`
 * **linked chronicle** — `sources/` beside its `project.db`, wherever the user put it
 
+It is a pure lookup and creates nothing; `ensure_sources_path_for` creates the folder and
+is used only when audio is added. Reading a chronicle that has no row, or whose linked
+`project.db` has moved, raises (`LookupError`, `FileNotFoundError`) rather than creating a
+new empty database.
+
 A linked chronicle's files were never in the workspace, so looking there made every one
 of its sources read as missing while `chronicle_directory()` — used by *Open folder* —
 correctly resolved the external path. The two disagreed.

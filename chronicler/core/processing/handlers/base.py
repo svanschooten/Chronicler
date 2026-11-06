@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.config import Settings, get_settings
-from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.database_manager import DatabaseManager, ensure_project_available
 from chronicler.core.file_staging import confine_to_directory
 from chronicler.core.models import Task, TranscriptLine
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
@@ -84,6 +84,14 @@ class HandlerBase:
         )
 
     async def project_session(self, chronicle_id: UUID):
+        """
+        Raises LookupError for a chronicle with no row (deleted while the task waited) and
+        FileNotFoundError for a linked one whose file has moved, instead of creating a
+        new empty database. Without `archive_sessions` there is no row to check.
+        """
+        if self.archive_sessions:
+            async with self.chronicles() as chronicles:
+                ensure_project_available(await chronicles.get_by_id(chronicle_id), chronicle_id)
         return await self.db_manager.get_project_session(
             str(chronicle_id), custom_path=await self.project_path_for(chronicle_id)
         )

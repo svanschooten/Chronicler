@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
+from uuid import UUID
 
 from alembic import command
 from alembic.config import Config
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from chronicler.core.models import Chronicle
 from chronicler.core.workspace_lock import WorkspaceLock
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,20 @@ def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
     cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / chain))
     cfg.attributes["connection"] = connection
     command.upgrade(cfg, "head")
+
+
+def ensure_project_available(chronicle: Chronicle | None, chronicle_id: UUID) -> None:
+    """
+    Reading a chronicle must never create its database. Raises LookupError when there is
+    no such chronicle, and FileNotFoundError when a linked one's project.db has moved -
+    opening it anyway would silently start a new empty database at the old path.
+    """
+    if chronicle is None:
+        raise LookupError(f"No chronicle {chronicle_id}")
+    if chronicle.project_path and not Path(chronicle.project_path).is_file():
+        raise FileNotFoundError(
+            f"The linked project database {chronicle.project_path} no longer exists"
+        )
 
 
 class DatabaseManager:
@@ -77,15 +93,21 @@ class DatabaseManager:
         get_imports_path()'s shared scratch space, which a worker is free to
         overwrite/lose).
         """
-        return self.sources_path_for(chronicle_id)
+        return self.ensure_sources_path_for(chronicle_id)
 
     def sources_path_for(self, chronicle_id: str, project_path: Path | None = None) -> Path:
         """
         A chronicle's audio directory: beside a linked project.db, otherwise in the
         workspace. A linked chronicle's files were never in the workspace, so looking
         there made every one of its sources read as missing. See docs/storage.md.
+
+        A pure lookup: reading must not create folders. Use `ensure_sources_path_for`
+        when about to write audio.
         """
-        path = self._chronicle_root(chronicle_id, project_path) / "sources"
+        return self._chronicle_root(chronicle_id, project_path) / "sources"
+
+    def ensure_sources_path_for(self, chronicle_id: str, project_path: Path | None = None) -> Path:
+        path = self.sources_path_for(chronicle_id, project_path)
         path.mkdir(parents=True, exist_ok=True)
         return path
 
