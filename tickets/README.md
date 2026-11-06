@@ -95,7 +95,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [ ] [010-C5 Transcribing a second track for a speaker deletes the first](010-C5_transcript_line_source_id.md) · critical · M
 
-- [ ] [011-H4 Clean rewrites the transcript with no confirmation or undo](011-H4_clean_confirm_and_snapshot.md) · high · S
+- [x] [011-H4 Clean rewrites the transcript with no confirmation or undo](011-H4_clean_confirm_and_snapshot.md) · high · S
 
 ### Wave 3: close the security exposure
 
