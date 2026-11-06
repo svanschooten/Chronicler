@@ -9,6 +9,8 @@ silently dropped. See docs/pdf-export.md.
 
 import logging
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from fpdf import FPDF
@@ -52,7 +54,7 @@ def format_pdf(
     fallback_fonts: list[Path] | None = None,
 ) -> bytearray:
     """`fallback_fonts` defaults to the system CJK fonts; tests pass their own."""
-    pdf = TranscriptPDF(title=title, fallback_fonts=fallback_fonts)
+    pdf = TranscriptPDF(title=title)
 
     rows = []
     for line in lines:
@@ -68,7 +70,12 @@ def format_pdf(
             )
         )
 
-    missing = pdf.unrenderable(title, *(f"{speaker}{text}" for _, speaker, text in rows))
+    texts = [title, *(f"{speaker}{text}" for _, speaker, text in rows)]
+    missing = pdf.unrenderable(*texts)
+    # A CJK font can be tens of megabytes; loading it for an all-Latin export cost most of
+    # the export's time. Only reach for it when DejaVu cannot draw something.
+    if missing and pdf.load_fallback(fallback_fonts):
+        missing = pdf.unrenderable(*texts)
     pdf.add_page()
     if missing:
         logger.warning(f"PDF export of '{title}' cannot draw: {''.join(missing)}")
@@ -81,13 +88,27 @@ def format_pdf(
     for timestamp, speaker, text in rows:
         pdf.add_line(timestamp=timestamp, speaker=speaker, text=text)
 
-    return pdf.output()
+    # fontTools warns about tables it drops while subsetting a system font, such as the
+    # bitmap "BDF" table in WenQuanYi. The output is fine; the console noise is not.
+    with _quiet("fontTools.subset"):
+        return pdf.output()
+
+
+@contextmanager
+def _quiet(logger_name: str) -> Iterator[None]:
+    noisy = logging.getLogger(logger_name)
+    previous = noisy.level
+    noisy.setLevel(logging.ERROR)
+    try:
+        yield
+    finally:
+        noisy.setLevel(previous)
 
 
 class TranscriptPDF(FPDF):
     """An A4 transcript: timestamp, speaker and text columns."""
 
-    def __init__(self, title: str = "Transcript", fallback_fonts: list[Path] | None = None):
+    def __init__(self, title: str = "Transcript"):
         super().__init__(unit="mm", format="A4")
         self.set_auto_page_break(auto=True, margin=15)
         self.set_margins(left=20, top=20, right=20)
@@ -95,17 +116,19 @@ class TranscriptPDF(FPDF):
 
         self.add_font(FAMILY, "", FONT_DIR / "DejaVuSans.ttf")
         self.add_font(FAMILY, "B", FONT_DIR / "DejaVuSans-Bold.ttf")
-        self._fallback_loaded = self._load_fallback(
-            fallback_fonts if fallback_fonts is not None else _cjk_font_candidates()
-        )
-        if self._fallback_loaded:
-            self.set_fallback_fonts([FALLBACK_FAMILY], exact_match=False)
+        self._fallback_loaded = False
 
         self.ts_width = 20
         self.speaker_width = 25
         self.text_width = 125
 
-    def _load_fallback(self, candidates: list[Path]) -> bool:
+    def load_fallback(self, candidates: list[Path] | None = None) -> bool:
+        """
+        Registers the first usable font in `candidates` (default: the system CJK fonts) as
+        the fallback for characters DejaVu lacks. True when one was loaded.
+        """
+        if candidates is None:
+            candidates = _cjk_font_candidates()
         for path in candidates:
             if not path.is_file():
                 continue
@@ -115,6 +138,8 @@ class TranscriptPDF(FPDF):
                 logger.debug(f"Could not load {path} as a fallback font", exc_info=True)
                 continue
             logger.debug(f"PDF fallback font: {path}")
+            self._fallback_loaded = True
+            self.set_fallback_fonts([FALLBACK_FAMILY], exact_match=False)
             return True
         return False
 

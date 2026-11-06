@@ -77,3 +77,23 @@ def test_rendering_raises_no_deprecation_warnings():
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
         format_pdf([_line(SAMPLE)], "Session", fallback_fonts=[])
+
+
+def test_an_all_latin_export_does_not_load_the_fallback_font(monkeypatch):
+    """Loading a 17 MB CJK font made a 300-line Latin export take 1 s instead of 0.2 s."""
+    from chronicler.core.services.pdf import TranscriptPDF
+
+    loads = []
+    monkeypatch.setattr(TranscriptPDF, "load_fallback", lambda self, c=None: loads.append(c))
+
+    format_pdf([_line(SAMPLE)], "Session", fallback_fonts=[SYSTEM_CJK_FONT])
+
+    assert loads == []
+
+
+@pytest.mark.skipif(not SYSTEM_CJK_FONT.exists(), reason="no CJK font on this machine")
+def test_subsetting_a_system_font_prints_no_warnings(caplog):
+    with caplog.at_level("WARNING"):
+        format_pdf([_line(CJK)], "Session", fallback_fonts=[SYSTEM_CJK_FONT])
+
+    assert "fontTools" not in caplog.text
