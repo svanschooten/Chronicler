@@ -10,6 +10,7 @@ from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
 from chronicler.core.processing.handlers import WorkerHandlers
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
+from tests.chronicler.core.processing.handlers.helpers import read_chronicle
 
 
 @pytest.fixture(autouse=True)
@@ -76,7 +77,7 @@ async def test_handle_transcribe_creates_lines_for_assigned_speaker(tmp_path):
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Recording"))
 
-            handlers = WorkerHandlers(db_manager, chronicle_repo=chronicle_repo)
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
             task, audio_file = await _make_transcribe_task(db_manager, chronicle.id, "Alice")
 
             with patch(
@@ -96,7 +97,7 @@ async def test_handle_transcribe_creates_lines_for_assigned_speaker(tmp_path):
             assert [line.text for line in lines] == ["Hello there", "General Kenobi"]
             assert all(line.speaker_name == "Alice" for line in lines)
 
-            updated = await chronicle_repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.speakers_count == 1
             assert [t.name for t in updated.tags] == ["Transcript"]
             assert updated.duration == "2s"
@@ -120,7 +121,7 @@ async def test_handle_transcribe_duration_reflects_longest_track(tmp_path):
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Podcast"))
 
-            handlers = WorkerHandlers(db_manager, chronicle_repo=chronicle_repo)
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
 
             alice_task, _ = await _make_transcribe_task(
                 db_manager, chronicle.id, "Alice", "alice.mp3"
@@ -138,7 +139,7 @@ async def test_handle_transcribe_duration_reflects_longest_track(tmp_path):
             ):
                 await handlers.handle_transcribe(bob_task, _noop_progress)
 
-            updated = await chronicle_repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.duration == "1m 30s"
     finally:
         await db_manager.close_all()
@@ -154,7 +155,7 @@ async def test_handle_transcribe_does_not_overwrite_a_non_default_status(tmp_pat
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Custom", status="Archived"))
 
-            handlers = WorkerHandlers(db_manager, chronicle_repo=chronicle_repo)
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
             task, _ = await _make_transcribe_task(db_manager, chronicle.id, "Alice")
             with patch(
                 "chronicler.core.processing.transcriber.transcribe_audio",
@@ -162,7 +163,7 @@ async def test_handle_transcribe_does_not_overwrite_a_non_default_status(tmp_pat
             ):
                 await handlers.handle_transcribe(task, _noop_progress)
 
-            updated = await chronicle_repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.status == "Archived"
     finally:
         await db_manager.close_all()
@@ -179,7 +180,7 @@ async def test_handle_transcribe_overwrites_only_the_assigned_speakers_lines(tmp
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Podcast"))
 
-            handlers = WorkerHandlers(db_manager, chronicle_repo=chronicle_repo)
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
 
             alice_task, _ = await _make_transcribe_task(
                 db_manager, chronicle.id, "Alice", "alice.mp3"
@@ -216,7 +217,7 @@ async def test_handle_transcribe_overwrites_only_the_assigned_speakers_lines(tmp
                 ("Bob", "Bob line one"),
             }
 
-            updated = await chronicle_repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.speakers_count == 2
     finally:
         await db_manager.close_all()

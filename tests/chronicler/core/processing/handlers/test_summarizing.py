@@ -15,6 +15,7 @@ from chronicler.core.sqlite import (
     SQLiteSummaryRepository,
     SQLiteTranscriptRepository,
 )
+from tests.chronicler.core.processing.handlers.helpers import read_chronicle
 
 
 @pytest.fixture(autouse=True)
@@ -182,8 +183,9 @@ class TestHandleSummarize:
         session = db_manager.get_archive_session()
         try:
             chronicle = await _chronicle_with_transcript(db_manager)
-            repo = SQLiteChronicleRepository(session)
-            handlers = WorkerHandlers(db_manager, chronicle_repo=repo, settings=_settings())
+            handlers = WorkerHandlers(
+                db_manager, archive_sessions=db_manager.get_archive_session, settings=_settings()
+            )
 
             with patch(
                 "chronicler.core.llm.client.OpenAiCompatibleClient._request",
@@ -194,7 +196,7 @@ class TestHandleSummarize:
                     _noop_progress,
                 )
 
-            updated = await repo.get_by_id(chronicle.id)
+            updated = await read_chronicle(db_manager, chronicle.id)
             assert updated.status == "Summarized"
             assert any(tag.name == "Summarized" for tag in updated.tags)
         finally:
@@ -248,7 +250,9 @@ class TestHandleSummarize:
         try:
             chronicle = await _chronicle_with_transcript(db_manager)
             repo = SQLiteChronicleRepository(session)
-            handlers = WorkerHandlers(db_manager, chronicle_repo=repo, settings=_settings())
+            handlers = WorkerHandlers(
+                db_manager, archive_sessions=db_manager.get_archive_session, settings=_settings()
+            )
 
             with patch(
                 "chronicler.core.llm.client.OpenAiCompatibleClient._request",

@@ -28,23 +28,6 @@ async def desktop_app(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_worker_session_is_separate_from_view_session(desktop_app):
-    """
-    The UI and the background WorkerManager loop are separate coroutines on the same event
-    loop; sharing one AsyncSession between them risks IllegalStateChangeError if their
-    operations interleave.
-    """
-    desktop_app._worker_session = desktop_app.db_manager.get_archive_session()
-
-    desktop_app.state.navigate_to(ViewType.ARCHIVE)
-    await desktop_app.update_view()
-
-    assert desktop_app._view_scope is not None
-    view_session = desktop_app._view_scope.resolve(AsyncSession)
-    assert view_session is not desktop_app._worker_session
-
-
-@pytest.mark.asyncio
 async def test_update_view_closes_previous_session_before_opening_next(desktop_app, monkeypatch):
     close_calls = 0
     original_close = AsyncSession.close
@@ -83,22 +66,18 @@ async def test_settings_view_has_no_session(desktop_app):
 
 
 @pytest.mark.asyncio
-async def test_cleanup_closes_both_view_and_worker_sessions(desktop_app):
-    desktop_app._worker_session = desktop_app.db_manager.get_archive_session()
+async def test_cleanup_closes_the_view_session_and_stops_the_worker(desktop_app):
     desktop_app.worker_manager = MagicMock()
 
     desktop_app.state.navigate_to(ViewType.ARCHIVE)
     await desktop_app.update_view()
 
     view_session = desktop_app._view_scope.resolve(AsyncSession)
-    worker_session = desktop_app._worker_session
     view_session.close = AsyncMock(wraps=view_session.close)
-    worker_session.close = AsyncMock(wraps=worker_session.close)
 
     await desktop_app.cleanup(None)
 
     view_session.close.assert_awaited_once()
-    worker_session.close.assert_awaited_once()
     desktop_app.worker_manager.stop.assert_called_once()
 
 
@@ -115,7 +94,6 @@ def test_thin_client_does_not_start_a_worker_manager():
     app._maybe_start_worker_manager()
 
     assert app.worker_manager is None
-    assert app._worker_session is None
 
 
 @pytest.mark.asyncio
@@ -129,7 +107,6 @@ async def test_full_stack_starts_a_worker_manager(desktop_app, monkeypatch):
     desktop_app._maybe_start_worker_manager()
 
     assert desktop_app.worker_manager is not None
-    assert desktop_app._worker_session is not None
 
 
 @pytest.mark.asyncio
