@@ -9,6 +9,10 @@ from chronicler.core.rpc import BINARY_RETURNS, exposed_methods
 
 T = TypeVar("T")
 
+# The server builds a zip or PDF before sending its first byte, so reads and writes need
+# minutes, not httpx's 5-second default.
+RPC_TIMEOUT = httpx.Timeout(10, read=600, write=600)
+
 
 class RemoteServiceProxy:
     def __init__(
@@ -20,7 +24,7 @@ class RemoteServiceProxy:
     ):
         self._base_url = base_url
         self._cls = cls
-        self._client = client or httpx.AsyncClient()
+        self._client = client or httpx.AsyncClient(timeout=RPC_TIMEOUT)
         self._api_key = api_key
 
         service_name = cls.__name__

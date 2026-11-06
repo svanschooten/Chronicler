@@ -80,3 +80,27 @@ def test_a_web_client_config_starts_as_a_thin_client():
     runtime = build_runtime(settings)
 
     assert isinstance(runtime.resolver, RemoteContainer)
+
+
+@pytest.mark.asyncio
+async def test_thin_client_shares_one_long_timeout_client():
+    settings = Settings(
+        server_url="http://example.invalid", api_key="key", mode="desktop:thin_client"
+    )
+    runtime = build_runtime(settings)
+    client = runtime.http_client
+
+    assert client is not None
+    assert client.timeout.connect == 10
+    assert client.timeout.read == 600
+    assert client.timeout.write == 600
+    assert runtime.file_stager._client is client
+    assert runtime.resolver._client is client
+    await client.aclose()
+
+
+def test_fallback_clients_use_the_long_timeouts():
+    from chronicler.core.remote import RPC_TIMEOUT, RemoteServiceProxy
+
+    proxy = RemoteServiceProxy("http://x", Settings)
+    assert proxy._client.timeout == RPC_TIMEOUT
