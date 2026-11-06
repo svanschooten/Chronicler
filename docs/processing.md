@@ -99,8 +99,8 @@ part's. A task's `start_offset` is stored on the track, so a re-run keeps it.
 Every line records the track it came from in `source_id`, and re-transcribing replaces
 only *that track's* lines, via `delete_track_lines`. Another participant's track
 survives, and so does a second track for the same speaker. The replacement happens even
-when the track turned out to be silent. Lines written before tracks were recorded have
-no `source_id`; see [audio-sources.md](audio-sources.md#lines-remember-their-track).
+when the track turned out to be silent. Lines with no `source_id`, such as imported ones,
+are never deleted; see [audio-sources.md](audio-sources.md#lines-remember-their-track).
 
 `status` is set to `Transcribed` only if it is still the untouched `Imported` default,
 so a chronicle whose status was already something else on purpose does not get stomped

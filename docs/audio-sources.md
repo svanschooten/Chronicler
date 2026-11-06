@@ -74,10 +74,22 @@ recording, a Discord user who rejoined, a repeat in-app recording) wiped the fir
 Re-transcribing a track replaces its lines, hand edits included. The transcribe dialog
 says so before a re-run.
 
-Lines from before this column existed have no `source_id`, and neither do imported
-transcripts. A re-run claims a speaker's untracked lines only when this track is that
-speaker's one transcribed track, because then they can only have come from it. With two
-or more transcribed tracks there is no telling, so they are kept.
+A line with no `source_id` is never deleted by a re-run. Imported transcripts have none,
+and neither do lines from before this column existed that could not be attributed.
+
+The attribution happens once, in migration `f6c3a9d2b417`: a speaker with exactly one
+transcribed track gets that track on all their lines. An earlier version did this on
+every re-run instead, and so deleted a speaker's imported lines whenever they also had
+one transcribed track.
+
+Two consequences of attributing only when it is certain:
+
+* A legacy chronicle in which one speaker had two transcribed tracks keeps those lines
+  untracked. Re-running either track adds its new lines next to the old ones, so the
+  chronicle ends up with duplicates to delete by hand.
+* A legacy chronicle that mixed imported lines with one transcribed track for the same
+  speaker gets the imported lines attributed to that track too. Nothing recorded the
+  difference, and the old code deleted them on a re-run anyway.
 
 `MergeSameSpeaker` never joins lines from different tracks, so a merged line can always
 be replaced along with the one track it came from.
