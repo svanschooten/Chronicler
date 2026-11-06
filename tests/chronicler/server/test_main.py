@@ -9,7 +9,7 @@ from chronicler.core.config import Settings
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Task, TaskStatus, TaskType
 from chronicler.core.sqlite import SQLiteTaskRepository
-from chronicler.core.worker_wiring import build_worker_runtime
+from chronicler.core.worker_wiring import build_worker_manager
 from chronicler.core.workspace_lock import WorkspaceLock
 from chronicler.server.main import _serve_and_work, run_server
 
@@ -58,24 +58,21 @@ async def test_a_queued_task_actually_executes_on_a_server(tmp_path):
     worker manager the server builds.
     """
     db_manager = DatabaseManager(tmp_path)
-    runtime = None
     try:
         await db_manager.init_archive()
-        runtime = build_worker_runtime(db_manager)
+        worker_manager = build_worker_manager(db_manager)
 
         async with db_manager.get_archive_session() as session:
             task = await SQLiteTaskRepository(session).create(
                 Task(type=TaskType.CLEAN, chronicle_id=uuid4())
             )
 
-        await runtime.manager.process_tasks()
+        await worker_manager.process_tasks()
 
         async with db_manager.get_archive_session() as session:
             fetched = await SQLiteTaskRepository(session).get_by_id(task.id)
             assert fetched.status != TaskStatus.PENDING
     finally:
-        if runtime is not None:
-            await runtime.session.close()
         await db_manager.close_all()
 
 

@@ -87,7 +87,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [006-C3 Saving a speaker locks the workspace database, then loses the write](006-C3_speaker_registry_commit.md) · critical · XS · after 002
 
-- [ ] [007-C2 One lock timeout stops all background work until restart](007-C2_worker_session_per_step.md) · critical · S · after 002
+- [x] [007-C2 One lock timeout stops all background work until restart](007-C2_worker_session_per_step.md) · critical · S · after 002
 
 - [x] [008-A1 Nothing stops two processes from sharing a workspace](008-A1_single_process_workspace_lock.md) · high · S
 
