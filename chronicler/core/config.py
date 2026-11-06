@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 from platformdirs import user_config_dir
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, field_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
@@ -113,6 +113,19 @@ class Settings(BaseSettings):
     api_key: str | None = None
     mode: str | None = None
     dark_mode: bool = True
+
+    @field_validator("mode")
+    @classmethod
+    def _forget_removed_modes(cls, mode: str | None) -> str | None:
+        """
+        `client:web` was removed with the web client. A config still naming it reads as
+        unset, so the desktop infers its mode from the server URL and workspace instead of
+        failing to start. Ticket 025 replaces this with one mode enum.
+        """
+        if mode == "client:web":
+            logger.warning("The web client was removed; ignoring mode 'client:web' in the config")
+            return None
+        return mode
 
     transcription: TranscriptionSettings = Field(default_factory=TranscriptionSettings)
     cleaning: CleaningSettings = Field(default_factory=CleaningSettings)

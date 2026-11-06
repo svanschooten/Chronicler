@@ -362,3 +362,16 @@ class TestNestedSections:
         settings = Settings()
 
         assert settings.transcription.no_speech_threshold == 0.6
+
+
+def test_a_saved_web_client_mode_reads_as_unset(isolated_config):
+    """The web client is gone; its config must not stop the desktop app from starting."""
+    config_file = isolated_config / ".chronicler_config.yaml"
+    config_file.write_text(
+        yaml.dump({"mode": "client:web", "server_url": "http://server:8000", "api_key": "k"})
+    )
+
+    settings = Settings()
+
+    assert settings.mode is None
+    assert settings.validate_for_mode("client:desktop") is True
