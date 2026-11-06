@@ -81,7 +81,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [004-S12 CI and install files carry a lot of avoidable text](004-S12_ci_and_install_cleanup.md) · medium · S · after 001
 
-- [ ] [005-T3 CI never runs on Windows, a platform you ship to](005-T3_windows_in_ci.md) · high · XS · after 003, 004
+- [x] [005-T3 CI never runs on Windows, a platform you ship to](005-T3_windows_in_ci.md) · high · XS · after 003, 004
 
 ### Wave 2: stop losing work
 
