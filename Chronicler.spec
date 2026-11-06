@@ -8,7 +8,7 @@ a = Analysis(
     ['chronicler/__main__.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('chronicler/migrations', 'chronicler/migrations')],
+    datas=[('assets', 'assets'), ('chronicler/migrations', 'chronicler/migrations'), ('chronicler/core/services/fonts', 'chronicler/core/services/fonts')],
     hiddenimports=['aiosqlite', 're._parser', 'logging.config'],
     hookspath=[],
     hooksconfig={},

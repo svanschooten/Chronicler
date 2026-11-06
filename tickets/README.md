@@ -114,7 +114,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 ### Wave 4: wrong output and robustness
 
-- [ ] [017-M1 PDF export removes every question mark and all non-Latin-1 text](017-M1_pdf_text_loss.md) · medium · S
+- [x] [017-M1 PDF export removes every question mark and all non-Latin-1 text](017-M1_pdf_text_loss.md) · medium · S
 
 - [ ] [018-M2 The default importer folds non-ASCII speakers into the previous turn](018-M2_unicode_speaker_names.md) · medium · XS
 
