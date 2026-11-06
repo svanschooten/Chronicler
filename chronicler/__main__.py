@@ -99,6 +99,10 @@ def main():
     }
     mode = mode_map.get(args.mode, args.mode)
 
+    if mode == "server":
+        # Before the wizard, so nobody answers its questions only to hit a traceback.
+        require_server_extra()
+
     if mode != "client:desktop":
         from chronicler.core.wizard import run_wizard
 
@@ -114,7 +118,19 @@ def main():
     run_desktop()
 
 
+def require_server_extra() -> None:
+    """
+    Exits with a readable message when FastAPI and Uvicorn are not installed, instead of
+    the traceback `import uvicorn` would give. See docs/optional-extras.md.
+    """
+    from chronicler.core import extras
+
+    if not extras.is_available("server"):
+        raise SystemExit(extras.missing_message("server"))
+
+
 def server_main(host: str | None = None, port: int | None = None):
+    require_server_extra()
     from chronicler.server.main import run_server
 
     run_server(**_binding(host, port, default_port=8000))

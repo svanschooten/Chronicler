@@ -156,6 +156,53 @@ def test_server_mode_still_uses_the_console_wizard(mock_is_init, mock_run_wizard
     mock_run_wizard.assert_called_once_with(mode="server")
 
 
+class TestWithoutTheServerExtra:
+    """A missing FastAPI or Uvicorn gets a sentence, not the traceback of `import uvicorn`."""
+
+    @patch("chronicler.core.wizard.run_wizard")
+    @patch("chronicler.core.config.is_config_initialized", return_value=False)
+    def test_server_mode_says_what_is_missing_before_the_wizard(
+        self, mock_is_init, mock_run_wizard
+    ):
+        with (
+            patch.object(sys, "argv", ["chronicler", "server"]),
+            patch("chronicler.core.extras.is_available", return_value=False),
+            patch("chronicler.server.main.run_server") as run_server,
+            pytest.raises(SystemExit) as exited,
+        ):
+            main()
+
+        assert "Running Chronicler as a server" in str(exited.value.code)
+        mock_run_wizard.assert_not_called()
+        run_server.assert_not_called()
+
+    def test_the_server_entry_point_checks_too(self):
+        """`chronicler-server` calls server_main directly, skipping main()."""
+        from chronicler.__main__ import server_main
+
+        with (
+            patch("chronicler.core.extras.is_available", return_value=False),
+            patch("chronicler.server.main.run_server") as run_server,
+            pytest.raises(SystemExit) as exited,
+        ):
+            server_main()
+
+        assert "server" in str(exited.value.code)
+        run_server.assert_not_called()
+
+    @patch("chronicler.core.wizard.run_wizard")
+    def test_desktop_mode_does_not_need_it(self, mock_run_wizard):
+        with (
+            patch.object(sys, "argv", ["chronicler"]),
+            patch("chronicler.core.extras.is_available", return_value=False) as available,
+            patch("chronicler.desktop.main.run_desktop") as run_desktop,
+        ):
+            main()
+
+        available.assert_not_called()
+        run_desktop.assert_called_once()
+
+
 class TestWindowsConsole:
     """
     The windowless build gets no console of its own, not even the one it was launched from,
