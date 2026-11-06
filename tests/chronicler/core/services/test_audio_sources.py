@@ -3,7 +3,11 @@ import pytest
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, SourceState
 from chronicler.core.services.transcript_service import TranscriptService
-from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
+from chronicler.core.sqlite import (
+    SQLiteChronicleRepository,
+    SQLiteKnownSpeakerRepository,
+    SQLiteTranscriptRepository,
+)
 
 
 async def _service(tmp_path):
@@ -151,9 +155,13 @@ async def test_listing_an_empty_chronicle(tmp_path):
         await db_manager.close_all()
 
 
-async def _service_with_registry(tmp_path):
-    from chronicler.core.sqlite import SQLiteKnownSpeakerRepository
+async def _registry_names(db_manager):
+    """The registry as another connection sees it, so an uncommitted write does not count."""
+    async with db_manager.get_archive_session() as other:
+        return await SQLiteKnownSpeakerRepository(other).list_names()
 
+
+async def _service_with_registry(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     session = db_manager.get_archive_session()
@@ -173,7 +181,7 @@ async def test_assigning_a_speaker_records_it_workspace_wide(tmp_path):
 
         await service.assign_speaker(chronicle.id, "gm.wav", "Alice")
 
-        assert await service.list_known_speakers() == ["Alice"]
+        assert await _registry_names(db_manager) == ["Alice"]
     finally:
         await session.close()
         await db_manager.close_all()

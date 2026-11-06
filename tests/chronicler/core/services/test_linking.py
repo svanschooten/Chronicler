@@ -45,6 +45,12 @@ def _line(speaker, text, start, end):
     return TranscriptLine(speaker_name=speaker, text=text, start_time=start, end_time=end)
 
 
+async def _registry_names(db_manager):
+    """The registry as another connection sees it, so an uncommitted write does not count."""
+    async with db_manager.get_archive_session() as other:
+        return await SQLiteKnownSpeakerRepository(other).list_names()
+
+
 class TestHydration:
     @pytest.mark.asyncio
     async def test_it_counts_the_speakers_it_finds(self, tmp_path):
@@ -182,7 +188,7 @@ class TestSpeakerRegistry:
 
             await service.link_external_chronicle(str(project_db))
 
-            assert await transcripts.list_known_speakers() == ["Nyx", "Vale"]
+            assert await _registry_names(db_manager) == ["Nyx", "Vale"]
         finally:
             await session.close()
             await db_manager.close_all()
