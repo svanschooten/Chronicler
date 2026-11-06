@@ -100,3 +100,26 @@ class TestSyntheticTimestampGuard:
         lines = [line("One", 0.0, 1.0), line("Two", 1.0, 2.0), line("Three", 2.0, 3.0)]
 
         assert format_srt(lines)
+
+
+class TestSyntheticTimingFlag:
+    def flagged(self, start, end, synthetic):
+        return TranscriptLine(
+            speaker_name="GM", text="x", start_time=start, end_time=end, synthetic_timing=synthetic
+        )
+
+    def test_flagged_lines_are_refused_after_cleaning_broke_the_index_pattern(self):
+        # A clean or a delete leaves gaps, so the 0, 1, 2 pattern no longer holds.
+        lines = [self.flagged(0.0, 1.0, True), self.flagged(4.0, 5.0, True)]
+
+        with pytest.raises(NoRealTimestampsError):
+            format_srt(lines, require_real_timestamps=True)
+
+    def test_flagged_transcription_with_whole_second_times_is_accepted(self):
+        lines = [self.flagged(0.0, 2.0, False), self.flagged(2.0, 4.0, False)]
+
+        assert format_srt(lines, require_real_timestamps=True)
+
+    def test_unflagged_rows_fall_back_to_whole_number_times(self):
+        with pytest.raises(NoRealTimestampsError):
+            format_srt([line("a", 0.0, 1.0), line("b", 5.0, 6.0)], require_real_timestamps=True)
