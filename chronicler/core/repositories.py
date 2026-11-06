@@ -90,6 +90,14 @@ class TaskRepository(ABC):
         pass
 
     @abstractmethod
+    async def recover_interrupted(self, error: str) -> list[Task]:
+        """
+        Puts every WORKING task back in the queue, or fails it once its attempts are used
+        up, recording `error`. Only safe while no worker is running. Returns the tasks.
+        """
+        pass
+
+    @abstractmethod
     async def update_status(self, task_id: UUID, status: str, error: str | None = None) -> None:
         pass
 
