@@ -103,3 +103,32 @@ class TestServerInfo:
     @pytest.mark.asyncio
     async def test_ping_answers(self, settings):
         assert await SystemService(settings=settings).ping() == "ok"
+
+
+class TestListModels:
+    @pytest.mark.asyncio
+    async def test_an_unreachable_gateway_reports_the_same_error_locally_and_remotely(
+        self, settings
+    ):
+        from httpx import ASGITransport, AsyncClient
+
+        from chronicler.core.container import Container
+        from chronicler.core.remote import RemoteContainer
+        from chronicler.core.rpc import RpcServer
+
+        settings.llm.provider = "openai_compatible"
+        settings.llm.base_url = "http://127.0.0.1:9/v1"
+        settings.llm.model = "qwen3"
+        local = SystemService(settings=settings)
+        container = Container()
+        container.register_instance(SystemService, local)
+        app = RpcServer(container, services=[SystemService], api_key="k").build()
+
+        local_check = await local.list_models()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+            remote = RemoteContainer("http://t", client=client, api_key="k").resolve(SystemService)
+            remote_check = await remote.list_models()
+
+        assert local_check.error is not None
+        assert remote_check == local_check
+        assert remote_check.models == ["qwen3"]

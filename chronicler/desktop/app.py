@@ -6,7 +6,7 @@ import flet as ft
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.container import Container
-from chronicler.core.models import Chronicle
+from chronicler.core.models import Chronicle, ModelCheck
 from chronicler.core.remote import RemoteContainer
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.system_service import SystemService
@@ -17,7 +17,7 @@ from chronicler.core.worker_wiring import build_worker_manager
 from chronicler.core.workers import WorkerManager
 from chronicler.desktop.components.sidebar import Sidebar
 from chronicler.desktop.runtime import DesktopRuntime
-from chronicler.desktop.state import AppState, ModelCheck, ViewType
+from chronicler.desktop.state import AppState, ViewType
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.archive import ArchiveView
 from chronicler.desktop.views.settings import SettingsView
@@ -195,7 +195,7 @@ class DesktopApp:
             self.sidebar.set_dark_mode(dark_mode)
         await self.update_view()
 
-    async def refresh_models(self, refresh: bool = False) -> ModelCheck:
+    async def refresh_models(self) -> ModelCheck:
         """
         Asks the service layer what it can do.
 
@@ -207,9 +207,6 @@ class DesktopApp:
         configuration decide what the buttons here should offer. `capabilities` stays None
         when the call fails, which every consumer reads as "assume it works" rather than
         greying out half the interface over an unrelated network hiccup.
-
-        `refresh` bypasses the model cache, for when the configuration just changed and
-        the five-minute-old answer is known to be stale.
         """
         scope = (
             self.resolver.create_scope() if isinstance(self.resolver, Container) else self.resolver
@@ -217,8 +214,9 @@ class DesktopApp:
         try:
             system = scope.resolve(SystemService)
             try:
-                self.available_models = await system.list_models(refresh=refresh)
-                self.model_error = await system.model_error()
+                check = await system.list_models()
+                self.available_models = list(check.models)
+                self.model_error = check.error
             except Exception as error:
                 logger.warning("Could not list language models", exc_info=True)
                 self.available_models = []
@@ -244,7 +242,7 @@ class DesktopApp:
         list were read once at startup, so the summarize button stayed greyed out until
         the next launch. See docs/desktop.md.
         """
-        return await self.refresh_models(refresh=True)
+        return await self.refresh_models()
 
     async def on_locale_change(self, _locale: str):
         if self.sidebar is not None:

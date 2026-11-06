@@ -178,3 +178,18 @@ class Summary(BaseModel):
     completion_tokens: int | None = None
 
     model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
+
+class ModelCheck(BaseModel):
+    """
+    What the service layer answered when asked about language models: the ids on offer and,
+    when the provider could not be listed, why. One value, so a thin client gets both from
+    one request. An unreachable provider still offers the configured model.
+    """
+
+    models: list[str] = Field(default_factory=list)
+    error: str | None = None
+
+    @property
+    def reachable(self) -> bool:
+        return self.error is None

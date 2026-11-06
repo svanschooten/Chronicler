@@ -17,13 +17,13 @@ gateway agrees on, so "local model" and "remote model" differ only by configurat
 
 ## Model discovery
 
-`ModelRegistry` fetches `GET /v1/models` and caches the result for five minutes.
-Discovery is a network round trip and the picker is opened far more often than the set of
-installed models changes, so the desktop app fetches once at startup
-(`DesktopApp.refresh_models`) and the dialog opens instantly.
+`discover_models()` fetches `GET /v1/models` on every call; nothing is cached. Discovery
+is a network round trip and the picker is opened far more often than the set of
+installed models changes, so the desktop app asks only at startup and after the
+configuration changes (`DesktopApp.refresh_models`), and the dialog opens instantly.
 
-An unreachable listing endpoint is **not fatal**: the registry falls back to the
-explicitly configured model, records `last_error`, and the picker still works. Plenty of
+An unreachable listing endpoint is **not fatal**: discovery falls back to the explicitly
+configured model, returns the reason in `ModelCheck.error`, and the picker still works. Plenty of
 OpenAI-compatible servers do not implement `/models` at all.
 
 ## Two stages
@@ -105,7 +105,7 @@ that mode rather than offering fields that would be saved and never read. See
 ### Changing the configuration does not need a restart
 
 `SettingsView` calls back into `DesktopApp.on_llm_change()` after any `llm.*` change, and
-that re-runs `refresh_models(refresh=True)` — a fresh model listing and a fresh reading of
+that re-runs `refresh_models()` — a fresh model listing and a fresh reading of
 the capabilities the views are built from.
 
 The worker never needed this: it reads the same cached `Settings` object the settings page
@@ -137,7 +137,9 @@ arithmetic. The rename is the fix; there is no behaviour change.
 
 ## When the model list is empty
 
-`ModelRegistry` records why discovery failed, and `SystemService.model_error` reports it.
-The summary dialog shows it on the model field when the list came back empty — before
-that, an unreachable gateway and a correctly-configured provider with no models looked
+`SystemService.list_models` returns a `ModelCheck`: the model ids and, when discovery
+failed, why. They travel in one response, so a thin client sees the same error a local
+run does. Nothing is cached - the desktop asks at startup and after the configuration
+changes. The summary dialog shows the error on the model field when the list came back
+empty — before that, an unreachable gateway and a correctly-configured provider with no models looked
 identical.

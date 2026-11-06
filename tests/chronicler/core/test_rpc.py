@@ -334,5 +334,5 @@ class TestTheRealServices:
             "ChronicleService": 8,
             "TranscriptService": 16,
             "TaskService": 8,
-            "SystemService": 4,
+            "SystemService": 3,
         }

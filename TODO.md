@@ -221,6 +221,8 @@ changes. Full plan and rationale: `docs/optional-extras.md`, `docs/desktop.md`.
   llama.cpp-server, Ollama, LM Studio, vLLM, hosted gateways) and an optional in-process
   `llama_cpp` provider. `ModelRegistry` discovers models once at startup and caches them,
   falling back to the configured model when a server has no `/models` endpoint.
+  *(Later replaced by `discover_models()` with no cache, which returns models and error
+  together - ticket 023.)*
 * [x] **`SUMMARIZE` task.** Two-stage chunk-then-recap with real context budgeting.
   Summaries are **numbered and accumulate**, each recording its model, provider, prompt,
   chunk count and token usage - so several models can be compared on one transcript.
