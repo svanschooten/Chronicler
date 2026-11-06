@@ -275,3 +275,23 @@ class TestQueueSummarize:
         task = await TaskService(_repository()).queue_summarize(uuid4(), title="")
 
         assert "title" not in json.loads(task.data)
+
+
+@pytest.mark.asyncio
+async def test_a_transcription_is_not_retried_automatically():
+    repository = AsyncMock()
+    repository.create = AsyncMock(side_effect=lambda task: task)
+
+    task = await TaskService(repository).queue_transcribe(uuid4(), "/tmp/a.wav", "Alice")
+
+    assert task.max_attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_other_task_types_keep_three_attempts():
+    repository = AsyncMock()
+    repository.create = AsyncMock(side_effect=lambda task: task)
+
+    task = await TaskService(repository).queue_clean(uuid4())
+
+    assert task.max_attempts == 3
