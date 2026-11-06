@@ -61,7 +61,7 @@ class ExtraInstaller:
                 t(
                     "extras.message",
                     purpose=extra.purpose,
-                    requirement=extra.requirement,
+                    requirement=extra.requirements_text,
                     size=extras.download_estimate(name),
                 ),
                 color=self.colors.text,
@@ -98,12 +98,16 @@ class ExtraInstaller:
     async def _install(self, name: str) -> bool:
         extra = extras.get_extra(name)
         self.show_snackbar(
-            t("extras.installing", name=extra.requirement, size=extras.download_estimate(name))
+            t(
+                "extras.installing",
+                name=extra.requirements_text,
+                size=extras.download_estimate(name),
+            )
         )
 
         result = await asyncio.to_thread(extras.install, name)
         if result.ok:
-            self.show_snackbar(t("extras.installed", name=extra.requirement))
+            self.show_snackbar(t("extras.installed", name=extra.requirements_text))
         else:
             self.show_snackbar(t("extras.failed", name=extra.name, error=result.output))
         return result.ok

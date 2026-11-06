@@ -48,7 +48,7 @@ dev = [
 server = [
     "fastapi>=0.141.1,<1",
     "uvicorn[standard]>=0.30,<1",
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.13",
 ]
 transcription = [
     "faster-whisper>=1.1,<2",

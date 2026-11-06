@@ -99,7 +99,7 @@ set, which is how `flet build` output is normally tried out.
 
 ## The optional extras are in the binary
 
-The release workflow installs `.[transcription,normalization,recording]` before running
+The release workflow installs `.[transcription,normalization,recording,server]` before running
 PyInstaller, and on Linux installs `libportaudio2` first. Both matter, and neither is
 optional any more:
 

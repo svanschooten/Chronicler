@@ -93,7 +93,7 @@ def smoke(audio: str) -> int:
     activate()
     from chronicler.core import extras
 
-    for name in ("transcription", "normalization", "recording"):
+    for name in ("transcription", "normalization", "recording", "server"):
         print(f"{name}: available={extras.is_available(name)}")
     if not extras.is_available("transcription"):
         return 1

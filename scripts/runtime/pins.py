@@ -117,5 +117,5 @@ SMOKE_AUDIO = Artifact(
 )
 
 # llama-cpp-python is deliberately absent: PyPI has no wheels for it, so local .gguf
-# models stay a source-install feature.
-COMPONENTS = ("transcription", "normalization", "recording")
+# models stay a source-install feature. `server` is what `Chronicler server` needs.
+COMPONENTS = ("transcription", "normalization", "recording", "server")

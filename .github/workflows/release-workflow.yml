@@ -83,11 +83,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ".[transcription,normalization,recording]" flet-cli pyinstaller
+          pip install ".[transcription,normalization,recording,server]" flet-cli pyinstaller
 
       - name: Verify the app and extras import
         shell: bash
-        run: python -c "import chronicler.desktop.main, av, sounddevice, faster_whisper; print('imports ok')"
+        run: python -c "import chronicler.desktop.main, chronicler.server.main, av, sounddevice, faster_whisper; print('imports ok')"
 
       - name: Build with PyInstaller
         run: pyinstaller Chronicler.spec
@@ -99,8 +99,8 @@ jobs:
           path: ${{ matrix.executable_path }}
 
   # The embedded-runtime build: a PyApp launcher around a trimmed standalone CPython, with
-  # transcription, normalization and recording installable later from the hash-pinned
-  # locks it ships. Released next to the PyInstaller build until it has proven itself.
+  # transcription, normalization, recording and the server installable later from the
+  # hash-pinned locks it ships. Released next to the PyInstaller build until it has proven itself.
   # See docs/runtime-build.md.
   runtime:
     name: Build the embedded runtime on ${{ matrix.os }}
