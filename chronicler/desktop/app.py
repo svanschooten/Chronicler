@@ -135,6 +135,8 @@ class DesktopApp:
 
         await self._close_view_scope()
         await close_scope(self.resolver)
+        if self.runtime.http_client is not None:
+            await self.runtime.http_client.aclose()
         if self.db_manager is not None:
             await self.db_manager.close_all()
 
