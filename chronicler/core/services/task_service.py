@@ -28,6 +28,11 @@ class TaskService:
     def __init__(self, repository: TaskRepository):
         self.repository = repository
 
+    async def _create(self, task: Task) -> Task:
+        """Every queued task goes through here, so its type's attempt budget applies."""
+        task.max_attempts = MAX_ATTEMPTS.get(task.type, task.max_attempts)
+        return await self.repository.create(task)
+
     async def list_tasks(self) -> list[Task]:
         return await self.repository.get_all()
 
@@ -57,14 +62,14 @@ class TaskService:
             chronicle_id=chronicle_id,
             data=json.dumps(data),
         )
-        return await self.repository.create(task)
+        return await self._create(task)
 
     async def queue_clean(self, chronicle_id: UUID) -> Task:
         task = Task(
             type=TaskType.CLEAN,
             chronicle_id=chronicle_id,
         )
-        return await self.repository.create(task)
+        return await self._create(task)
 
     async def queue_transcribe(
         self,
@@ -97,9 +102,8 @@ class TaskService:
             type=TaskType.TRANSCRIBE,
             chronicle_id=chronicle_id,
             data=json.dumps(data),
-            max_attempts=MAX_ATTEMPTS[TaskType.TRANSCRIBE],
         )
-        return await self.repository.create(task)
+        return await self._create(task)
 
     async def queue_normalize(
         self, chronicle_id: UUID, file_path: str, force: bool = False
@@ -108,7 +112,7 @@ class TaskService:
         data: dict[str, Any] = {"file_path": file_path}
         if force:
             data["force"] = True
-        return await self.repository.create(
+        return await self._create(
             Task(type=TaskType.NORMALIZE, chronicle_id=chronicle_id, data=json.dumps(data))
         )
 
@@ -139,7 +143,7 @@ class TaskService:
         if summary:
             data["summary"] = summary
 
-        return await self.repository.create(
+        return await self._create(
             Task(type=TaskType.SUMMARIZE, chronicle_id=chronicle_id, data=json.dumps(data))
         )
 

@@ -103,7 +103,9 @@ class SQLiteTaskRepository(TaskRepository):
                 db_task.claimed_by = None
                 db_task.claimed_at = None
                 db_task.progress = 0
-                delay = self.retry_delays[min(db_task.attempts, len(self.retry_delays)) - 1]
+                # attempts was just incremented, so it is at least 1.
+                step = min(max(db_task.attempts, 1), len(self.retry_delays))
+                delay = self.retry_delays[step - 1]
                 db_task.not_before = datetime.now() + timedelta(seconds=delay)
             else:
                 db_task.status = TaskStatus.FAILED
