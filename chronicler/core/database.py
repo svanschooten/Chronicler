@@ -64,6 +64,7 @@ class DBTask(Base):
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime)
     attempts: Mapped[int] = mapped_column(default=0)
     max_attempts: Mapped[int] = mapped_column(default=3)
+    not_before: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class DBKnownSpeaker(Base):

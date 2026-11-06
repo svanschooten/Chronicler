@@ -31,19 +31,23 @@ and waiting for the next poll cycle. It guards against pathologically unlucky
 contention without looping forever; in practice a single caller almost always claims
 its first candidate.
 
-## Why `process_tasks` is bounded
+## Retry backoff
 
-The loop is bounded to what was pending *before* the cycle started.
+`mark_failed_or_retry()` puts a task back to `PENDING` with a `not_before` time: 30 seconds
+after the first failure and 5 minutes after the second (`RETRY_DELAYS`; a later retry
+waits the last delay). `claim_next()` skips rows that are not due yet, so a transient
+failure such as a restarting gateway has time to clear, and `process_tasks` can simply run
+until nothing is due. `retry_task` and `update_status(PENDING)` clear `not_before`, so a
+manual retry runs at once. The Tasks view shows the next attempt time.
 
-A task that `mark_failed_or_retry()` puts back to `PENDING` mid-cycle is immediately
-re-claimable, and an unbounded claim loop would burn through all of a task's retries in
-one instant burst instead of spreading them across poll cycles. That defeats the point
-of retrying at all — an instant re-attempt gives a transient failure no time to clear.
+`TaskService` sets `max_attempts` per task type (`MAX_ATTEMPTS`): a transcription is not
+retried automatically, because a late failure would repeat hours of work and a manual
+retry exists. Every other type keeps 3.
 
 ## Returning a task to the queue
 
 Both `mark_failed_or_retry()` and `update_status(PENDING)` clear `claimed_by`,
-`claimed_at`, `error` and `progress`. From the queue's point of view the task has not
+`claimed_at` and `progress` (`update_status` also clears `error` and `not_before`). From the queue's point of view the task has not
 been attempted, so the previous run's state is stale. Leaving `claimed_by`/`claimed_at`
 behind made the Tasks view keep showing the *previous* run's start time until something
 claimed it again.

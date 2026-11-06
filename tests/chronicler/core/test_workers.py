@@ -32,6 +32,12 @@ class Tasks:
         return task
 
 
+@pytest.fixture
+def no_backoff(monkeypatch):
+    """Retries are due at once, so a test can drive several attempts back to back."""
+    monkeypatch.setattr(SQLiteTaskRepository, "retry_delays", (0.0,))
+
+
 @pytest_asyncio.fixture
 async def tasks(tmp_path):
     db_manager = DatabaseManager(tmp_path)
@@ -98,7 +104,29 @@ async def test_worker_manager_task_failure(tasks):
 
 
 @pytest.mark.asyncio
-async def test_worker_manager_retries_before_succeeding(tasks):
+async def test_a_failed_task_is_not_retried_until_its_delay_has_passed(tasks):
+    calls = 0
+
+    async def always_fails(task, update_progress):
+        nonlocal calls
+        calls += 1
+        raise Exception("down")
+
+    manager = WorkerManager(tasks.sessions)
+    manager.register_handler(TaskType.IMPORT, always_fails)
+    task = await tasks.create(Task(type=TaskType.IMPORT))
+
+    await manager.process_tasks()
+    await manager.process_tasks()
+
+    fetched = await tasks.get_by_id(task.id)
+    assert calls == 1
+    assert fetched.status == TaskStatus.PENDING
+    assert fetched.not_before is not None
+
+
+@pytest.mark.asyncio
+async def test_worker_manager_retries_before_succeeding(tasks, no_backoff):
     calls = 0
 
     async def flaky_handler(task, update_progress):
@@ -109,41 +137,25 @@ async def test_worker_manager_retries_before_succeeding(tasks):
 
     manager = WorkerManager(tasks.sessions)
     manager.register_handler(TaskType.IMPORT, flaky_handler)
-
     task = await tasks.create(Task(type=TaskType.IMPORT))
 
     await manager.process_tasks()
-    fetched = await tasks.get_by_id(task.id)
-    assert fetched.status == TaskStatus.PENDING
-    assert fetched.attempts == 1
-    assert fetched.claimed_by is None
 
-    await manager.process_tasks()
-    fetched = await tasks.get_by_id(task.id)
-    assert fetched.status == TaskStatus.PENDING
-    assert fetched.attempts == 2
-
-    await manager.process_tasks()
     fetched = await tasks.get_by_id(task.id)
     assert fetched.status == TaskStatus.DONE
     assert calls == 3
 
 
 @pytest.mark.asyncio
-async def test_worker_manager_fails_after_exhausting_max_attempts(tasks):
+async def test_worker_manager_fails_after_exhausting_max_attempts(tasks, no_backoff):
     handler = AsyncMock(side_effect=Exception("always fails"))
 
     manager = WorkerManager(tasks.sessions)
     manager.register_handler(TaskType.IMPORT, handler)
-
     task = await tasks.create(Task(type=TaskType.IMPORT, max_attempts=3))
 
-    for _ in range(2):
-        await manager.process_tasks()
-        fetched = await tasks.get_by_id(task.id)
-        assert fetched.status == TaskStatus.PENDING
-
     await manager.process_tasks()
+
     fetched = await tasks.get_by_id(task.id)
     assert fetched.status == TaskStatus.FAILED
     assert fetched.attempts == 3

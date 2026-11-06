@@ -36,7 +36,7 @@ These areas conflict when worked on at the same time, so take their tickets in t
 | ---- | ----- | --- |
 | Worker and task queue | 007 → 009 → 069 → 022 → 040 → 064 | Same files in `core/workers.py` and `task_repository.py` |
 | Project migrations | 010 → 020 → 029 → 063 | Each adds an Alembic revision on the project chain (head `a8e1d5c3b790`). Rebase `down_revision` on whatever merged last |
-| Archive migrations | 022 → 029 | Same for the archive chain (head `c9f2a4e17b30`) |
+| Archive migrations | 022 → 029 | Same for the archive chain (head `b4d7e2a9c156`) |
 | Task handlers | 010 → 011 → 032 → 040 | Same files in `core/processing/handlers/` |
 | Desktop shell | 007 → 027 → 041 | Same parts of `desktop/app.py`. Schedule 041 alone, because it conflicts with most open desktop work |
 | Runtime locks | 016, 035, 067 | Each regenerates `scripts/runtime/locks/`. Merge one, then regenerate on top of it |
@@ -124,7 +124,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [021-M10 Reading an unknown chronicle creates it on disk](021-M10_reads_must_not_create_chronicles.md) · medium · S
 
-- [ ] [022-M6 Retries run about one second apart](022-M6_retry_backoff.md) · medium · S · after 009
+- [x] [022-M6 Retries run about one second apart](022-M6_retry_backoff.md) · medium · S · after 009
 
 - [x] [023-S7 Replace the model registry cache with one call](023-S7_model_list_single_call.md) · medium · S
 

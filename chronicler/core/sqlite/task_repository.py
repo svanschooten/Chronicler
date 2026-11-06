@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import cast
 from uuid import UUID
 
@@ -13,8 +13,15 @@ from chronicler.core.sqlite.patterns import LIKE_ESCAPE, contains_pattern
 
 _MAX_CLAIM_CANDIDATES = 5
 
+RETRY_DELAYS = (30.0, 300.0)
+"""Seconds before the first retry, then the second; any later retry waits the last one."""
+
 
 class SQLiteTaskRepository(TaskRepository):
+    # A class attribute, not a constructor argument: the container builds this class from
+    # its constructor's type hints.
+    retry_delays: tuple[float, ...] = RETRY_DELAYS
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -50,6 +57,7 @@ class SQLiteTaskRepository(TaskRepository):
             updated_at=task.updated_at,
             attempts=task.attempts,
             max_attempts=task.max_attempts,
+            not_before=task.not_before,
         )
         self.session.add(db_task)
         await self.session.commit()
@@ -57,15 +65,18 @@ class SQLiteTaskRepository(TaskRepository):
         return Task.model_validate(db_task)
 
     async def claim_next(self, worker_id: str) -> Task | None:
+        now = datetime.now()
         result = await self.session.execute(
             select(DBTask.id)
-            .where(DBTask.status == TaskStatus.PENDING)
+            .where(
+                DBTask.status == TaskStatus.PENDING,
+                or_(DBTask.not_before.is_(None), DBTask.not_before <= now),
+            )
             .order_by(DBTask.priority.desc(), DBTask.created_at.asc())
             .limit(_MAX_CLAIM_CANDIDATES)
         )
         candidate_ids = [row[0] for row in result.all()]
 
-        now = datetime.now()
         for candidate_id in candidate_ids:
             update_result = cast(
                 CursorResult,
@@ -92,6 +103,10 @@ class SQLiteTaskRepository(TaskRepository):
                 db_task.claimed_by = None
                 db_task.claimed_at = None
                 db_task.progress = 0
+                # attempts was just incremented, so it is at least 1.
+                step = min(max(db_task.attempts, 1), len(self.retry_delays))
+                delay = self.retry_delays[step - 1]
+                db_task.not_before = datetime.now() + timedelta(seconds=delay)
             else:
                 db_task.status = TaskStatus.FAILED
             await self.session.commit()
@@ -108,6 +123,7 @@ class SQLiteTaskRepository(TaskRepository):
             row.claimed_by = None
             row.claimed_at = None
             row.progress = 0
+            row.not_before = None
             if row.attempts < row.max_attempts:
                 row.status = TaskStatus.PENDING
             else:
@@ -126,6 +142,7 @@ class SQLiteTaskRepository(TaskRepository):
                 db_task.error = None
                 db_task.claimed_by = None
                 db_task.claimed_at = None
+                db_task.not_before = None
             await self.session.commit()
 
     async def update_progress(self, task_id: UUID, progress: int) -> None:

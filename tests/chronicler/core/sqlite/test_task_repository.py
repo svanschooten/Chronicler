@@ -196,3 +196,69 @@ async def test_recovery_leaves_tasks_that_are_not_working_alone(async_session):
         assert fetched.status == task.status
         assert fetched.attempts == 0
         assert fetched.error is None
+
+
+@pytest.mark.asyncio
+async def test_retry_delays_grow_and_then_stay_at_the_last_one(async_session):
+    from datetime import datetime
+
+    repo = SQLiteTaskRepository(async_session)
+    task = await repo.create(Task(type=TaskType.IMPORT, max_attempts=4))
+
+    waits = []
+    for _ in range(3):
+        assert await repo.claim_next("w") is not None
+        await repo.mark_failed_or_retry(task.id, "boom")
+        waits.append(
+            round(
+                (await repo.get_by_id(task.id)).not_before.timestamp() - datetime.now().timestamp(),
+                -1,
+            )
+        )
+        assert await repo.claim_next("w") is None
+        await _make_due(async_session, task.id)
+
+    assert waits == [30.0, 300.0, 300.0]
+
+
+async def _make_due(session, task_id):
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import update
+
+    from chronicler.core.database import DBTask
+
+    await session.execute(
+        update(DBTask)
+        .where(DBTask.id == str(task_id))
+        .values(not_before=datetime.now() - timedelta(seconds=1))
+    )
+    await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_first_retry_waits_about_thirty_seconds(async_session):
+    from datetime import datetime, timedelta
+
+    repo = SQLiteTaskRepository(async_session)
+    task = await repo.create(Task(type=TaskType.IMPORT))
+    await repo.claim_next("w")
+    await repo.mark_failed_or_retry(task.id, "boom")
+
+    row = await repo.get_by_id(task.id)
+    assert timedelta(seconds=25) < row.not_before - datetime.now() <= timedelta(seconds=30)
+    assert await repo.claim_next("w") is None
+
+
+@pytest.mark.asyncio
+async def test_a_manual_retry_clears_the_wait(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    task = await repo.create(Task(type=TaskType.IMPORT))
+    await repo.claim_next("w")
+    await repo.mark_failed_or_retry(task.id, "boom")
+    assert await repo.claim_next("w") is None
+
+    await repo.update_status(task.id, TaskStatus.PENDING)
+
+    assert (await repo.get_by_id(task.id)).not_before is None
+    assert await repo.claim_next("w") is not None
