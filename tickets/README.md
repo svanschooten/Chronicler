@@ -13,6 +13,9 @@ its owner shares it, and every ticket stands on its own without it.
 - One ticket, one branch, one PR. Update the docs your change affects in the same PR.
 - `001-C1_sqlalchemy_asyncio_extra` comes first for everyone, because a fresh install
   cannot start until it lands.
+- Tickets 067 and up came out of reviewing the first merged work, so their numbers are not
+  their order. Each sits in the wave where it belongs, and the coordination table below
+  places it in its area.
 - A ticket marked *closed by* needs no work of its own. It stays here to record the
   problem, and gets ticked along with the ticket that closes it.
 
@@ -31,12 +34,12 @@ These areas conflict when worked on at the same time, so take their tickets in t
 
 | Area | Order | Why |
 | ---- | ----- | --- |
-| Worker and task queue | 007 → 009 → 022 → 040 → 064 | Same files in `core/workers.py` and `task_repository.py` |
+| Worker and task queue | 007 → 009 → 069 → 022 → 040 → 064 | Same files in `core/workers.py` and `task_repository.py` |
 | Project migrations | 010 → 020 → 029 → 063 | Each adds an Alembic revision on the project chain (head `f6c3a9d2b417`). Rebase `down_revision` on whatever merged last |
 | Archive migrations | 022 → 029 | Same for the archive chain (head `c9f2a4e17b30`) |
 | Task handlers | 010 → 011 → 032 → 040 | Same files in `core/processing/handlers/` |
 | Desktop shell | 007 → 027 → 041 | Same parts of `desktop/app.py`. Schedule 041 alone, because it conflicts with most open desktop work |
-| Runtime locks | 016, 035 | Each regenerates `scripts/runtime/locks/`. Merge one, then regenerate on top of it |
+| Runtime locks | 016, 035, 067 | Each regenerates `scripts/runtime/locks/`. Merge one, then regenerate on top of it |
 | CI workflow | 004 → 005 → 044 | Same file |
 
 ## Reading a ticket
@@ -129,11 +132,15 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [ ] [025-S9 Replace the three mode vocabularies with one enum](025-S9_single_mode_enum.md) · medium · S · after 012
 
-- [ ] [026-M9 A web-client config crashes the desktop app](026-M9_stale_mode_crashes_desktop.md) · medium · closed by 025
+- [x] [026-M9 A web-client config crashes the desktop app](026-M9_stale_mode_crashes_desktop.md) · medium · closed by 012
 
 - [ ] [027-M7 A finished task rebuilds the view on screen](027-M7_refresh_view_in_place.md) · medium · M
 
 - [ ] [028-P1 PDF and zip exports freeze the app](028-P1_exports_off_event_loop.md) · medium · XS
+
+- [ ] [067-M11 The normalization extra does not install numpy, which normalizing needs](067-M11_normalization_extra_numpy.md) · medium · XS
+
+- [ ] [068-M12 Any failure to lock a workspace reads as "already open in another process"](068-M12_workspace_lock_error_reasons.md) · medium · XS
 
 ### Wave 5: simplify the foundations
 
@@ -198,6 +205,12 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 - [ ] [057-P6 Normalization decodes the file three times](057-P6_normalization_single_pass.md) · low · S · after 044
 
 - [ ] [058-T6 Nothing verifies the real rendered UI](058-T6_ui_rendering_checks.md) · low · M
+
+- [ ] [069-L12 A finished task's event is lost when the database is busy](069-L12_completion_event_on_busy_database.md) · low · XS · after 009
+
+- [ ] [070-T7 Dependabot misses the shared setup action and opens floor-only PRs](070-T7_dependabot_config.md) · low · XS
+
+- [ ] [071-T8 Two tests pass for a reason other than the one they state](071-T8_tests_that_pass_for_the_wrong_reason.md) · low · XS
 
 ### Wave 7: release format, docs and features
 

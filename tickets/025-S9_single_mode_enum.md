@@ -41,4 +41,4 @@ client.
 - (BLOCKS) [041-S3_services_bundle](041-S3_services_bundle.md): `build_runtime` is rewritten around the mode enum
 - (BLOCKS) [042-S10_console_wizard_to_flags](042-S10_console_wizard_to_flags.md): uses the mode enum
 - (BLOCKS) [049-L5_open_folder_thin_client](049-L5_open_folder_thin_client.md): uses `effective_mode`
-- (CLOSES) [026-M9_stale_mode_crashes_desktop](026-M9_stale_mode_crashes_desktop.md): validation and runtime building share one answer
+- (RELATED) [026-M9_stale_mode_crashes_desktop](026-M9_stale_mode_crashes_desktop.md): closed by 012's stopgap for `client:web`; this ticket replaces the stopgap

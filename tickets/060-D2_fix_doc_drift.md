@@ -23,6 +23,7 @@
 | `ARCHITECTURE.md:468` | Implemented tasks: IMPORT, CLEAN, TRANSCRIBE | NORMALIZE and SUMMARIZE exist too |
 | `docs/deployment-and-rpc.md:24`, `:58` | Every public coroutine is exposed | Explicit `expose=` lists since Sprint 11 |
 | `HOWTO.md:108` | Two features need extras | Five extras exist |
+| `README.md:411` | "The same four checks CI runs" | CI also runs the runtime locks check |
 
 ### related tickets
 

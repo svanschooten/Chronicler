@@ -44,6 +44,11 @@ says tasks survive restarts.
 The audit report also suggested offering retry on WORKING rows. With this reset, a visible
 WORKING row really is running, so a retry would run it twice. Leave that out.
 
+Since 007-C2, a task can also stay WORKING without a crash: when its final status write
+is still locked after `STATUS_WRITE_TIMEOUT`, the error propagates and the row keeps
+WORKING. The startup reset covers that row too, so no extra work is needed, but it is
+another way to reach the state this fixes.
+
 Done when killing the process mid-task and restarting runs the task again, and closing the
 app mid-task leaves it PENDING.
 
@@ -54,3 +59,4 @@ app mid-task leaves it PENDING.
 - (BLOCKS) [022-M6_retry_backoff](022-M6_retry_backoff.md): same repository and worker code
 - (BLOCKS) [040-S6_worker_and_handlers](040-S6_worker_and_handlers.md): edits the same repository
 - (BLOCKS) [064-F2_progress_and_cancel](064-F2_progress_and_cancel.md): cancel must interact correctly with task recovery
+- (RELATED) [069-L12_completion_event_on_busy_database](069-L12_completion_event_on_busy_database.md): same file, take it after this one
