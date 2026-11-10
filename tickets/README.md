@@ -26,8 +26,8 @@ against the code, re-baselined `TODO.md`, and set the order of the open waves be
 ## Claiming a ticket
 
 Change its `[ ]` to `[x]` in the list below. Commit only that change and get it onto
-`master` before you start, so everyone else can see it. `git blame` on this file shows who
-claimed what, and unticking gives a ticket back.
+your feature branch and into a draft PR before you start, so everyone else can see it. `git blame` on this file shows who
+claimed what, and closing the PR and deleting the stale branch gives a ticket back.
 
 Keep the blank line between tickets. Without it, two people claiming neighbouring tickets
 get a merge conflict.
