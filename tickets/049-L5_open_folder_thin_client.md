@@ -20,11 +20,11 @@ opens the answer locally. On a thin client that path does not exist on this mach
 
 ### proposed fix
 
-Hide the button on a thin client using `effective_mode`, and remove `chronicle_directory`
+Hide the button on a thin client using `desktop_mode`, and remove `chronicle_directory`
 from `expose`.
 
 Done when the button is absent on a thin client, and the API surface count is updated.
 
 ### related tickets
 
-- (BLOCKER) [025-S9_single_mode_enum](025-S9_single_mode_enum.md): uses `effective_mode`
+- (BLOCKER) [025-S9_single_mode_enum](025-S9_single_mode_enum.md): uses `desktop_mode`
