@@ -9,9 +9,9 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
 
 from chronicler.core.database import DBChronicle
-from chronicler.core.database_manager import DatabaseManager, NewerSchemaError
+from chronicler.core.database_manager import _MIGRATIONS_ROOT, DatabaseManager, NewerSchemaError
 from chronicler.core.project_database import DBSpeaker
-from chronicler.core.workspace_lock import WorkspaceLockedError
+from chronicler.core.workspace_lock import WorkspaceLock, WorkspaceLockedError
 
 
 @pytest.mark.asyncio
@@ -418,8 +418,46 @@ def _tables(path) -> set[str]:
         return {name for (name,) in rows}
 
 
+_FIRST_PROJECT_REVISION = "a71eeb9c4240"
+
+
+def _project_db_at(path, revision: str) -> None:
+    """A project.db migrated only as far as `revision`, as an older release left it."""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine
+
+    engine = create_engine(f"sqlite:///{path}")
+    with engine.begin() as connection:
+        cfg = Config()
+        cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
+        cfg.attributes["connection"] = connection
+        command.upgrade(cfg, revision)
+    engine.dispose()
+
+
+def _project_head() -> str:
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
+    return ScriptDirectory.from_config(cfg).get_current_head()
+
+
+def _stamped(path) -> str:
+    with closing(sqlite3.connect(path)) as connection:
+        (revision,) = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+    return revision
+
+
 class TestNewerSchema:
-    """A database a newer Chronicler upgraded is refused with a message that says what to do."""
+    """
+    A database a newer Chronicler upgraded is refused with a message that says what to do.
+
+    These open a project through `_project_engine`, the step that migrates, so they do not
+    depend on how a chronicle's location is looked up.
+    """
 
     @pytest.mark.asyncio
     async def test_a_newer_chronicle_is_refused_and_left_alone(self, tmp_path):
@@ -427,9 +465,10 @@ class TestNewerSchema:
         project_db = tmp_path / "shared" / "project.db"
         _stamp_with_unknown_revision(project_db)
 
-        with pytest.raises(NewerSchemaError, match="newer version of Chronicler.*Update"):
-            await db_manager.get_project_session("shared", custom_path=project_db)
+        with pytest.raises(NewerSchemaError, match="newer version of Chronicler.*Update") as raised:
+            await db_manager._project_engine("shared", project_db)
 
+        assert raised.value.kind == "chronicle"
         assert _tables(project_db) == {"alembic_version"}
         await db_manager.close_all()
 
@@ -438,19 +477,37 @@ class TestNewerSchema:
         _stamp_with_unknown_revision(tmp_path / "chronicler.db")
         db_manager = DatabaseManager(tmp_path)
 
-        with pytest.raises(NewerSchemaError, match="workspace"):
+        with pytest.raises(NewerSchemaError, match="workspace") as raised:
             await db_manager.init_archive()
 
+        assert raised.value.kind == "workspace"
         assert _tables(tmp_path / "chronicler.db") == {"alembic_version"}
+        lock = WorkspaceLock(tmp_path)
+        lock.acquire()
+        lock.release()
         await db_manager.close_all()
 
     @pytest.mark.asyncio
-    async def test_a_chronicle_from_this_or_an_older_version_still_opens(self, tmp_path):
+    async def test_a_chronicle_from_an_older_version_is_upgraded(self, tmp_path):
+        project_db = tmp_path / "older" / "project.db"
+        project_db.parent.mkdir()
+        _project_db_at(project_db, _FIRST_PROJECT_REVISION)
         db_manager = DatabaseManager(tmp_path)
 
-        async with await db_manager.get_project_session("ordinary") as session:
-            await session.execute(select(DBSpeaker))
-        async with await DatabaseManager(tmp_path).get_project_session("ordinary") as session:
-            await session.execute(select(DBSpeaker))
+        await db_manager._project_engine("older", project_db)
 
+        assert _stamped(project_db) == _project_head()
         await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_chronicle_from_this_version_opens_again(self, tmp_path):
+        project_db = tmp_path / "current" / "project.db"
+        first = DatabaseManager(tmp_path)
+        await first._project_engine("current", project_db)
+        await first.close_all()
+
+        second = DatabaseManager(tmp_path)
+        await second._project_engine("current", project_db)
+
+        assert _stamped(project_db) == _project_head()
+        await second.close_all()

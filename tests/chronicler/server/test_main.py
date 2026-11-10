@@ -165,7 +165,9 @@ def test_a_server_on_a_workspace_from_a_newer_chronicler_exits_with_the_reason(
     mock_server_cls.assert_not_called()
 
     assert "newer version of Chronicler" in str(exit_info.value.code)
-    WorkspaceLock(tmp_path).acquire()
+    lock = WorkspaceLock(tmp_path)
+    lock.acquire()
+    lock.release()
 
 
 def test_startup_does_not_log_the_api_key(tmp_path, isolated_config, monkeypatch, caplog):
