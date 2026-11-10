@@ -1,7 +1,7 @@
 # Chronicler
 
 ![CI](https://github.com/svanschooten/Chronicler/actions/workflows/continuous-integration-workflow.yml/badge.svg)
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![License](https://img.shields.io/github/license/svanschooten/Chronicler)
 ![Version](https://img.shields.io/github/v/tag/svanschooten/Chronicler?label=version)
 ![Status](https://img.shields.io/badge/status-alpha-blue)
@@ -307,7 +307,7 @@ More detailed documentation is available in:
 
 | Component  | Technology                    |
 | ---------- | ----------------------------- |
-| Language   | Python 3.10+                  |
+| Language   | Python 3.12+                  |
 | UI         | Flet                          |
 | Database   | SQLite (via aiosqlite)        |
 | ORM        | SQLAlchemy 2 (async)          |

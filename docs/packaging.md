@@ -176,7 +176,9 @@ from there via `[tool.hatch.version]`, so the wheel filename, the package metada
 `chronicler.__version__` — which the thin-client handshake compares across the wire — all
 follow that single line.
 
-1. Edit `__version__` in `chronicler/__init__.py`.
+1. Edit `__version__` in `chronicler/__init__.py` to the number you are about to tag. This
+   is a required step, not a courtesy: the handshake needs an exact match, so a source
+   checkout with a stale value refuses a server built from the tag.
 2. Commit, tag, push the tag.
 3. Publish the GitHub release for that tag. That fires `release-workflow.yml`, which
    builds both binaries from the spec and attaches them to the release.
