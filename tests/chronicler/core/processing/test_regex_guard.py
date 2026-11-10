@@ -87,3 +87,63 @@ async def test_slow_import_does_not_stall_the_event_loop(monkeypatch):
     finally:
         task.cancel()
     assert longest_stall < 0.5
+
+
+class TestTimeLimit:
+    """One budget for every match an import or clean makes, not just each match on its own."""
+
+    def test_matches_inside_a_time_limit_share_its_deadline(self, monkeypatch):
+        monkeypatch.setattr(regex_guard, "MATCH_TIMEOUT_SECONDS", 5.0)
+        compiled = compile_pattern(SLOW_PATTERN)
+
+        started = time.monotonic()
+        with pytest.raises(PatternTimeoutError, match="whole transcript"):
+            with regex_guard.time_limit(0.2):
+                for _ in range(100):
+                    run_timed(compiled, compiled.search, SLOW_LINE)
+        assert time.monotonic() - started < 2
+
+    def test_a_spent_budget_refuses_the_next_match_without_running_it(self):
+        compiled = compile_pattern(r"a")
+        with regex_guard.time_limit(0):
+            with pytest.raises(PatternTimeoutError, match="whole transcript"):
+                run_timed(compiled, compiled.search, "a")
+
+    def test_a_nested_limit_keeps_the_earlier_deadline(self):
+        compiled = compile_pattern(r"a")
+        with regex_guard.time_limit(0):
+            with regex_guard.time_limit(60):
+                with pytest.raises(PatternTimeoutError):
+                    run_timed(compiled, compiled.search, "a")
+
+    def test_outside_a_time_limit_only_the_per_match_bound_applies(self):
+        compiled = compile_pattern(r"a")
+        assert run_timed(compiled, compiled.search, "a") is not None
+
+    def test_an_import_stops_at_its_total_budget(self, monkeypatch):
+        monkeypatch.setattr(regex_guard, "MATCH_TIMEOUT_SECONDS", 5.0)
+        monkeypatch.setattr(regex_guard, "TOTAL_TIMEOUT_SECONDS", 0.2)
+        importer = RegexImporter(SLOW_PATTERN)
+
+        started = time.monotonic()
+        with pytest.raises(PatternTimeoutError, match="whole transcript"):
+            importer.parse("\n".join([SLOW_LINE] * 100))
+        assert time.monotonic() - started < 2
+
+    def test_a_clean_stops_at_its_total_budget(self, monkeypatch):
+        from chronicler.core.config_sections import CleaningSettings
+        from chronicler.core.models import TranscriptLine
+        from chronicler.core.processing.cleaners import TranscriptCleaner
+
+        monkeypatch.setattr(regex_guard, "MATCH_TIMEOUT_SECONDS", 5.0)
+        monkeypatch.setattr(regex_guard, "TOTAL_TIMEOUT_SECONDS", 0.2)
+        lines = [
+            TranscriptLine(speaker_name="A", text=SLOW_LINE, start_time=i, end_time=i + 1)
+            for i in range(100)
+        ]
+        cleaner = TranscriptCleaner(CleaningSettings(strip_patterns=[SLOW_PATTERN]))
+
+        started = time.monotonic()
+        with pytest.raises(PatternTimeoutError, match="whole transcript"):
+            cleaner.clean(lines)
+        assert time.monotonic() - started < 2

@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 from chronicler.core.formatting import parse_timestamp
 from chronicler.core.models import TranscriptLine
-from chronicler.core.processing.regex_guard import compile_pattern, run_timed
+from chronicler.core.processing.regex_guard import compile_pattern, run_timed, time_limit
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,8 @@ class RegexImporter(Importer):
         self.timestamp_group = timestamp_group
 
     def parse(self, content: str, start_offset: float = 0.0) -> list[TranscriptLine]:
-        turns = self._collect_turns(content, start_offset)
+        with time_limit():
+            turns = self._collect_turns(content, start_offset)
         self._assign_times(turns, start_offset)
         for turn in turns:
             turn.synthetic_timing = self.timestamp_group is None

@@ -7,7 +7,7 @@ import regex
 
 from chronicler.core.config_sections import CleaningSettings, HallucinationMatch
 from chronicler.core.models import TranscriptLine
-from chronicler.core.processing.regex_guard import compile_pattern, run_timed
+from chronicler.core.processing.regex_guard import compile_pattern, run_timed, time_limit
 
 
 def normalize_for_comparison(text: str) -> str:
@@ -207,6 +207,7 @@ class TranscriptCleaner:
 
     def clean(self, lines: list[TranscriptLine]) -> list[TranscriptLine]:
         result = list(lines)
-        for rule in self._rules:
-            result = rule.apply(result)
+        with time_limit():
+            for rule in self._rules:
+                result = rule.apply(result)
         return result

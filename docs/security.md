@@ -55,8 +55,10 @@ minutes. Two things bound that:
 
 1. Patterns are compiled with the third-party `regex` package, capped at 500 characters.
    Every match goes through `run_timed`, which passes `timeout=` (5 seconds per call) and
-   `concurrent=True`. A timeout raises `PatternTimeoutError` and fails the task with a
-   message naming the pattern.
+   `concurrent=True`. A whole import or clean also shares one 60-second budget
+   (`time_limit`), so a pattern just under the per-match limit cannot hold the worker for
+   hours over a long transcript. Either timeout raises `PatternTimeoutError` and fails the
+   task with a message naming the pattern.
 2. `handle_import` and `handle_clean` run parsing and cleaning with `asyncio.to_thread`.
    `concurrent=True` releases the GIL while matching, so a slow pattern does not stall the
    window or other server clients. Moving the call to a thread alone would not help, since
