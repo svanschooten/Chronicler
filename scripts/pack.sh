@@ -15,7 +15,6 @@ flet pack chronicler/__main__.py \
             --add-data "chronicler/migrations:chronicler/migrations" \
             --add-data "chronicler/webclient/src:chronicler/webclient/src" \
             --hidden-import aiosqlite \
-            --hidden-import re._parser \
             --hidden-import logging.config
 
 python3 - <<'PY'
