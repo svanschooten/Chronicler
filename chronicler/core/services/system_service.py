@@ -1,5 +1,6 @@
 """Server identity and health, used by a thin client to verify what it is talking to."""
 
+import asyncio
 import logging
 
 from chronicler import __version__
@@ -35,10 +36,13 @@ class SystemService:
             except Exception:
                 logger.warning("Could not count chronicles for server info", exc_info=True)
 
+        # Off the event loop: availability means the module really imports, and the first
+        # import of an extra such as faster_whisper takes seconds.
+        capabilities = await asyncio.to_thread(capabilities_for, self.settings)
         return ServerInfo(
             version=__version__,
             chronicle_count=chronicle_count,
-            capabilities=sorted(capabilities_for(self.settings)),
+            capabilities=sorted(capabilities),
         )
 
     async def ping(self) -> str:
