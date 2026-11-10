@@ -161,7 +161,7 @@ Small and independent. Users hit the first four, and the rest are under an hour 
 
 - [x] [073-M14 Dismissing a dialog leaves its action waiting forever, and a recording keeps running](073-M14_dismissed_dialogs_hang.md) · medium · S
 
-- [ ] [069-L12 A finished task's event is lost when the database is busy](069-L12_completion_event_on_busy_database.md) · low · XS · after 009
+- [x] [069-L12 A finished task's event is lost when the database is busy](069-L12_completion_event_on_busy_database.md) · low · XS · after 009
 
 - [ ] [054-L10 Config files can be misread and overwritten](054-L10_config_encoding_and_atomic_save.md) · low · XS · after 015
 
