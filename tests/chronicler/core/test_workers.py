@@ -672,3 +672,60 @@ async def test_a_failed_announcement_does_not_skip_the_next_tasks_cleanup(tasks,
 
     assert {call.args[0].id for call in cleanup.await_args_list} == {first.id, second.id}
     assert "Could not announce that interrupted task" in caplog.text
+
+
+def _locked_reads(failures: int, armed: asyncio.Event):
+    """
+    A `get_by_id` that, once `armed` is set (the handler has run, so claiming is over),
+    raises "database is locked" `failures` times and then works.
+    """
+    real = SQLiteTaskRepository.get_by_id
+    calls = {"n": 0}
+
+    async def get_by_id(self, task_id):
+        if armed.is_set():
+            calls["n"] += 1
+            if calls["n"] <= failures:
+                raise OperationalError("SELECT", {}, Exception("database is locked"))
+        return await real(self, task_id)
+
+    return get_by_id
+
+
+@pytest.mark.asyncio
+async def test_the_completion_event_survives_a_busy_database(tasks):
+    bus = TaskEventBus()
+    received = []
+    bus.subscribe(received.append)
+    manager = WorkerManager(tasks.sessions, event_bus=bus, status_write_timeout=5.0)
+    armed = asyncio.Event()
+
+    async def handler(task, update_progress):
+        armed.set()
+
+    manager.register_handler(TaskType.IMPORT, handler)
+    await tasks.create(Task(type=TaskType.IMPORT))
+
+    with patch.object(SQLiteTaskRepository, "get_by_id", _locked_reads(1, armed)):
+        await manager.process_tasks()
+
+    assert [event.status for event in received] == [TaskStatus.DONE]
+
+
+@pytest.mark.asyncio
+async def test_a_busy_database_that_never_clears_does_not_fail_the_worker(tasks, caplog):
+    bus = TaskEventBus()
+    manager = WorkerManager(tasks.sessions, event_bus=bus, status_write_timeout=0.3)
+    armed = asyncio.Event()
+
+    async def handler(task, update_progress):
+        armed.set()
+
+    manager.register_handler(TaskType.IMPORT, handler)
+    task = await tasks.create(Task(type=TaskType.IMPORT))
+
+    with patch.object(SQLiteTaskRepository, "get_by_id", _locked_reads(10**6, armed)):
+        await manager.process_tasks()
+
+    assert "could not read it back" in caplog.text
+    assert (await tasks.get_by_id(task.id)).status == TaskStatus.DONE
