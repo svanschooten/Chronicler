@@ -93,3 +93,40 @@ class TestNoDevices:
         page.show_dialog.assert_not_called()
         dialog.show_snackbar.assert_called_once()
         assert "input" in dialog.show_snackbar.call_args[0][0].lower()
+
+
+class TestDismissal:
+    @pytest.mark.asyncio
+    async def test_dismissing_the_dialog_stops_the_recorder_and_removes_the_temp_folder(
+        self, make_dialog
+    ):
+        import asyncio
+
+        dialog = make_dialog()
+        page = MagicMock(spec=ft.Page)
+        device = InputDevice(index=0, name="Mic", channels=1)
+
+        with (
+            patch(
+                "chronicler.desktop.views.transcript.recording.list_input_devices",
+                return_value=[device],
+            ),
+            patch("chronicler.desktop.views.transcript.recording.Recorder") as recorder_class,
+        ):
+            recorder = recorder_class.return_value
+            recorder.is_recording = False
+            recorder.start.side_effect = lambda: setattr(recorder, "is_recording", True)
+
+            task = asyncio.ensure_future(dialog.run(page))
+            await asyncio.sleep(0)
+            (shown,), _ = page.show_dialog.call_args
+            record_button = shown.content.controls[2]
+            await record_button.on_click(MagicMock())
+            temp_folder = dialog.temp_path.parent
+            assert temp_folder.exists()
+
+            shown.on_dismiss(MagicMock())
+            await asyncio.wait_for(task, timeout=1)
+
+        recorder.stop.assert_called_once()
+        assert not temp_folder.exists()

@@ -143,3 +143,39 @@ async def test_ask_text_resolves_to_none_on_cancel():
     result, _, _ = await _click(call, button_index=0)
 
     assert result is None
+
+
+async def _dismiss(coro):
+    """Starts `coro`, then closes its dialog the way Esc or a click outside does."""
+    page = MagicMock(spec=ft.Page)
+    task = asyncio.ensure_future(coro(page))
+    await asyncio.sleep(0)
+    (dialog,), _ = page.show_dialog.call_args
+    dialog.on_dismiss(MagicMock())
+    return await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_dismissing_a_choice_dialog_resolves_to_its_first_choice():
+    async def call(page):
+        return await ask_choice(
+            page, "T", "M", [Choice("Cancel", "cancel"), Choice("Append", "append")]
+        )
+
+    assert await _dismiss(call) == "cancel"
+
+
+@pytest.mark.asyncio
+async def test_dismissing_a_confirm_means_no():
+    async def call(page):
+        return await confirm(page, "T", "M")
+
+    assert await _dismiss(call) is False
+
+
+@pytest.mark.asyncio
+async def test_dismissing_a_text_dialog_means_cancelled():
+    async def call(page):
+        return await ask_text(page, "T", "M", ft.TextField(value="x"))
+
+    assert await _dismiss(call) is None

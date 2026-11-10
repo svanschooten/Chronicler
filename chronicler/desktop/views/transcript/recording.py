@@ -6,6 +6,7 @@ makes it work identically in full-stack and thin-client mode.
 """
 
 import logging
+import shutil
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -84,7 +85,7 @@ class RecordingDialog:
         def build(on_choice) -> ft.AlertDialog:
             async def finish(_event):
                 await self._finish(name_field.value)
-                on_choice(lambda: None)
+                await on_choice(lambda: None)(_event)
 
             return ft.AlertDialog(
                 title=ft.Text(t("recording.title")),
@@ -97,11 +98,22 @@ class RecordingDialog:
                 ],
             )
 
-        await await_dialog(page, build)
-        if self.recorder is not None and self.recorder.is_recording:
-            self.recorder.stop()
+        try:
+            await await_dialog(page, build)
+        finally:
+            # However the dialog went away - Close, Save or Esc - the microphone goes off.
+            if self.recorder is not None and self.recorder.is_recording:
+                self.recorder.stop()
+            self._discard_recording()
+
+    def _discard_recording(self) -> None:
+        """Removes the recording's temp folder; a saved one was copied by the stager."""
+        if self.temp_path is not None:
+            shutil.rmtree(self.temp_path.parent, ignore_errors=True)
+            self.temp_path = None
 
     async def _start(self, device_index, status, button, device_field) -> None:
+        self._discard_recording()
         self.temp_path = Path(tempfile.mkdtemp(prefix="chronicler-rec-")) / "recording.wav"
         self.recorder = Recorder(self.temp_path, device=device_index)
         try:

@@ -40,6 +40,11 @@ because blocking in an audio callback drops samples.
 `stop()` stops the stream first, then joins the writer, so anything still queued is
 written before the file is closed.
 
+## Closing the dialog
+
+However the dialog closes - Close, Save, Esc or a click outside - the recorder is stopped and
+the recording's temp folder is removed. A saved recording was already copied by the stager.
+
 ## Optional extra
 
 `sounddevice` is the optional `recording` extra, imported lazily. Because recording runs
