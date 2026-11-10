@@ -23,7 +23,11 @@ Hiragino on macOS, Noto CJK or WenQuanYi on Linux) and registers it as a fallbac
 
 It does so only when the transcript has characters DejaVu cannot draw. Loading the 17 MB
 WenQuanYi collection made a 300-line all-Latin export take about a second instead of a
-fifth of one, and exports still run on the UI event loop (ticket 028).
+fifth of one.
+
+`TranscriptService.export_pdf` runs `format_pdf` through `asyncio.to_thread`, so a long
+transcript does not freeze the desktop UI or stall a server's other clients while it is
+laid out.
 
 Subsetting a system font makes fontTools warn about tables it drops, such as the bitmap
 `BDF` table in WenQuanYi. The output is unaffected, so `format_pdf` silences
