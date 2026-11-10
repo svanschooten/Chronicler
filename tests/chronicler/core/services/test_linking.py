@@ -1,8 +1,11 @@
 """Tests for linking a project database that lives outside the workspace."""
 
+import sqlite3
+from unittest.mock import patch
+
 import pytest
 
-from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.database_manager import DatabaseManager, LinkRefusedError
 from chronicler.core.models import TranscriptLine
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.transcript_service import TranscriptService
@@ -281,26 +284,92 @@ class TestHydrationDuration:
 
 
 class TestFailedLink:
-    @pytest.mark.asyncio
-    async def test_a_missing_file_leaves_no_chronicle(self, tmp_path):
+    async def _refused(self, tmp_path, path) -> tuple[LinkRefusedError, int]:
         db_manager, session, service, _ = await _workspace(tmp_path)
         try:
-            with pytest.raises(ValueError, match="no such file"):
-                await service.link_external_chronicle(str(tmp_path / "nope" / "project.db"))
+            with pytest.raises(LinkRefusedError) as refused:
+                await service.link_external_chronicle(str(path))
+            return refused.value, len(await service.list_chronicles())
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_missing_file_leaves_no_chronicle(self, tmp_path):
+        error, count = await self._refused(tmp_path, tmp_path / "nope" / "project.db")
+        assert (error.reason, count) == ("not_found", 0)
+        assert "no such file" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_a_file_that_is_not_a_database_leaves_no_chronicle(self, tmp_path):
+        bogus = tmp_path / "project.db"
+        bogus.write_text("this is not sqlite" * 100)
+        error, count = await self._refused(tmp_path, bogus)
+        assert (error.reason, count) == ("not_chronicler", 0)
+
+    @pytest.mark.asyncio
+    async def test_another_apps_sqlite_file_is_refused_and_left_untouched(self, tmp_path):
+        foreign = tmp_path / "other-app" / "project.db"
+        foreign.parent.mkdir()
+        with sqlite3.connect(foreign) as connection:
+            connection.execute("CREATE TABLE notes (body TEXT)")
+        before = foreign.read_bytes()
+
+        error, count = await self._refused(tmp_path, foreign)
+
+        assert (error.reason, count) == ("not_chronicler", 0)
+        assert foreign.read_bytes() == before
+
+    @pytest.mark.asyncio
+    async def test_an_empty_file_is_refused_and_left_empty(self, tmp_path):
+        empty = tmp_path / "notes" / "project.db"
+        empty.parent.mkdir()
+        empty.touch()
+
+        error, count = await self._refused(tmp_path, empty)
+
+        assert (error.reason, count) == ("not_chronicler", 0)
+        assert empty.stat().st_size == 0
+
+    @pytest.mark.asyncio
+    async def test_a_database_from_a_newer_chronicler_is_refused(self, tmp_path):
+        newer = tmp_path / "future" / "project.db"
+        newer.parent.mkdir()
+        with sqlite3.connect(newer) as connection:
+            connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32))")
+            connection.execute("INSERT INTO alembic_version VALUES ('ffffffffffff')")
+
+        error, count = await self._refused(tmp_path, newer)
+
+        assert (error.reason, count) == ("newer_version", 0)
+
+    @pytest.mark.asyncio
+    async def test_a_failure_while_reading_removes_the_chronicle_again(self, tmp_path):
+        db_manager, session, service, _ = await _workspace(tmp_path)
+        try:
+            project_db = await _external_project(db_manager, tmp_path, [])
+            with (
+                patch.object(service, "hydrate_from_project", side_effect=OSError("disk gone")),
+                pytest.raises(LinkRefusedError) as refused,
+            ):
+                await service.link_external_chronicle(str(project_db))
+            assert (refused.value.reason, refused.value.detail) == ("unreadable", "disk gone")
             assert await service.list_chronicles() == []
         finally:
             await session.close()
             await db_manager.close_all()
 
     @pytest.mark.asyncio
-    async def test_a_file_that_is_not_a_database_leaves_no_chronicle(self, tmp_path):
+    async def test_a_failed_cleanup_does_not_hide_why_the_link_failed(self, tmp_path):
         db_manager, session, service, _ = await _workspace(tmp_path)
         try:
-            bogus = tmp_path / "project.db"
-            bogus.write_text("this is not sqlite" * 100)
-            with pytest.raises(ValueError, match="not a Chronicler database"):
-                await service.link_external_chronicle(str(bogus))
-            assert await service.list_chronicles() == []
+            project_db = await _external_project(db_manager, tmp_path, [])
+            with (
+                patch.object(service, "hydrate_from_project", side_effect=OSError("disk gone")),
+                patch.object(service, "delete_chronicle", side_effect=RuntimeError("also")),
+                pytest.raises(LinkRefusedError, match="disk gone"),
+            ):
+                await service.link_external_chronicle(str(project_db))
         finally:
             await session.close()
             await db_manager.close_all()

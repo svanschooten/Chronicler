@@ -1,10 +1,12 @@
 import asyncio
 import logging
+import sqlite3
 from pathlib import Path
 from uuid import UUID
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -32,6 +34,62 @@ def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
     cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / chain))
     cfg.attributes["connection"] = connection
     command.upgrade(cfg, "head")
+
+
+class LinkRefusedError(ValueError):
+    """
+    A file that cannot be linked as a chronicle. `reason` is one of `REASONS`, so a client
+    can say why in its own language; `detail` is the underlying error, if any.
+    """
+
+    REASONS = {
+        "not_found": "no such file",
+        "not_chronicler": "not a Chronicler database",
+        "newer_version": "made by a newer version of Chronicler",
+        "unreadable": "could not be read",
+    }
+
+    def __init__(self, path: Path | str, reason: str, detail: str = ""):
+        self.path = str(path)
+        self.reason = reason
+        self.detail = detail
+        suffix = f" ({detail})" if detail else ""
+        super().__init__(f"Cannot link {path}: {self.REASONS[reason]}{suffix}")
+
+
+def _known_project_revisions() -> set[str]:
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
+    return {script.revision for script in ScriptDirectory.from_config(cfg).walk_revisions()}
+
+
+def check_linkable_project(path: Path) -> None:
+    """
+    Raises LinkRefusedError unless `path` is a project.db this version of Chronicler can
+    open. Read-only, and before anything is registered: opening a project runs its
+    migrations, which would write Chronicler's tables into any SQLite file it was given.
+    """
+    if not path.is_file():
+        raise LinkRefusedError(path, "not_found")
+    try:
+        connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    except sqlite3.Error as error:
+        raise LinkRefusedError(path, "unreadable", str(error)) from error
+    try:
+        revisions = {
+            row[0] for row in connection.execute("SELECT version_num FROM alembic_version")
+        }
+    except sqlite3.DatabaseError as error:
+        # "file is not a database", or "no such table" for a SQLite file of something else.
+        if "locked" in str(error) or "busy" in str(error):
+            raise LinkRefusedError(path, "unreadable", str(error)) from error
+        raise LinkRefusedError(path, "not_chronicler") from error
+    finally:
+        connection.close()
+    if not revisions:
+        raise LinkRefusedError(path, "not_chronicler")
+    if not revisions <= _known_project_revisions():
+        raise LinkRefusedError(path, "newer_version")
 
 
 def ensure_project_available(chronicle: Chronicle | None, chronicle_id: UUID) -> None:
