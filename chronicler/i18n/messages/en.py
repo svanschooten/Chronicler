@@ -408,5 +408,10 @@ MESSAGES = {
             "The filesystem it is on may not support file locks, as some network and FUSE "
             "mounts do not. Choose a workspace on a local disk, then start Chronicler again."
         ),
+        "workspace_not_writable": ("Chronicler cannot write to the workspace at {path}: {reason}."),
+        "workspace_not_writable_hint": (
+            "Check the folder's permissions, or choose a different workspace, then start "
+            "Chronicler again."
+        ),
     },
 }

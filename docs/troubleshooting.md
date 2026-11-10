@@ -167,6 +167,12 @@ when the process ends, so the message means a running process. Do not delete
 `.chronicler.lock` to get past it: on Linux and macOS that lets the second process in
 while the first is still running. See [storage.md](storage.md#one-process-per-workspace).
 
+## "Chronicler cannot write to the workspace"
+
+The workspace folder cannot be created or written to, and the message ends with the
+operating system's reason, such as "Permission denied" or "Read-only file system". Fix the
+folder's permissions, or choose a different workspace.
+
 ## "Chronicler could not lock the workspace"
 
 The message ends with the operating system's reason, such as "No locks available" or

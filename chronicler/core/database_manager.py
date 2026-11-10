@@ -129,8 +129,8 @@ class DatabaseManager:
         """
         Opens the workspace for this process. Raises WorkspaceLockedError if another
         process has it open: one workspace belongs to one process. Raises
-        WorkspaceLockUnavailableError if its filesystem cannot take the lock at all. See
-        docs/storage.md.
+        WorkspaceLockUnavailableError if its filesystem cannot take the lock at all, and
+        WorkspaceNotWritableError if the folder cannot be written to. See docs/storage.md.
         """
         self._workspace_lock.acquire()
         try:

@@ -429,5 +429,12 @@ MESSAGES = {
             "Netzwerk- und FUSE-Einbindungen. Wähle einen Arbeitsbereich auf einem lokalen "
             "Laufwerk und starte Chronicler dann erneut."
         ),
+        "workspace_not_writable": (
+            "Chronicler kann nicht in den Arbeitsbereich unter {path} schreiben: {reason}."
+        ),
+        "workspace_not_writable_hint": (
+            "Prüfe die Berechtigungen des Ordners oder wähle einen anderen Arbeitsbereich und "
+            "starte Chronicler dann erneut."
+        ),
     },
 }

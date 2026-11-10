@@ -419,5 +419,12 @@ MESSAGES = {
             "sommige netwerk- en FUSE-koppelingen. Kies een werkruimte op een lokale schijf "
             "en start Chronicler daarna opnieuw."
         ),
+        "workspace_not_writable": (
+            "Chronicler kan niet schrijven naar de werkruimte in {path}: {reason}."
+        ),
+        "workspace_not_writable_hint": (
+            "Controleer de rechten van de map of kies een andere werkruimte en start "
+            "Chronicler daarna opnieuw."
+        ),
     },
 }
