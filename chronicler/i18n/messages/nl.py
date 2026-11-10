@@ -405,5 +405,13 @@ MESSAGES = {
             "andere server."
         ),
         "workspace_locked_hint": "Sluit die eerst en start Chronicler daarna opnieuw.",
+        "workspace_lock_unavailable": (
+            "Chronicler kon de werkruimte in {path} niet vergrendelen: {reason}."
+        ),
+        "workspace_lock_unavailable_hint": (
+            "Het bestandssysteem ondersteunt mogelijk geen bestandsvergrendeling, zoals "
+            "sommige netwerk- en FUSE-koppelingen. Kies een werkruimte op een lokale schijf "
+            "en start Chronicler daarna opnieuw."
+        ),
     },
 }
