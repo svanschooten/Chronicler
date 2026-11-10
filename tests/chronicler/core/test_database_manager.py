@@ -1,12 +1,14 @@
 import asyncio
+import sqlite3
 import time
+from contextlib import closing
 
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
 
 from chronicler.core.database import DBChronicle
-from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.database_manager import DatabaseManager, NewerSchemaError
 from chronicler.core.project_database import DBSpeaker
 from chronicler.core.workspace_lock import WorkspaceLockedError
 
@@ -385,3 +387,54 @@ def test_sources_path_for_is_a_pure_lookup(tmp_path):
     assert not path.exists()
     assert db_manager.ensure_sources_path_for("abc") == path
     assert path.is_dir()
+
+
+def _stamp_with_unknown_revision(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32))")
+        connection.execute("INSERT INTO alembic_version VALUES ('ffffffffffff')")
+
+
+def _tables(path) -> set[str]:
+    with closing(sqlite3.connect(path)) as connection:
+        rows = connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        return {name for (name,) in rows}
+
+
+class TestNewerSchema:
+    """A database a newer Chronicler upgraded is refused with a message that says what to do."""
+
+    @pytest.mark.asyncio
+    async def test_a_newer_chronicle_is_refused_and_left_alone(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        project_db = tmp_path / "shared" / "project.db"
+        _stamp_with_unknown_revision(project_db)
+
+        with pytest.raises(NewerSchemaError, match="newer version of Chronicler.*Update"):
+            await db_manager.get_project_session("shared", custom_path=project_db)
+
+        assert _tables(project_db) == {"alembic_version"}
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_newer_workspace_is_refused_and_released(self, tmp_path):
+        _stamp_with_unknown_revision(tmp_path / "chronicler.db")
+        db_manager = DatabaseManager(tmp_path)
+
+        with pytest.raises(NewerSchemaError, match="workspace"):
+            await db_manager.init_archive()
+
+        assert _tables(tmp_path / "chronicler.db") == {"alembic_version"}
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_chronicle_from_this_or_an_older_version_still_opens(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+
+        async with await db_manager.get_project_session("ordinary") as session:
+            await session.execute(select(DBSpeaker))
+        async with await DatabaseManager(tmp_path).get_project_session("ordinary") as session:
+            await session.execute(select(DBSpeaker))
+
+        await db_manager.close_all()

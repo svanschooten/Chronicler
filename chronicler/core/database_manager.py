@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 from uuid import UUID
 
+from sqlalchemy import inspect
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -20,16 +21,54 @@ logger = logging.getLogger(__name__)
 _MIGRATIONS_ROOT = Path(__file__).resolve().parent.parent / "migrations"
 
 
+class NewerSchemaError(RuntimeError):
+    """A database that a newer Chronicler has already upgraded, so this one cannot open it."""
+
+    def __init__(self, chain: str):
+        what = "chronicle" if chain == "project" else "workspace"
+        super().__init__(
+            f"This {what} was made by a newer version of Chronicler. "
+            "Update Chronicler to open it; the file is unchanged."
+        )
+
+
+def _known_revisions(chain: str) -> set[str]:
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / chain))
+    return {script.revision for script in ScriptDirectory.from_config(cfg).walk_revisions()}
+
+
+def _refuse_newer_schema(connection: Connection, chain: str) -> None:
+    """
+    Raises NewerSchemaError if the database is stamped with a revision this version does
+    not have. Without it Alembic stops with "Can't locate revision identified by '...'",
+    which tells the user nothing about what to do. A new database has no stamp yet.
+    """
+    if not inspect(connection).has_table("alembic_version"):
+        return
+    stamped = {
+        row[0] for row in connection.exec_driver_sql("SELECT version_num FROM alembic_version")
+    }
+    if not stamped <= _known_revisions(chain):
+        raise NewerSchemaError(chain)
+
+
 def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
     """
     Run one migration chain ("archive" or "project") to head against an already-open sync
     connection - see chronicler/migrations/<chain>/env.py, which picks this connection up
     via config.attributes["connection"] instead of opening its own engine.
+
+    Refuses a database that a newer Chronicler has upgraded, before touching it.
     """
     # Imported here: thin clients never migrate, and alembic costs about half a second.
     from alembic import command
     from alembic.config import Config
 
+    _refuse_newer_schema(connection, chain)
     logger.info(f"Running {chain} migrations")
     cfg = Config()
     cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / chain))
@@ -58,15 +97,6 @@ class LinkRefusedError(ValueError):
         super().__init__(f"Cannot link {path}: {self.REASONS[reason]}{suffix}")
 
 
-def _known_project_revisions() -> set[str]:
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
-    cfg = Config()
-    cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
-    return {script.revision for script in ScriptDirectory.from_config(cfg).walk_revisions()}
-
-
 def check_linkable_project(path: Path) -> None:
     """
     Raises LinkRefusedError unless `path` is a project.db this version of Chronicler can
@@ -92,7 +122,7 @@ def check_linkable_project(path: Path) -> None:
         connection.close()
     if not revisions:
         raise LinkRefusedError(path, "not_chronicler")
-    if not revisions <= _known_project_revisions():
+    if not revisions <= _known_revisions("project"):
         raise LinkRefusedError(path, "newer_version")
 
 
