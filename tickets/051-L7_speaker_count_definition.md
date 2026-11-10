@@ -10,7 +10,7 @@
 | danger level | Low: a wrong number in the UI. Change risk: low. |
 | reach | All modes |
 | effort | XS |
-| evidence | read in code |
+| evidence | reproduced: deleting all of one speaker's lines in the example transcript left the count at 6 |
 | touches | `chronicler/core/services/transcript_service.py`, `chronicler/core/processing/handlers/` |
 
 ### description
