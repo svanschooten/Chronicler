@@ -1,5 +1,6 @@
 """Tests for the server-identity service a client uses to decide what to offer."""
 
+import threading
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -71,6 +72,21 @@ class TestCapabilities:
 
 
 class TestServerInfo:
+    @pytest.mark.asyncio
+    async def test_capabilities_are_checked_off_the_event_loop(self, settings):
+        loop_thread = threading.get_ident()
+        checked_on = []
+
+        def record(_settings):
+            checked_on.append(threading.get_ident())
+            return {"transcribe"}
+
+        with patch("chronicler.core.services.system_service.capabilities_for", record):
+            info = await SystemService(settings=settings).get_server_info()
+
+        assert checked_on and checked_on[0] != loop_thread
+        assert info.capabilities == ["transcribe"]
+
     @pytest.mark.asyncio
     async def test_it_reports_this_version_and_its_capabilities(self, settings):
         service = SystemService(settings=settings)
