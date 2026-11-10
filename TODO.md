@@ -407,10 +407,9 @@ Fixed in Sprint 1 (2026-08-13):
   (`uuid4()` + whitelisted extension); a 500MB size cap is enforced with cleanup of
   partial files; `python-multipart` moved into `requirements.txt`.
 * [x] **Import tasks trust client input.** `file_path` is confined to the imports
-  directory in `handle_import` (`is_relative_to` check). `regex` is statically checked
-  for catastrophic-backtracking shapes (`chronicler/core/processing/regex_guard.py`)
-  before a task is even created. Note: the static check is a pre-filter, not a CPU-time
-  bound — see the note under Phase 3 below.
+  directory in `handle_import` (`is_relative_to` check). User patterns are compiled with
+  the `regex` package, capped at 500 characters, and every match has a timeout
+  (`chronicler/core/processing/regex_guard.py`).
 * [x] **CI gates nothing.** `continue-on-error` removed from ruff/mypy; flake8 dropped
   (100% overlap with ruff, confirmed by running both); `--cov-fail-under` added.
 
@@ -630,12 +629,9 @@ The UI and services should not depend directly on SQLite.
       `core/worker_wiring.py::build_worker_runtime`, so a newly added handler can't be
       registered in one mode and silently missing in the other (which is exactly how
       TRANSCRIBE nearly shipped desktop-only).
-* [ ] **Per-task CPU timeout.** The regex ReDoS guard (`chronicler/core/processing/
-  regex_guard.py`) is a static shape check, not a CPU-time bound — Python threads can't
-  be force-killed and CPython's regex matcher doesn't release the GIL during
-  backtracking, so a real bound needs a subprocess-based watchdog. Build this as a
-  general per-task timeout in the worker loop (not regex-specific) rather than a
-  one-off version.
+* [ ] **Per-task CPU timeout.** Regex matching is bounded by its own timeout (see
+  `regex_guard.py`), but nothing bounds other CPU-heavy handlers. Build a general
+  per-task timeout in the worker loop if one is needed.
 
 Initial tasks:
 
@@ -894,10 +890,10 @@ Future:
 * [x] Confine import paths to the workspace
     * Fixed 2026-08-13: enforced in `handle_import` (resolve + `is_relative_to` against
       the imports directory), at the point of file access, so it covers any caller.
-* [~] Bound regex execution (ReDoS)
-    * Static pre-filter added 2026-08-13 (`regex_guard.py`) — rejects patterns over 500
-      chars and patterns shaped for catastrophic backtracking. Not a CPU-time bound; see
-      the new item under Phase 3.
+* [x] Bound regex execution (ReDoS)
+    * Replaced the static pre-filter with the `regex` package: patterns over 500 chars
+      are rejected, and every match has a timeout and releases the GIL, so a slow
+      pattern fails its task and the event loop keeps running.
 * [x] Overwrite/append confirmation
     * Fixed 2026-08-13 (Sprint 4 UI fixes): `handle_import` unconditionally called
       `delete_all_lines()` before writing the new file's lines — importing a second

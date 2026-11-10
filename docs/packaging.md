@@ -132,7 +132,6 @@ empirical — each entry is there because a build failed without it:
 | Import | Needed by |
 | ------ | --------- |
 | `aiosqlite` | SQLAlchemy resolves the `sqlite+aiosqlite` dialect by string |
-| `re._parser` | pulled in dynamically by `re` on 3.12 |
 | `logging.config` | `logging.basicConfig` paths reached only at runtime |
 
 Add to both the spec and `scripts/pack.sh` when a new one turns up.
