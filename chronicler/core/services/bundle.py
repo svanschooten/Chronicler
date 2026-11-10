@@ -1,6 +1,5 @@
 """Chronicle archive (.zip) packing - a portable copy of one chronicle's own storage."""
 
-import io
 import json
 import zipfile
 from collections.abc import Sequence
@@ -55,6 +54,28 @@ class BundleManifest(BaseModel):
         )
 
 
+class _Archive:
+    """
+    Where the zip is written: straight into the bytearray that gets returned.
+
+    A BytesIO had to be copied out at the end. With audio that is hundreds of megabytes
+    copied in one step that holds the GIL, which stalls the event loop even though the
+    bundle is built on a worker thread. zipfile only needs `write` and `flush`; given
+    nothing to seek in, it writes each entry's sizes after its data instead of going back
+    to fill them in.
+    """
+
+    def __init__(self) -> None:
+        self.data = bytearray()
+
+    def write(self, chunk: bytes) -> int:
+        self.data += chunk
+        return len(chunk)
+
+    def flush(self) -> None:
+        pass
+
+
 def format_bundle(
     project_db: Path,
     manifest: BundleManifest,
@@ -65,8 +86,8 @@ def format_bundle(
     Packs a chronicle into a zip, everything under one `root` folder so unpacking it
     somewhere busy leaves one directory behind rather than loose files.
     """
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:
+    buffer = _Archive()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:  # type: ignore[call-overload]
         bundle.writestr(
             f"{root}/{MANIFEST_NAME}",
             json.dumps(json.loads(manifest.model_dump_json()), indent=2) + "\n",
@@ -75,7 +96,7 @@ def format_bundle(
         for source in sources:
             bundle.write(source, f"{root}/{SOURCES_DIR}/{source.name}")
 
-    return bytearray(buffer.getvalue())
+    return buffer.data
 
 
 def safe_folder_name(title: str, fallback: str = "chronicle") -> str:
