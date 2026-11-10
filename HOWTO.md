@@ -76,12 +76,12 @@ workspace_path: /home/user/ChroniclerWorkspace
 api_key: some-secret-key
 server_url: null
 app_name: Chronicler
-mode: desktop:full_stack
+mode: full_stack
 dark_mode: true
 ```
 
-`mode` is one of `desktop:full_stack`, `desktop:thin_client` or `server`,
-and is written by the wizard. A config saved before `mode` existed still works — the
+`mode` is one of `full_stack`, `thin_client` or `server`, and is written by the wizard.
+The older spellings `desktop:full_stack` and `desktop:thin_client` still load. A config saved before `mode` existed still works — the
 mode is inferred from whether a workspace path or a server URL is present.
 
 Chronicler validates the configuration against the mode it is starting in, and re-runs

@@ -55,15 +55,27 @@ called it directly.
 
 ## `Settings.mode`
 
-One of `server`, `desktop:full_stack`, `desktop:thin_client`, set by `ConfigWizard`
-once it knows which of the three concrete setups was chosen.
+One `Mode` enum (`core/config.py`) names the three setups everywhere: `full_stack`,
+`thin_client` and `server`. The wizards store it once they know which was chosen.
 
-It is recorded rather than re-derived because desktop's two sub-modes are not otherwise
+It is recorded rather than re-derived because desktop's two modes are not otherwise
 distinguishable from settings alone — both can have `workspace_path` and `server_url`
 set at once, for example after switching modes once.
 
-`DesktopRuntime` infers the mode the way `desktop/main.py` used to for configs saved
-before this field existed, rather than forcing a re-run of the wizard.
+Loading accepts what earlier versions saved: `desktop:full_stack` and
+`desktop:thin_client` map to the new values, and `client:web` or any unknown value reads
+as unset, with a warning.
+
+Three members of `Settings` answer every mode question, so validation, `build_runtime`
+and the Settings page cannot disagree:
+
+| Member | Answers |
+| ------ | ------- |
+| `effective_mode` | The stored mode. Without one: thin client when there is a server URL and no workspace, else full stack |
+| `desktop_mode` | `effective_mode`, with `server` read as full stack: a server's configuration opens its workspace locally |
+| `validate_for_mode(mode)` | Whether the settings are complete for that mode: a workspace for full stack, a server URL and API key for thin client, a workspace and API key for server |
+
+The command line takes `desktop` or `server`. `desktop` runs in `desktop_mode`.
 
 ## Serialisation
 
@@ -93,12 +105,12 @@ console to ask questions through.
 
 | Mode | Wizard | Where |
 | ---- | ------ | ----- |
-| `client:desktop` | `FletSetupWizard` | `desktop/views/wizard.py`, on screen |
+| desktop | `FletSetupWizard` | `desktop/views/wizard.py`, on screen |
 | `server` | `ConfigWizard` | `core/wizard.py`, on stdin |
 
 The split exists because the packaged desktop build is windowless and has no stdin at
 all — see [packaging.md](packaging.md). `__main__.main()` simply does not call
-`run_wizard` for `client:desktop`; `desktop.main.start()` gates the Flet one on the same
+`run_wizard` for the desktop; `desktop.main.start()` gates the Flet one on the same
 `validate_for_mode()` check, inside the Flet session so it can draw.
 
 Both write the same `Settings` fields, so a config produced by either is

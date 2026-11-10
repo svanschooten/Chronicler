@@ -19,7 +19,8 @@ again, Flet's web mode over the thin client is the first thing to try. The code 
 history.
 
 A config still saved with `mode: client:web` reads as if no mode were set, with a warning.
-The desktop then infers thin client from its server URL instead of failing to start.
+The desktop then infers thin client from its server URL instead of failing to start. See
+[configuration.md](configuration.md#settingsmode).
 
 ## The generated API
 
