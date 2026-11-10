@@ -157,7 +157,7 @@ Small and independent. Users hit the first four, and the rest are under an hour 
 
 - [x] [072-M13 A failed link leaves a broken chronicle, and Link cannot work on a thin client](072-M13_failed_link_leaves_chronicle.md) · medium · S
 
-- [ ] [049-L5 "Open folder" on a thin client tries to open a server path](049-L5_open_folder_thin_client.md) · low · XS · after 025
+- [x] [049-L5 "Open folder" on a thin client tries to open a server path](049-L5_open_folder_thin_client.md) · low · XS · after 025
 
 - [x] [073-M14 Dismissing a dialog leaves its action waiting forever, and a recording keeps running](073-M14_dismissed_dialogs_hang.md) · medium · S
 
