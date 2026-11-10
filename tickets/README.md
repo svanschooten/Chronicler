@@ -134,7 +134,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [026-M9 A web-client config crashes the desktop app](026-M9_stale_mode_crashes_desktop.md) · medium · closed by 012
 
-- [ ] [027-M7 A finished task rebuilds the view on screen](027-M7_refresh_view_in_place.md) · medium · M
+- [x] [027-M7 A finished task rebuilds the view on screen](027-M7_refresh_view_in_place.md) · medium · M
 
 - [ ] [028-P1 PDF and zip exports freeze the app](028-P1_exports_off_event_loop.md) · medium · XS
 
