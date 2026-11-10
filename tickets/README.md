@@ -183,9 +183,9 @@ Stop a pattern from freezing the app, make opening chronicles cheap, settle what
 
 - [x] [031-S5 Project databases keep a thread and a file open per chronicle](031-S5_nullpool_project_engines.md) · medium · XS
 
-- [ ] [032-S4 Give project database access one helper and one owner](032-S4_project_db_access.md) · medium · M · after 010, 011, 021
+- [x] [032-S4 Give project database access one helper and one owner](032-S4_project_db_access.md) · medium · M · after 010, 011, 021
 
-- [ ] [033-L1 Three panel loads share one database session](033-L1_shared_session_panel_loads.md) · low · closed by 032
+- [x] [033-L1 Three panel loads share one database session](033-L1_shared_session_panel_loads.md) · low · closed by 032
 
 - [ ] [074-A2 A chronicle opened by a newer Chronicler cannot be opened by an older one](074-A2_schema_versions_for_shared_chronicles.md) · medium · S
 
