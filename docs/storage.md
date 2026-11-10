@@ -32,6 +32,16 @@ Windows), and `close_all` releases it. A second desktop app or server on the sam
 workspace gets `WorkspaceLockedError`: the desktop shows it on the startup screen, and
 the server exits with status 1 and the message.
 
+The lock call can also fail because the filesystem cannot take a lock at all: some NFS,
+SMB and FUSE mounts answer `flock` with `ENOLCK`, `EINVAL` or `EOPNOTSUPP`. That raises
+`WorkspaceLockUnavailableError`, reported the same two ways but naming the OS error and
+suggesting a local disk. Only "held by someone else" counts as locked: `EWOULDBLOCK`,
+`EAGAIN` or `EACCES` from `flock`, and `EACCES` or `EDEADLOCK` from `msvcrt.locking`.
+
+`init_archive` releases the lock again if anything after taking it fails, including
+creating `imports/`. After `close_all` the manager no longer holds the lock, but its
+engines would reconnect if used; nothing reuses a closed manager today.
+
 Sharing a workspace between processes would need task leases and heartbeats so a crashed
 worker's tasks could be told apart from a live one's. Ruling it out keeps task recovery a
 plain reset at startup.
