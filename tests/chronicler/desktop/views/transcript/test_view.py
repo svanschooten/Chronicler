@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import flet as ft
 import pytest
 
+from chronicler.core.config import Mode, Settings
 from chronicler.core.models import Chronicle, Tag, TranscriptLine
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.transcript import TranscriptView
@@ -558,8 +559,6 @@ class TestRefresh:
 
 
 def test_open_folder_is_hidden_for_a_thin_client(make_view):
-    from chronicler.core.config import Mode, Settings
-
     full = make_view(settings=Settings(mode=Mode.FULL_STACK))
     thin = make_view(settings=Settings(server_url="http://server:8000", workspace_path=None))
 
