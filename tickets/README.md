@@ -165,7 +165,7 @@ Small and independent. Users hit the first four, and the rest are under an hour 
 
 - [ ] [054-L10 Config files can be misread and overwritten](054-L10_config_encoding_and_atomic_save.md) · low · XS · after 015
 
-- [ ] [055-L11 Workspace validation exists but never runs](055-L11_workspace_validation.md) · low · XS
+- [x] [055-L11 Workspace validation exists but never runs](055-L11_workspace_validation.md) · low · XS
 
 - [ ] [039-P4 Checking extras can stall startup](039-P4_extras_check_off_event_loop.md) · low · XS
 
