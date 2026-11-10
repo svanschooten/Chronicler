@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chronicler.core.database_manager import DatabaseManager, ensure_project_available
+from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import AudioSource, Summary, TranscriptLine
 from chronicler.core.processing.fingerprint import fingerprint_file
@@ -68,23 +68,13 @@ class TranscriptService:
         self.chronicle_repository = chronicle_repository
         self.known_speakers = known_speakers
 
-    async def _get_repository(
-        self, chronicle_id: UUID
-    ) -> tuple[AsyncSession, SQLiteTranscriptRepository]:
-        custom_path = await self._project_path(chronicle_id, must_exist=True)
-        session = await self.db_manager.get_project_session(
-            str(chronicle_id), custom_path=custom_path
-        )
-        return session, SQLiteTranscriptRepository(session)
-
     async def _project_session(self, chronicle_id: UUID) -> AsyncSession:
-        session, _ = await self._get_repository(chronicle_id)
-        return session
+        """A session on the chronicle's database. Raises for an unknown or moved one."""
+        return await self.db_manager.get_project_session(chronicle_id, must_exist=True)
 
     async def get_transcript(self, chronicle_id: UUID) -> list[TranscriptLine]:
-        session, repo = await self._get_repository(chronicle_id)
-        async with session:
-            return await repo.get_lines()
+        async with await self._project_session(chronicle_id) as session:
+            return await SQLiteTranscriptRepository(session).get_lines()
 
     async def update_line(
         self,
@@ -100,17 +90,12 @@ class TranscriptService:
         a name learned while correcting a transcript is offered the next time a track is
         transcribed. See docs/transcript-editing.md.
         """
-        session, repo = await self._get_repository(chronicle_id)
-        async with session:
-            try:
-                speaker_id = None
-                if speaker_name:
-                    speaker_id = (await repo.get_or_create_speaker(speaker_name)).id
-                line = await repo.update_line(line_id, text=text, speaker_id=speaker_id)
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
+        async with self.db_manager.transaction(chronicle_id) as session:
+            repo = SQLiteTranscriptRepository(session)
+            speaker_id = None
+            if speaker_name:
+                speaker_id = (await repo.get_or_create_speaker(speaker_name)).id
+            line = await repo.update_line(line_id, text=text, speaker_id=speaker_id)
 
         if speaker_name:
             await self._remember_speaker(speaker_name)
@@ -118,14 +103,8 @@ class TranscriptService:
 
     async def delete_line(self, chronicle_id: UUID, line_id: UUID) -> None:
         """Removes one line. The speaker row stays - it still names an audio source."""
-        session, repo = await self._get_repository(chronicle_id)
-        async with session:
-            try:
-                await repo.delete_line(line_id)
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
+        async with self.db_manager.transaction(chronicle_id) as session:
+            await SQLiteTranscriptRepository(session).delete_line(line_id)
 
     async def export_plaintext(self, chronicle_id: UUID, include_timestamps: bool = False) -> str:
         lines = [line for line in await self.get_transcript(chronicle_id) if line.text.strip()]
@@ -155,22 +134,10 @@ class TranscriptService:
                 )
         return "\n".join(formatted)
 
-    async def _project_path(self, chronicle_id: UUID, must_exist: bool = False) -> Path | None:
-        """
-        A linked chronicle's project.db. With `must_exist`, an unknown chronicle or a
-        linked file that has moved raises instead of getting a fresh empty database.
-        """
-        chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
-        if must_exist:
-            ensure_project_available(chronicle, chronicle_id)
-        if chronicle and chronicle.project_path:
-            return Path(chronicle.project_path)
-        return None
-
     async def sources_dir(self, chronicle_id: UUID) -> Path:
         """Beside a linked project.db, otherwise in the workspace - see docs/audio-sources.md."""
         return self.db_manager.sources_path_for(
-            str(chronicle_id), await self._project_path(chronicle_id)
+            str(chronicle_id), await self.db_manager.project_path_for(chronicle_id)
         )
 
     async def source_path(self, chronicle_id: UUID, filename: str) -> Path:
@@ -233,7 +200,6 @@ class TranscriptService:
             snapshot = await self.db_manager.snapshot_project(
                 str(chronicle_id),
                 Path(workspace) / DATABASE_NAME,
-                custom_path=await self._project_path(chronicle_id),
             )
             # Off the event loop, like the PDF: with audio this compresses for seconds.
             return await asyncio.to_thread(
@@ -246,15 +212,12 @@ class TranscriptService:
 
     async def list_summaries(self, chronicle_id: UUID) -> list[Summary]:
         """Every generated summary, numbered in the order they were produced."""
-        session = await self._project_session(chronicle_id)
-        async with session:
+        async with await self._project_session(chronicle_id) as session:
             return await SQLiteSummaryRepository(session).list_summaries()
 
     async def delete_summary(self, chronicle_id: UUID, summary_id: UUID) -> None:
-        session = await self._project_session(chronicle_id)
-        async with session:
+        async with self.db_manager.transaction(chronicle_id) as session:
             await SQLiteSummaryRepository(session).delete(summary_id)
-            await session.commit()
 
     async def read_transcript_text(
         self, chronicle_id: UUID, include_timestamps: bool = False
@@ -267,15 +230,14 @@ class TranscriptService:
         Where this chronicle's files live, so a local client can offer to open it. Not
         exposed over RPC: on a thin client the path would be the server's.
         """
-        chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
-        if chronicle and chronicle.project_path:
-            return str(Path(chronicle.project_path).parent)
+        project_path = await self.db_manager.project_path_for(chronicle_id)
+        if project_path:
+            return str(project_path.parent)
         return str(self.db_manager.workspace_path / "chronicles" / str(chronicle_id))
 
     async def list_audio_sources(self, chronicle_id: UUID) -> list[AudioSource]:
         """This chronicle's tracks, reconciling what is on disk with the recorded state."""
-        session = await self._project_session(chronicle_id)
-        async with session:
+        async with self.db_manager.transaction(chronicle_id) as session:
             repo = SQLiteAudioSourceRepository(session)
             present = set()
             for path in await self._on_disk(chronicle_id):
@@ -285,7 +247,6 @@ class TranscriptService:
                     content_hash=fingerprint_file(path),
                     size_bytes=path.stat().st_size,
                 )
-            await session.commit()
             sources = await repo.list_sources()
 
         for source in sources:
@@ -297,22 +258,18 @@ class TranscriptService:
         self, chronicle_id: UUID, filename: str, speaker_name: str | None
     ) -> AudioSource | None:
         """Remembers which speaker a track belongs to, creating the speaker if needed."""
-        session = await self._project_session(chronicle_id)
-        async with session:
+        async with self.db_manager.transaction(chronicle_id) as session:
             transcripts = SQLiteTranscriptRepository(session)
             sources = SQLiteAudioSourceRepository(session)
-            try:
-                speaker_id = None
-                if speaker_name:
-                    speaker_id = (await transcripts.get_or_create_speaker(speaker_name)).id
-                await sources.set_speaker(filename, speaker_id)
-                await session.commit()
-                if speaker_name:
-                    await self._remember_speaker(speaker_name)
-            except Exception:
-                await session.rollback()
-                raise
-            return await sources.get_by_filename(filename)
+            speaker_id = None
+            if speaker_name:
+                speaker_id = (await transcripts.get_or_create_speaker(speaker_name)).id
+            await sources.set_speaker(filename, speaker_id)
+            source = await sources.get_by_filename(filename)
+
+        if speaker_name:
+            await self._remember_speaker(speaker_name)
+        return source
 
     async def _remember_speaker(self, name: str) -> None:
         """Adds a name to the workspace-wide registry, ignoring a registry-side failure."""
@@ -336,9 +293,9 @@ class TranscriptService:
         return sorted(names, key=str.casefold)
 
     async def list_speaker_names(self, chronicle_id: UUID) -> list[str]:
-        session, repo = await self._get_repository(chronicle_id)
-        async with session:
-            return sorted(speaker.name for speaker in await repo.get_speakers())
+        async with await self._project_session(chronicle_id) as session:
+            speakers = await SQLiteTranscriptRepository(session).get_speakers()
+        return sorted(speaker.name for speaker in speakers)
 
     async def refresh_speaker_count(self, chronicle_id: UUID) -> int:
         """
@@ -346,9 +303,8 @@ class TranscriptService:
         manual reconciliation action for chronicles imported before this existed, or
         whose transcript was hand-edited since.
         """
-        session, repo = await self._get_repository(chronicle_id)
-        async with session:
-            speakers = await repo.get_speakers()
+        async with await self._project_session(chronicle_id) as session:
+            speakers = await SQLiteTranscriptRepository(session).get_speakers()
         count = len(speakers)
 
         for speaker in speakers:

@@ -49,8 +49,7 @@ class NormalizeHandler(HandlerBase):
             await self.sources_root_for(chronicle_id),
             "the chronicle's sources directory",
         )
-        session = await self.project_session(chronicle_id)
-        async with session:
+        async with self.transaction(chronicle_id) as session:
             repo = SQLiteAudioSourceRepository(session)
             source = await repo.get_by_filename(resolved.name)
             if source is None:
@@ -60,7 +59,6 @@ class NormalizeHandler(HandlerBase):
                 await repo.mark_transcription_failed(resolved.name, error)
             if source.normalization_state == SourceState.RUNNING:
                 await repo.mark_normalization_failed(resolved.name, error)
-            await session.commit()
 
     async def ensure_normalized(
         self, chronicle_id: UUID, source: Path, force: bool = False
@@ -88,8 +86,7 @@ class NormalizeHandler(HandlerBase):
             await self._mark_failed(chronicle_id, source.name, str(error))
             raise
 
-        session = await self.project_session(chronicle_id)
-        async with session:
+        async with self.transaction(chronicle_id) as session:
             repo = SQLiteAudioSourceRepository(session)
             await repo.mark_normalized(
                 source.name,
@@ -98,7 +95,6 @@ class NormalizeHandler(HandlerBase):
                 loudness_before=result.loudness_before,
                 loudness_after=result.loudness_after,
             )
-            await session.commit()
         return result.output_path
 
     async def transcription_source(self, chronicle_id: UUID, source: Path) -> Path:
@@ -110,30 +106,24 @@ class NormalizeHandler(HandlerBase):
         return normalized if normalized.exists() else source
 
     async def _source_record(self, chronicle_id: UUID, source: Path) -> AudioSource | None:
-        session = await self.project_session(chronicle_id)
-        async with session:
+        async with self.transaction(chronicle_id) as session:
             repo = SQLiteAudioSourceRepository(session)
             await repo.register(
                 source.name,
                 content_hash=fingerprint_file(source) if source.exists() else None,
                 size_bytes=source.stat().st_size if source.exists() else None,
             )
-            await session.commit()
             return await repo.get_by_filename(source.name)
 
     async def _mark_running(self, chronicle_id: UUID, source: Path) -> None:
-        session = await self.project_session(chronicle_id)
-        async with session:
+        async with self.transaction(chronicle_id) as session:
             await SQLiteAudioSourceRepository(session).mark_normalizing(source.name)
-            await session.commit()
 
     async def _mark_failed(self, chronicle_id: UUID, filename: str, error: str) -> None:
-        session = await self.project_session(chronicle_id)
-        async with session:
-            try:
+        try:
+            async with self.transaction(chronicle_id) as session:
                 await SQLiteAudioSourceRepository(session).mark_normalization_failed(
                     filename, error
                 )
-                await session.commit()
-            except KeyError:
-                await session.rollback()
+        except KeyError:
+            pass  # the source row is gone, so there is nothing to mark
