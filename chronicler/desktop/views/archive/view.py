@@ -147,6 +147,10 @@ class ArchiveView(ft.Column):
     def show_snackbar(self, message: str):
         self.page.show_dialog(ft.SnackBar(ft.Text(message)))
 
+    async def refresh(self) -> None:
+        """Re-reads the list after a task finished, keeping the search and any open form."""
+        await self.load_chronicles()
+
     async def refresh_clicked(self, e):
         await self.load_chronicles()
 
