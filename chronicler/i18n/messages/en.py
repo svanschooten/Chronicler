@@ -210,6 +210,10 @@ MESSAGES = {
         "deleted": "Deleted '{title}'",
         "delete_failed": "Could not delete the chronicle: {error}",
         "failed": "Error: {error}",
+        "link_not_found": "Cannot link {path}: the file was not found",
+        "link_not_chronicler": "Cannot link {path}: it is not a Chronicler database",
+        "link_newer_version": "Cannot link {path}: it was made by a newer version of Chronicler",
+        "link_unreadable": "Cannot link {path}: it could not be read ({detail})",
         "transcript_exists_title": "Transcript already exists",
         "transcript_exists_message": (
             "This chronicle already has an imported transcript. Overwrite it with the "

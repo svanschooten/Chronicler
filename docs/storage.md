@@ -237,11 +237,16 @@ database was.
 The title comes from the containing directory, falling back to the filename when that
 directory is the generic `chronicles`.
 
-A file that does not exist, or that is not a Chronicler database, is refused before a
-chronicle is registered, and one that fails while being read is removed again. The error
-names the path and the reason, and the chronicle count is unchanged. A thin client does
-not offer *Link*: the picker returns a path on the client's machine, and the server would
-look for it on its own disk.
+Before anything is registered, `check_linkable_project` opens the file read-only and
+refuses it with a `LinkRefusedError` when it does not exist, is not a Chronicler project
+database (no `alembic_version` table: another app's SQLite file, an empty file, or not
+SQLite at all), or carries a revision this version does not know, meaning a newer
+Chronicler made it. This check comes first because opening a project runs its migrations,
+which would otherwise write Chronicler's tables into whatever file was picked. A file that
+passes but then fails while being read is unregistered again and refused as unreadable.
+Either way the chronicle count is unchanged, and the error's `reason` lets the desktop say
+why in the user's language. A thin client does not offer *Link*: the picker returns a path
+on the client's machine, and the server would look for it on its own disk.
 
 `hydrate_from_project` is separate from the link so it can be re-run — the chronicle
 view's *Identify speakers* covers the speaker half of the same job.

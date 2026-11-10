@@ -211,6 +211,12 @@ MESSAGES = {
         "deleted": "'{title}' verwijderd",
         "delete_failed": "Kon de kroniek niet verwijderen: {error}",
         "failed": "Fout: {error}",
+        "link_not_found": "Kan {path} niet koppelen: het bestand is niet gevonden",
+        "link_not_chronicler": "Kan {path} niet koppelen: het is geen Chronicler-database",
+        "link_newer_version": (
+            "Kan {path} niet koppelen: het is gemaakt door een nieuwere versie van Chronicler"
+        ),
+        "link_unreadable": "Kan {path} niet koppelen: het kon niet worden gelezen ({detail})",
         "transcript_exists_title": "Er is al een transcript",
         "transcript_exists_message": (
             "Deze Chronicle heeft al een geimporteerd transcript. Overschrijven met het "

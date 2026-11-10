@@ -661,3 +661,15 @@ async def test_cleanup_closes_the_shared_http_client(desktop_app):
     await desktop_app.cleanup(None)
 
     assert client.is_closed
+
+
+@pytest.mark.asyncio
+async def test_the_archive_offers_link_only_where_the_picked_path_is_the_servers(
+    desktop_app, monkeypatch
+):
+    """A thin client's picker returns a path on its own machine, which the server cannot see."""
+    desktop_app.state.navigate_to(ViewType.ARCHIVE)
+    assert (await desktop_app._build_view()).can_link is True
+
+    monkeypatch.setattr(Settings, "desktop_mode", property(lambda self: Mode.THIN_CLIENT))
+    assert (await desktop_app._build_view()).can_link is False

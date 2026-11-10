@@ -4,7 +4,11 @@ import shutil
 from pathlib import Path
 from uuid import UUID
 
-from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.database_manager import (
+    DatabaseManager,
+    LinkRefusedError,
+    check_linkable_project,
+)
 from chronicler.core.file_staging import confine_to_directory, safe_display_name
 from chronicler.core.formatting import format_duration, looks_synthetic
 from chronicler.core.models import Chronicle
@@ -60,15 +64,19 @@ class ChronicleService:
         "Imported" with no speakers is the state this replaces. See docs/storage.md.
         """
         path = Path(project_path)
-        if not path.is_file():
-            raise ValueError(f"Cannot link {path}: no such file")
+        await asyncio.to_thread(check_linkable_project, path)
         chronicle = await self.create_chronicle(_title_for(path), project_path=str(path))
         try:
             return await self.hydrate_from_project(chronicle.id)
         except Exception as error:
-            # Leave nothing behind that opens onto the same error again.
-            await self.delete_chronicle(chronicle.id)
-            raise ValueError(f"Cannot link {path}: not a Chronicler database ({error})") from error
+            # Leave nothing behind that opens onto the same error again. A failure to
+            # clean up is logged, so it does not hide why the link failed.
+            try:
+                await self.delete_chronicle(chronicle.id)
+            except Exception:
+                logger.exception(f"Could not remove the failed link {chronicle.id}")
+            detail = str(getattr(error, "orig", None) or error)
+            raise LinkRefusedError(path, "unreadable", detail) from error
 
     async def hydrate_from_project(self, chronicle_id: UUID) -> Chronicle:
         """Fills in speaker count, duration and status from what the project db holds."""

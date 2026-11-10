@@ -217,6 +217,12 @@ MESSAGES = {
         "deleted": "'{title}' geloescht",
         "delete_failed": "Chronik konnte nicht geloescht werden: {error}",
         "failed": "Fehler: {error}",
+        "link_not_found": "{path} kann nicht verknüpft werden: Die Datei wurde nicht gefunden",
+        "link_not_chronicler": "{path} kann nicht verknüpft werden: Keine Chronicler-Datenbank",
+        "link_newer_version": (
+            "{path} kann nicht verknüpft werden: Mit einer neueren Chronicler-Version erstellt"
+        ),
+        "link_unreadable": ("{path} kann nicht verknüpft werden: Nicht lesbar ({detail})"),
         "transcript_exists_title": "Es gibt schon ein Transkript",
         "transcript_exists_message": (
             "Diese Chronicle hat bereits ein importiertes Transkript. Mit der neuen Datei "

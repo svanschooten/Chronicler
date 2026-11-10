@@ -6,9 +6,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from uuid import UUID
 
+from chronicler.core.database_manager import LinkRefusedError
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
+from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -111,5 +113,9 @@ class ImportCoordinator:
         One service call, so the naming, the speaker registry and the metadata it can
         read out of the file all happen server-side - see docs/storage.md.
         """
-        chronicle = await self.chronicle_service.link_external_chronicle(file_path)
+        try:
+            chronicle = await self.chronicle_service.link_external_chronicle(file_path)
+        except LinkRefusedError as refused:
+            logger.warning(str(refused))
+            return t(f"actions.link_{refused.reason}", path=refused.path, detail=refused.detail)
         return f"Linked '{chronicle.title}' - {chronicle.speakers_count} speaker(s)"

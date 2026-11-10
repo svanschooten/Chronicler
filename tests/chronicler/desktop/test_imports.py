@@ -223,3 +223,19 @@ async def test_link_chronicle_reports_what_the_service_found(make_coordinator, t
 
     assert "Emberfall session 14" in message
     assert "4" in message
+
+
+@pytest.mark.asyncio
+async def test_a_refused_link_says_why_in_the_users_language(make_coordinator, tmp_path):
+    from chronicler.core.database_manager import LinkRefusedError
+
+    chronicle_service = AsyncMock()
+    chronicle_service.link_external_chronicle.side_effect = LinkRefusedError(
+        tmp_path / "project.db", "newer_version"
+    )
+    coordinator = make_coordinator(chronicle_service=chronicle_service)
+
+    message = await coordinator.link_chronicle(str(tmp_path / "project.db"))
+
+    assert "newer version" in message
+    assert str(tmp_path / "project.db") in message
