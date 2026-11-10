@@ -175,6 +175,8 @@ class Settings(BaseSettings):
         if mode is None or isinstance(mode, Mode):
             return mode
         if mode in LEGACY_MODES:
+            if LEGACY_MODES[mode] is None:
+                logger.warning("The mode %r was removed; ignoring it in the config", mode)
             return LEGACY_MODES[mode]
         try:
             return Mode(mode)

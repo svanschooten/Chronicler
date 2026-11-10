@@ -512,3 +512,23 @@ def test_a_saved_web_client_mode_reads_as_unset(isolated_config):
     assert settings.mode is None
     assert settings.desktop_mode is Mode.THIN_CLIENT
     assert settings.validate_for_mode(settings.desktop_mode) is True
+
+
+@pytest.mark.parametrize("stored", ["client:web", "some-future-mode"])
+def test_a_mode_read_as_unset_is_warned_about(isolated_config, caplog, stored):
+    (isolated_config / ".chronicler_config.yaml").write_text(yaml.dump({"mode": stored}))
+
+    with caplog.at_level("WARNING"):
+        Settings()
+
+    assert any(stored in record.getMessage() for record in caplog.records)
+
+
+def test_a_renamed_mode_loads_without_a_warning(isolated_config, caplog):
+    config_file = isolated_config / ".chronicler_config.yaml"
+    config_file.write_text(yaml.dump({"mode": "desktop:thin_client"}))
+
+    with caplog.at_level("WARNING"):
+        Settings()
+
+    assert not caplog.records
