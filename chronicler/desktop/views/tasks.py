@@ -80,6 +80,10 @@ class TasksView(ft.Column):
     def show_snackbar(self, message: str):
         self.page.show_dialog(ft.SnackBar(ft.Text(message)))
 
+    async def refresh(self) -> None:
+        """Re-reads the list after a task finished, keeping the search and the filter."""
+        await self.load_tasks()
+
     async def refresh_clicked(self, e):
         await self.load_tasks()
 

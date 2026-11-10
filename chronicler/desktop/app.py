@@ -58,6 +58,7 @@ class DesktopApp:
         self.capabilities: set[str] | None = None
         self.model_error: str | None = None
         self._view_scope: Container | None = None
+        self.current_view: ft.Control | None = None
         logger.debug("DesktopApp constructed")
 
     async def main(self, page: ft.Page):
@@ -155,12 +156,17 @@ class DesktopApp:
 
     async def _on_task_completed(self, event: TaskCompletedEvent) -> None:
         """
-        Refreshes whatever view is currently on screen if a just-finished task could
+        Asks the view on screen to re-read its data if a just-finished task could
         plausibly have changed what it's showing - a chronicle's transcript, speaker
         count, duration, status or tags after import/clean/transcribe, or the task list
         itself.
+
+        The view object stays. Building a new one, as `update_view()` does, would reset
+        search text, detach an open form and drop the transcript out of edit mode along
+        with whatever was being typed. See docs/desktop.md.
         """
-        if self.state.current_view == ViewType.SETTINGS:
+        refresh = getattr(self.current_view, "refresh", None)
+        if refresh is None:
             return
         if (
             self.state.current_view == ViewType.TRANSCRIPT
@@ -171,7 +177,7 @@ class DesktopApp:
             return
 
         logger.debug(f"Refreshing current view after task {event.task_id} completed")
-        await self.update_view()
+        await refresh()
 
     async def on_sidebar_nav_change(self, view_id: str):
         view = ViewType.from_nav_id(view_id)
@@ -274,6 +280,7 @@ class DesktopApp:
         if content is None:
             return
 
+        self.current_view = content
         if self.content_area is not None:
             self.content_area.content = content
             self.content_area.update()
