@@ -97,7 +97,9 @@ chronicle id, never a path:
   file that has moved into `FileNotFoundError`, instead of silently creating a new empty
   database. Handlers without an archive connection to check against skip it.
 
-The cache assumes a chronicle's `project_path` does not change after it is created.
+The cache is dropped by `close_project`, which runs whenever the cached answer stops being
+true: `ChronicleService.update_chronicle` calls it when `project_path` changes, and
+`delete_chronicle` after the row is gone.
 
 ## Migrations are serialised process-wide
 

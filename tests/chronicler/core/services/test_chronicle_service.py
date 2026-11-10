@@ -153,6 +153,36 @@ async def test_delete_chronicle_closes_a_linked_project_database_too(tmp_path):
     db_manager.close_project.assert_awaited_once_with(str(chronicle_id))
 
 
+def _repo_holding(chronicle: Chronicle):
+    repo = MagicMock(spec=ChronicleRepository)
+    repo.get_by_id = AsyncMock(return_value=chronicle)
+    repo.update = AsyncMock(side_effect=lambda updated: updated)
+    return repo
+
+
+@pytest.mark.asyncio
+async def test_changing_a_project_path_forgets_the_old_location(tmp_path):
+    chronicle = Chronicle(title="Moved", project_path=str(tmp_path / "old" / "project.db"))
+    db_manager = _db_manager(tmp_path)
+    service = ChronicleService(_repo_holding(chronicle), db_manager)
+
+    moved = chronicle.model_copy(update={"project_path": str(tmp_path / "new" / "project.db")})
+    await service.update_chronicle(moved)
+
+    db_manager.close_project.assert_awaited_once_with(str(chronicle.id))
+
+
+@pytest.mark.asyncio
+async def test_an_update_that_keeps_the_project_path_keeps_the_database_open(tmp_path):
+    chronicle = Chronicle(title="Same", project_path=str(tmp_path / "project.db"))
+    db_manager = _db_manager(tmp_path)
+    service = ChronicleService(_repo_holding(chronicle), db_manager)
+
+    await service.update_chronicle(chronicle.model_copy(update={"title": "Renamed"}))
+
+    db_manager.close_project.assert_not_awaited()
+
+
 @pytest.mark.asyncio
 async def test_removing_a_directory_retries_before_giving_up(tmp_path):
     """A file held open for a moment is a pause on Windows, not a failed delete."""
