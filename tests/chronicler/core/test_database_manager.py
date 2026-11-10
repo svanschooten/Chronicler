@@ -364,6 +364,18 @@ class TestWorkspaceLock:
         await second.init_archive()
         await second.close_all()
 
+    @pytest.mark.asyncio
+    async def test_a_failure_creating_imports_releases_the_workspace(self, tmp_path):
+        """Ticket 068: the mkdir ran outside the try that releases the lock."""
+        (tmp_path / "imports").write_text("a file where the directory should be")
+        manager = DatabaseManager(tmp_path)
+
+        with pytest.raises(FileExistsError):
+            await manager.init_archive()
+
+        assert not manager._workspace_lock.held
+        await manager.close_all()
+
 
 def test_sources_path_for_is_a_pure_lookup(tmp_path):
     db_manager = DatabaseManager(tmp_path)
