@@ -5,6 +5,7 @@ from collections.abc import Callable
 import flet as ft
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chronicler.core.config import Mode
 from chronicler.core.container import Container
 from chronicler.core.models import Chronicle, ModelCheck
 from chronicler.core.remote import RemoteContainer
@@ -303,6 +304,7 @@ class DesktopApp:
                 self.file_stager.stage,
                 scope.resolve(TranscriptService),
                 dark_mode=dark_mode,
+                can_link=self.runtime.settings.desktop_mode is not Mode.THIN_CLIENT,
             )
 
         if self.state.current_view == ViewType.TASKS:

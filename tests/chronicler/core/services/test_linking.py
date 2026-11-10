@@ -278,3 +278,29 @@ class TestHydrationDuration:
         finally:
             await session.close()
             await db_manager.close_all()
+
+
+class TestFailedLink:
+    @pytest.mark.asyncio
+    async def test_a_missing_file_leaves_no_chronicle(self, tmp_path):
+        db_manager, session, service, _ = await _workspace(tmp_path)
+        try:
+            with pytest.raises(ValueError, match="no such file"):
+                await service.link_external_chronicle(str(tmp_path / "nope" / "project.db"))
+            assert await service.list_chronicles() == []
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_file_that_is_not_a_database_leaves_no_chronicle(self, tmp_path):
+        db_manager, session, service, _ = await _workspace(tmp_path)
+        try:
+            bogus = tmp_path / "project.db"
+            bogus.write_text("this is not sqlite" * 100)
+            with pytest.raises(ValueError, match="not a Chronicler database"):
+                await service.link_external_chronicle(str(bogus))
+            assert await service.list_chronicles() == []
+        finally:
+            await session.close()
+            await db_manager.close_all()

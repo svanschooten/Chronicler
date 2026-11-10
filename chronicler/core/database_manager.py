@@ -44,7 +44,7 @@ def ensure_project_available(chronicle: Chronicle | None, chronicle_id: UUID) ->
         raise LookupError(f"No chronicle {chronicle_id}")
     if chronicle.project_path and not Path(chronicle.project_path).is_file():
         raise FileNotFoundError(
-            f"The linked project database {chronicle.project_path} no longer exists"
+            f"The linked project database {chronicle.project_path} was not found"
         )
 
 
