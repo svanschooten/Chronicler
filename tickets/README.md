@@ -169,7 +169,7 @@ Small and independent. Users hit the first four, and the rest are under an hour 
 
 - [ ] [039-P4 Checking extras can stall startup](039-P4_extras_check_off_event_loop.md) · low · XS
 
-- [ ] [038-P3 Slow imports that most runs never use](038-P3_lazy_imports.md) · low · XS
+- [x] [038-P3 Slow imports that most runs never use](038-P3_lazy_imports.md) · low · XS
 
 - [x] [061-D3 Version and project status disagree](061-D3_version_and_status.md) · low · XS
 
