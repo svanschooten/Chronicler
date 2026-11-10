@@ -138,7 +138,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [ ] [028-P1 PDF and zip exports freeze the app](028-P1_exports_off_event_loop.md) · medium · XS
 
-- [ ] [067-M11 The normalization extra does not install numpy, which normalizing needs](067-M11_normalization_extra_numpy.md) · medium · XS
+- [x] [067-M11 The normalization extra does not install numpy, which normalizing needs](067-M11_normalization_extra_numpy.md) · medium · XS
 
 - [ ] [068-M12 Any failure to lock a workspace reads as "already open in another process"](068-M12_workspace_lock_error_reasons.md) · medium · XS
 
