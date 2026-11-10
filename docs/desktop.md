@@ -99,6 +99,10 @@ immediately after `open = False`, which dropped the post-animation dismiss callb
 buttons worked, the future resolved, the import proceeded — and the dialog visually never
 closed.
 
+Dialogs are not modal, so Esc or a click outside closes them without any button. `await_dialog`
+sets `on_dismiss` to resolve the future with a `dismissed` value - the first (cancel) choice for
+`ask_choice` and `confirm`, `None` otherwise - so the awaiting action never hangs.
+
 The `on_choice` builder takes a zero-argument *getter* rather than a plain value, so a
 button can resolve to something only known at click time, such as the current contents
 of a `TextField`.
