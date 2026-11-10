@@ -46,13 +46,14 @@ def test_rejects_invalid_regex_syntax():
 
 @pytest.mark.parametrize("pattern", CATASTROPHIC_PATTERNS)
 def test_catastrophic_patterns_finish_quickly_on_adversarial_lines(pattern):
+    """
+    The `regex` engine finished each of these in under 10 ms when measured for ticket 035,
+    where `re` takes minutes. A second leaves room for a slow CI runner; a timeout fails.
+    """
     compiled = compile_pattern(pattern)
     started = time.monotonic()
-    try:
-        run_timed(compiled, compiled.search, "a" * 40 + "!")
-    except PatternTimeoutError:
-        pass
-    assert time.monotonic() - started < regex_guard.MATCH_TIMEOUT_SECONDS + 2
+    run_timed(compiled, compiled.search, "a" * 40 + "!")
+    assert time.monotonic() - started < 1.0
 
 
 def test_a_slow_match_raises_a_timeout_error(monkeypatch):
