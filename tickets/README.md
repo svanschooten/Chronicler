@@ -163,7 +163,7 @@ Small and independent. Users hit the first four, and the rest are under an hour 
 
 - [x] [069-L12 A finished task's event is lost when the database is busy](069-L12_completion_event_on_busy_database.md) · low · XS · after 009
 
-- [ ] [054-L10 Config files can be misread and overwritten](054-L10_config_encoding_and_atomic_save.md) · low · XS · after 015
+- [x] [054-L10 Config files can be misread and overwritten](054-L10_config_encoding_and_atomic_save.md) · low · XS · after 015
 
 - [ ] [055-L11 Workspace validation exists but never runs](055-L11_workspace_validation.md) · low · XS
 
