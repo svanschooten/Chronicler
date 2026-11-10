@@ -189,6 +189,7 @@ async def test_add_audio_source_moves_file_into_durable_sources_dir(tmp_path):
     staged_file.write_bytes(b"fake audio")
 
     db_manager = MagicMock(workspace_path=tmp_path)
+    db_manager.project_path_for = AsyncMock(return_value=None)
     db_manager.get_imports_path.return_value = tmp_path / "imports"
     db_manager.ensure_sources_path_for.return_value = (
         tmp_path / "chronicles" / str(chronicle_id) / "sources"
@@ -216,6 +217,7 @@ async def test_add_audio_source_avoids_overwriting_same_name(tmp_path):
     staged_file.write_bytes(b"new track")
 
     db_manager = MagicMock(workspace_path=tmp_path)
+    db_manager.project_path_for = AsyncMock(return_value=None)
     db_manager.get_imports_path.return_value = tmp_path / "imports"
     db_manager.ensure_sources_path_for.return_value = sources_dir
 
@@ -238,6 +240,7 @@ def _service_with_workspace(tmp_path, chronicle_id):
     sources_dir.mkdir(parents=True, exist_ok=True)
 
     db_manager = MagicMock(workspace_path=tmp_path)
+    db_manager.project_path_for = AsyncMock(return_value=None)
     db_manager.get_imports_path.return_value = imports_dir
     db_manager.ensure_sources_path_for.return_value = sources_dir
     return ChronicleService(_plain_repo(), db_manager), imports_dir, sources_dir

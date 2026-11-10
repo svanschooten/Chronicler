@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, text
 
 from chronicler.core.database_manager import _MIGRATIONS_ROOT, DatabaseManager
 from chronicler.core.sqlite import SQLiteAudioSourceRepository, SQLiteTranscriptRepository
+from tests.projects import register_chronicle
 
 BEFORE_SOURCE_IDS = "e5b2f70c31a8"
 SPEAKER = "00000000-0000-0000-0000-000000000001"
@@ -46,7 +47,8 @@ async def test_lines_and_sources_survive_the_source_id_migration(tmp_path):
 
     db_manager = DatabaseManager(tmp_path / "workspace")
     try:
-        session = await db_manager.get_project_session("legacy", custom_path=project_db)
+        await register_chronicle(db_manager, "legacy", project_db)
+        session = await db_manager.get_project_session("legacy")
         async with session:
             (line,) = await SQLiteTranscriptRepository(session).get_lines()
             (source,) = await SQLiteAudioSourceRepository(session).list_sources()
@@ -98,7 +100,8 @@ async def test_the_migration_attributes_lines_only_where_one_track_is_certain(tm
 
     db_manager = DatabaseManager(tmp_path / "workspace")
     try:
-        session = await db_manager.get_project_session("legacy", custom_path=project_db)
+        await register_chronicle(db_manager, "legacy", project_db)
+        session = await db_manager.get_project_session("legacy")
         async with session:
             lines = await SQLiteTranscriptRepository(session).get_lines()
     finally:
