@@ -43,7 +43,7 @@ Merged tickets are left in for context.
 | Task handlers | 010 → 011 → 035 → 032 → 064 → 040 | Same files in `core/processing/handlers/` |
 | Project migrations | 010 → 020 → 074 → 063 → 029 | Each adds an Alembic revision on the project chain (head `a8e1d5c3b790`). Rebase `down_revision` on whatever merged last. 074 settles the compatibility rule before the next revision |
 | Archive migrations | 022 → 029 | Same for the archive chain (head `b4d7e2a9c156`) |
-| Chronicle service and repository | 072 → 076 → 075 → 029 → 066 | Same parts of `chronicle_service.py` and `chronicle_repository.py` |
+| Chronicle service and repository | 072 → 032 → 076 → 075 → 029 → 066 | Same parts of `chronicle_service.py` and `chronicle_repository.py` |
 | Archive view | 072 → 063 → 078 | Same parts of `desktop/views/archive/view.py` |
 | Dialogs and recording | 073 → 036 | Same code in `desktop/dialogs.py` and `views/transcript/recording.py` |
 | Desktop shell | 007 → 027 → 041 | Same parts of `desktop/app.py`. Schedule 041 alone, because it conflicts with most open desktop work |
