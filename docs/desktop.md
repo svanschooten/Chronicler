@@ -100,8 +100,12 @@ buttons worked, the future resolved, the import proceeded — and the dialog vis
 closed.
 
 Dialogs are not modal, so Esc or a click outside closes them without any button. `await_dialog`
-sets `on_dismiss` to resolve the future with a `dismissed` value - the first (cancel) choice for
-`ask_choice` and `confirm`, `None` otherwise - so the awaiting action never hangs.
+sets `on_dismiss` to resolve the future with a `dismissed` value, so the awaiting action never
+hangs. `ask_choice` callers name that value explicitly (`"cancel"`, or `False` for `confirm`)
+rather than relying on a button's position; everything else resolves to `None`.
+`show_dialog()` wraps this handler and still calls it once the close animation finishes.
+`TranscribeDialog.ask` keeps its own future, so it sets its own `on_dismiss` to resolve as a
+cancel.
 
 The `on_choice` builder takes a zero-argument *getter* rather than a plain value, so a
 button can resolve to something only known at click time, such as the current contents

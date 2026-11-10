@@ -148,6 +148,7 @@ class ChronicleOperations:
                 Choice(t("actions.append"), "append"),
                 Choice(t("actions.overwrite"), "overwrite", primary=True),
             ],
+            dismissed="cancel",
         )
 
     async def _report(self, work: Awaitable[str | None]) -> bool:

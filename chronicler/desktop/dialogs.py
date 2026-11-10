@@ -57,10 +57,13 @@ async def ask_choice(
     title: str,
     message: str,
     choices: Sequence[Choice[T]],
+    *,
+    dismissed: T,
 ) -> T:
     """
-    A question with one button per choice, resolving to the chosen value. Dismissing the
-    dialog counts as the first choice, which by convention is the cancel one.
+    A question with one button per choice, resolving to the chosen value. Esc or a click
+    outside resolves to `dismissed`, which callers name explicitly - usually the cancel
+    choice's value - so no button's position decides what "never mind" means.
     """
 
     def build(on_choice) -> ft.AlertDialog:
@@ -76,7 +79,7 @@ async def ask_choice(
             ],
         )
 
-    return await await_dialog(page, build, dismissed=choices[0].value)  # type: ignore[return-value]
+    return await await_dialog(page, build, dismissed=dismissed)  # type: ignore[return-value]
 
 
 async def confirm(page: ft.Page, title: str, message: str, confirm_label: str = "Delete") -> bool:
@@ -86,6 +89,7 @@ async def confirm(page: ft.Page, title: str, message: str, confirm_label: str = 
         title,
         message,
         [Choice("Cancel", False), Choice(confirm_label, True, primary=True)],
+        dismissed=False,
     )
 
 

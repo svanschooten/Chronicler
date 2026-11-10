@@ -474,3 +474,12 @@ class TestRerunWarning:
 
         await dialog.actions[0].on_click(MagicMock())
         await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_dismissing_the_dialog_resolves_as_cancelled(ask):
+    task, dialog, _ = await ask()
+
+    dialog.on_dismiss(MagicMock())
+
+    assert await asyncio.wait_for(task, timeout=1) is None

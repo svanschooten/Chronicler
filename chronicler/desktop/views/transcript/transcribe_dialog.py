@@ -120,6 +120,11 @@ class TranscribeDialog:
             if choice is not None:
                 finish(choice)
 
+        def dismissed(_event) -> None:
+            # Esc or a click outside closed it already: resolve as a cancel, without popping.
+            if not future.done():
+                future.set_result(None)
+
         page.show_dialog(
             ft.AlertDialog(
                 title=ft.Text(t("transcribe.title", name=self.source.filename)),
@@ -129,6 +134,7 @@ class TranscribeDialog:
                     ft.TextButton(t("transcribe.save_speaker"), on_click=save_speaker),
                     ft.FilledButton(self._start_label(), on_click=start),
                 ],
+                on_dismiss=dismissed,
             )
         )
         return await future
