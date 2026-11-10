@@ -237,6 +237,12 @@ database was.
 The title comes from the containing directory, falling back to the filename when that
 directory is the generic `chronicles`.
 
+A file that does not exist, or that is not a Chronicler database, is refused before a
+chronicle is registered, and one that fails while being read is removed again. The error
+names the path and the reason, and the chronicle count is unchanged. A thin client does
+not offer *Link*: the picker returns a path on the client's machine, and the server would
+look for it on its own disk.
+
 `hydrate_from_project` is separate from the link so it can be re-run — the chronicle
 view's *Identify speakers* covers the speaker half of the same job.
 

@@ -265,3 +265,8 @@ async def test_refresh_keeps_the_search_and_the_open_form():
     assert view.query == "budget"
     assert view.create_form is form
     assert len(view.chronicle_list.controls) == 1
+
+
+def test_link_is_offered_by_default_and_hidden_for_a_thin_client(make_view):
+    assert len(make_view()._link_items()) == 1
+    assert make_view(can_link=False)._link_items() == []
