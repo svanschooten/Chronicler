@@ -37,7 +37,9 @@ class ExtraInstaller:
 
     async def ensure(self, page: ft.Page, name: str) -> bool:
         """True when `name` is usable by the time this returns."""
-        if extras.is_available(name):
+        # A real import, on a worker thread: the first import of an extra takes seconds, and
+        # a failed one is not cached, so a broken extra would stall the UI on every click.
+        if await asyncio.to_thread(extras.is_available, name):
             return True
 
         if not extras.can_install():

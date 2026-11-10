@@ -1,6 +1,7 @@
 """Tests for the confirm-then-install flow for optional components."""
 
 import asyncio
+import threading
 from unittest.mock import MagicMock, patch
 
 import flet as ft
@@ -207,3 +208,19 @@ class TestUninstallableEnvironment:
         page.show_dialog.assert_not_called()
         reported = " ".join(str(call) for call in subject.show_snackbar.call_args_list)
         assert "chronicler[recording]" in reported
+
+
+class TestOffTheEventLoop:
+    @pytest.mark.asyncio
+    async def test_availability_is_checked_on_a_worker_thread(self, installer):
+        loop_thread = threading.get_ident()
+        checked_on = []
+
+        def record(_name):
+            checked_on.append(threading.get_ident())
+            return True
+
+        with patch("chronicler.desktop.extras_prompt.extras.is_available", record):
+            assert await installer().ensure(MagicMock(spec=ft.Page), "recording") is True
+
+        assert checked_on and checked_on[0] != loop_thread
