@@ -66,6 +66,17 @@ def test_workspace_validation(tmp_path):
     assert settings.is_workspace_valid()
 
 
+def test_a_workspace_that_cannot_be_written_is_invalid(tmp_path, monkeypatch):
+    """The probe writes a file, so this holds on Windows, where `os.access` would not."""
+
+    def refuse(*args, **kwargs):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr("chronicler.core.workspace_lock.tempfile.TemporaryFile", refuse)
+
+    assert not Settings(workspace_path=tmp_path).is_workspace_valid()
+
+
 @pytest.mark.skipif(
     sys.platform == "win32" or os.geteuid() == 0,
     reason="chmod cannot make a directory unwritable on Windows or for root",

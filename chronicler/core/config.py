@@ -27,6 +27,7 @@ from chronicler.core.config_sections import (
     TranscriptionSettings,
     UiSettings,
 )
+from chronicler.core.workspace_lock import probe_writable
 
 SECTION_MODELS: dict[str, type] = {
     "transcription": TranscriptionSettings,
@@ -202,7 +203,11 @@ class Settings(BaseSettings):
         if not self.workspace_path.exists() or not self.workspace_path.is_dir():
             return False
 
-        return os.access(self.workspace_path, os.R_OK | os.W_OK)
+        try:
+            probe_writable(self.workspace_path)
+        except OSError:
+            return False
+        return True
 
     @property
     def effective_mode(self) -> Mode:

@@ -7,7 +7,11 @@ import pytest
 
 from chronicler.core.config import Mode, Settings
 from chronicler.core.handshake import HandshakeError
-from chronicler.core.workspace_lock import WorkspaceLockedError, WorkspaceLockUnavailableError
+from chronicler.core.workspace_lock import (
+    WorkspaceLockedError,
+    WorkspaceLockUnavailableError,
+    WorkspaceNotWritableError,
+)
 from chronicler.desktop import main as desktop_main
 from tests.chronicler.desktop.controls import text_values
 
@@ -190,6 +194,27 @@ async def test_a_workspace_that_cannot_be_locked_is_reported_on_screen(
     assert any(str(tmp_path) in text and "No locks available" in text for text in shown)
     assert any("local disk" in text for text in shown)
     assert not any("already open" in text for text in shown)
+
+
+@pytest.mark.asyncio
+async def test_start_shows_an_unwritable_workspace_on_the_startup_screen(
+    page, monkeypatch, tmp_path
+):
+    settings = Settings(workspace_path=tmp_path, mode="desktop:full_stack")
+    app = stub_app(monkeypatch)
+    db_manager = AsyncMock()
+    db_manager.init_archive.side_effect = WorkspaceNotWritableError(
+        tmp_path, PermissionError(errno.EACCES, "Permission denied")
+    )
+    monkeypatch.setattr(desktop_main, "get_settings", lambda: settings)
+    monkeypatch.setattr(desktop_main, "build_runtime", lambda s: runtime_for(s, db_manager))
+
+    await desktop_main.start(page)
+
+    app.return_value.main.assert_not_awaited()
+    shown = text_values(page.add.call_args[0][0])
+    assert any(str(tmp_path) in text and "Permission denied" in text for text in shown)
+    assert any("permissions" in text for text in shown)
 
 
 def test_show_startup_failure_names_the_reason(page):

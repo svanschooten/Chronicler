@@ -38,6 +38,11 @@ SMB and FUSE mounts answer `flock` with `ENOLCK`, `EINVAL` or `EOPNOTSUPP`. That
 suggesting a local disk. Only "held by someone else" counts as locked: `EWOULDBLOCK`,
 `EAGAIN` or `EACCES` from `flock`, and `EACCES` or `EDEADLOCK` from `msvcrt.locking`.
 
+Before locking, the workspace is probed by creating and removing a file in it (`os.access`
+ignores ACLs on Windows). A folder that cannot be created or written to raises
+`WorkspaceNotWritableError`, reported the same two ways with the OS reason.
+`Settings.is_workspace_valid` uses the same probe.
+
 `init_archive` releases the lock again if anything after taking it fails, including
 creating `imports/`. After `close_all` the manager no longer holds the lock, but its
 engines would reconnect if used; nothing reuses a closed manager today.

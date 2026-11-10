@@ -125,6 +125,26 @@ def test_a_server_on_a_workspace_that_cannot_be_locked_exits_with_the_reason(
     assert "already open" not in message
 
 
+def test_a_server_on_an_unwritable_workspace_exits_with_the_reason(
+    tmp_path, isolated_config, monkeypatch
+):
+    monkeypatch.setattr(
+        "chronicler.server.main.get_settings", lambda: Settings(workspace_path=tmp_path)
+    )
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr("chronicler.core.workspace_lock.tempfile.TemporaryFile", refuse)
+
+    with patch("chronicler.server.main.uvicorn.Server") as mock_server_cls:
+        with pytest.raises(SystemExit) as exit_info:
+            run_server()
+    mock_server_cls.assert_not_called()
+
+    assert "Permission denied" in str(exit_info.value.code)
+
+
 def test_startup_does_not_log_the_api_key(tmp_path, isolated_config, monkeypatch, caplog):
     monkeypatch.setattr(
         "chronicler.server.main.get_settings",

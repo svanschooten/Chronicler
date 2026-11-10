@@ -10,6 +10,7 @@ from chronicler.core.workspace_lock import (
     WorkspaceLock,
     WorkspaceLockedError,
     WorkspaceLockUnavailableError,
+    WorkspaceNotWritableError,
 )
 
 
@@ -129,3 +130,32 @@ def test_a_failed_lock_does_not_leak_its_file_descriptor(tmp_path, monkeypatch):
         WorkspaceLock(tmp_path).acquire()
 
     assert len(closed) == 1
+
+
+def test_a_workspace_that_cannot_be_written_is_reported_as_such(tmp_path, monkeypatch):
+    def refuse(*args, **kwargs):
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES))
+
+    monkeypatch.setattr(workspace_lock.tempfile, "TemporaryFile", refuse)
+    lock = WorkspaceLock(tmp_path)
+
+    with pytest.raises(WorkspaceNotWritableError) as raised:
+        lock.acquire()
+
+    assert str(tmp_path) in str(raised.value)
+    assert os.strerror(errno.EACCES) in str(raised.value)
+    assert not lock.held
+
+
+def test_a_workspace_path_that_is_a_file_is_reported_as_not_writable(tmp_path):
+    a_file = tmp_path / "file"
+    a_file.write_text("x")
+
+    with pytest.raises(WorkspaceNotWritableError):
+        WorkspaceLock(a_file).acquire()
+
+
+def test_the_probe_leaves_nothing_behind(tmp_path):
+    workspace_lock.probe_writable(tmp_path)
+
+    assert list(tmp_path.iterdir()) == []
