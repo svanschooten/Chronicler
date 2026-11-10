@@ -181,7 +181,7 @@ Stop a pattern from freezing the app, make opening chronicles cheap, settle what
 
 - [ ] [035-S11 Replace the regex guard with a real timeout, so a pattern cannot freeze the app](035-S11_regex_timeout_instead_of_guard.md) · medium · S
 
-- [ ] [031-S5 Project databases keep a thread and a file open per chronicle](031-S5_nullpool_project_engines.md) · medium · XS
+- [x] [031-S5 Project databases keep a thread and a file open per chronicle](031-S5_nullpool_project_engines.md) · medium · XS
 
 - [x] [032-S4 Give project database access one helper and one owner](032-S4_project_db_access.md) · medium · M · after 010, 011, 021
 

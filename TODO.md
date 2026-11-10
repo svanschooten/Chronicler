@@ -596,13 +596,9 @@ every `ASGITransport`-based test in the sprint had missed:
   with targeted `# type: ignore[type-abstract]` for now (`server/main.py`,
   `test_server_main.py`); worth revisiting the container's type signature directly.
   Ticket 030 removes the interfaces, and these ignores with them.
-* [ ] `DatabaseManager._project_engines` caches an engine per chronicle id forever, no
-  eviction. Not corrupting anything (each chronicle's engine is independent), just a slow
-  resource leak in a long-running process that opens many distinct chronicles. Deferred
-  during the Sprint 2 session-scoping work — a proper fix (LRU with a size cap) is easy to
-  get subtly wrong (evicting an engine mid-use) and lower severity than what that sprint
-  actually fixed. Ticket 031 removes the cost instead: with `NullPool` the cache holds no
-  connection.
+* [x] `DatabaseManager._project_engines` cached a pooled engine per chronicle forever,
+  holding a thread and an open file each. Project engines now use `NullPool`, so the
+  cache holds no connection.
 * [x] Prepare remote API backend interface — `RemoteContainer` / `RemoteServiceProxy`, tested
 
 Goal:
