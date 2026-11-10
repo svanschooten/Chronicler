@@ -276,18 +276,21 @@ async def test_three_panel_loads_at_once_all_succeed_on_an_empty_connection_pool
     """
     import asyncio
 
-    db_manager, session, service = await _service(tmp_path)
+    db_manager, session, _ = await _service(tmp_path)
+    chronicle = await SQLiteChronicleRepository(session).create(Chronicle(title="Panels"))
+    await session.close()
     try:
-        chronicle = await SQLiteChronicleRepository(session).create(Chronicle(title="Panels"))
-        await db_manager.close_project(str(chronicle.id))
-
         for _ in range(20):
-            results = await asyncio.gather(
-                service.get_transcript(chronicle.id),
-                service.list_audio_sources(chronicle.id),
-                service.list_summaries(chronicle.id),
-            )
+            # An empty pool and a session that has not connected yet, as in the view: the
+            # first load is still opening the connection when the other two arrive.
+            await db_manager.archive_engine.dispose()
+            async with db_manager.get_archive_session() as shared:
+                service = TranscriptService(db_manager, SQLiteChronicleRepository(shared))
+                results = await asyncio.gather(
+                    service.get_transcript(chronicle.id),
+                    service.list_audio_sources(chronicle.id),
+                    service.list_summaries(chronicle.id),
+                )
             assert results == [[], [], []]
     finally:
-        await session.close()
         await db_manager.close_all()
