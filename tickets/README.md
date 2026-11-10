@@ -149,7 +149,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [ ] [034-S8 Reduce the handshake to one function](034-S8_simplify_handshake.md) · low · XS
 
-- [ ] [035-S11 Replace the regex guard with a real timeout](035-S11_regex_timeout_instead_of_guard.md) · low · S
+- [x] [035-S11 Replace the regex guard with a real timeout](035-S11_regex_timeout_instead_of_guard.md) · low · S
 
 - [ ] [036-S13 Share the desktop's repeated helpers](036-S13_desktop_helpers.md) · low · XS
 
