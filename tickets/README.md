@@ -167,7 +167,7 @@ Small and independent. Users hit the first four, and the rest are under an hour 
 
 - [x] [055-L11 Workspace validation exists but never runs](055-L11_workspace_validation.md) · low · XS
 
-- [ ] [039-P4 Checking extras can stall startup](039-P4_extras_check_off_event_loop.md) · low · XS
+- [x] [039-P4 Checking extras can stall startup](039-P4_extras_check_off_event_loop.md) · low · XS
 
 - [x] [038-P3 Slow imports that most runs never use](038-P3_lazy_imports.md) · low · XS
 
