@@ -30,7 +30,7 @@ dependencies = [
     "PyYAML>=6.0.3,<7",
     "alembic>=1.19.1,<2",
     "fpdf2>=2.8.8,<3",
-    "regex>=2024.11.6",
+    "regex>=2024.11.6,<2027",
 ]
 
 [project.optional-dependencies]
