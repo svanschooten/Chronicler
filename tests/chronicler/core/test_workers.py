@@ -1,4 +1,6 @@
 import asyncio
+import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
@@ -674,58 +676,93 @@ async def test_a_failed_announcement_does_not_skip_the_next_tasks_cleanup(tasks,
     assert "Could not announce that interrupted task" in caplog.text
 
 
-def _locked_reads(failures: int, armed: asyncio.Event):
+@contextmanager
+def _exclusive_lock(db_path):
     """
-    A `get_by_id` that, once `armed` is set (the handler has run, so claiming is over),
-    raises "database is locked" `failures` times and then works.
+    Holds an EXCLUSIVE lock on the real database file from another connection, which
+    blocks readers too: a flushed write only blocks other writers, and `_publish_completion`
+    only reads.
     """
-    real = SQLiteTaskRepository.get_by_id
-    calls = {"n": 0}
+    connection = sqlite3.connect(db_path, isolation_level=None)
+    connection.execute("BEGIN EXCLUSIVE")
+    try:
+        yield connection
+    finally:
+        if connection.in_transaction:
+            connection.execute("ROLLBACK")
+        connection.close()
 
-    async def get_by_id(self, task_id):
-        if armed.is_set():
-            calls["n"] += 1
-            if calls["n"] <= failures:
-                raise OperationalError("SELECT", {}, Exception("database is locked"))
-        return await real(self, task_id)
 
-    return get_by_id
+def _lock_during_publish(manager: WorkerManager, db_path, release_after: float | None):
+    """
+    Wraps `_publish_completion` so the database is locked exactly while it runs: the
+    status write before it has already gone through. Released after `release_after`
+    seconds, or only when the publish is over.
+    """
+    original = manager._publish_completion
+
+    async def locked(task_id):
+        with _exclusive_lock(db_path) as connection:
+            if release_after is not None:
+                asyncio.get_running_loop().call_later(
+                    release_after, lambda: connection.execute("ROLLBACK")
+                )
+            await original(task_id)
+
+    return locked
 
 
 @pytest.mark.asyncio
-async def test_the_completion_event_survives_a_busy_database(tasks):
+async def test_the_completion_event_survives_a_busy_database(two_sessions, caplog):
+    tasks = Tasks(two_sessions.db_manager.get_archive_session)
     bus = TaskEventBus()
     received = []
     bus.subscribe(received.append)
     manager = WorkerManager(tasks.sessions, event_bus=bus, status_write_timeout=5.0)
-    armed = asyncio.Event()
-
-    async def handler(task, update_progress):
-        armed.set()
-
-    manager.register_handler(TaskType.IMPORT, handler)
+    manager.register_handler(TaskType.IMPORT, AsyncMock())
+    db_path = two_sessions.db_manager.archive_db_path
+    # Well past the fixture's 0.2s busy timeout, so the first read fails and a retry is
+    # what succeeds.
+    manager._publish_completion = _lock_during_publish(manager, db_path, release_after=1.0)
     await tasks.create(Task(type=TaskType.IMPORT))
 
-    with patch.object(SQLiteTaskRepository, "get_by_id", _locked_reads(1, armed)):
-        await manager.process_tasks()
+    await manager.process_tasks()
 
     assert [event.status for event in received] == [TaskStatus.DONE]
+    assert "retrying reading a finished task" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_a_busy_database_that_never_clears_does_not_fail_the_worker(tasks, caplog):
+async def test_a_busy_database_that_never_clears_does_not_fail_the_worker(two_sessions, caplog):
+    tasks = Tasks(two_sessions.db_manager.get_archive_session)
     bus = TaskEventBus()
-    manager = WorkerManager(tasks.sessions, event_bus=bus, status_write_timeout=0.3)
-    armed = asyncio.Event()
-
-    async def handler(task, update_progress):
-        armed.set()
-
-    manager.register_handler(TaskType.IMPORT, handler)
+    received = []
+    bus.subscribe(received.append)
+    manager = WorkerManager(tasks.sessions, event_bus=bus, status_write_timeout=0.5)
+    manager.register_handler(TaskType.IMPORT, AsyncMock())
+    db_path = two_sessions.db_manager.archive_db_path
+    manager._publish_completion = _lock_during_publish(manager, db_path, release_after=None)
     task = await tasks.create(Task(type=TaskType.IMPORT))
 
-    with patch.object(SQLiteTaskRepository, "get_by_id", _locked_reads(10**6, armed)):
-        await manager.process_tasks()
+    await manager.process_tasks()
 
+    assert received == []
     assert "could not read it back" in caplog.text
     assert (await tasks.get_by_id(task.id)).status == TaskStatus.DONE
+
+
+@pytest.mark.asyncio
+async def test_an_error_that_is_not_a_lock_is_not_retried(tasks, caplog):
+    manager = WorkerManager(tasks.sessions, event_bus=TaskEventBus(), status_write_timeout=5.0)
+    calls = 0
+
+    async def broken(_tasks):
+        nonlocal calls
+        calls += 1
+        raise OperationalError("SELECT", {}, Exception("no such table: tasks"))
+
+    with pytest.raises(OperationalError, match="no such table"):
+        await manager._retry_while_busy(broken, "a broken read")
+
+    assert calls == 1
+    assert "retrying" not in caplog.text

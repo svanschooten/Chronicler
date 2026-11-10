@@ -28,6 +28,12 @@ Cleanup = Callable[[Task], Awaitable[None]]
 T = TypeVar("T")
 
 
+def _is_busy(error: OperationalError) -> bool:
+    """Whether SQLite gave up waiting on another connection's lock."""
+    message = str(error.orig or error).lower()
+    return "locked" in message or "busy" in message
+
+
 class WorkerManager:
     """
     Runs queued tasks. Every group of task-table calls gets a short session of its own, and
@@ -203,8 +209,9 @@ class WorkerManager:
             try:
                 async with self._tasks() as tasks:
                     return await operation(tasks)
-            except OperationalError:
-                if time.monotonic() + delay > deadline:
+            except OperationalError as error:
+                # Only a lock clears by waiting; a missing table or a full disk does not.
+                if not _is_busy(error) or time.monotonic() + delay > deadline:
                     raise
                 logger.warning(f"Database busy, retrying {what} in {delay:.1f}s")
                 await asyncio.sleep(delay)
