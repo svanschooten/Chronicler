@@ -159,7 +159,7 @@ Small and independent. Users hit the first four, and the rest are under an hour 
 
 - [ ] [049-L5 "Open folder" on a thin client tries to open a server path](049-L5_open_folder_thin_client.md) · low · XS · after 025
 
-- [ ] [073-M14 Dismissing a dialog leaves its action waiting forever, and a recording keeps running](073-M14_dismissed_dialogs_hang.md) · medium · S
+- [x] [073-M14 Dismissing a dialog leaves its action waiting forever, and a recording keeps running](073-M14_dismissed_dialogs_hang.md) · medium · S
 
 - [ ] [069-L12 A finished task's event is lost when the database is busy](069-L12_completion_event_on_busy_database.md) · low · XS · after 009
 
