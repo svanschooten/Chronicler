@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import tempfile
 import textwrap
@@ -199,9 +200,14 @@ class TranscriptService:
         return format_html(lines, chronicle_title)
 
     async def export_pdf(self, chronicle_id: UUID, chronicle_title: str) -> bytearray:
-        """PDF for a transcribed chronicle."""
+        """
+        PDF for a transcribed chronicle.
+
+        Laid out on a worker thread: a long transcript takes seconds, and the event loop
+        this runs on is also the desktop UI's, or the server's for every other client.
+        """
         lines = await self.get_transcript(chronicle_id)
-        return format_pdf(lines, chronicle_title)
+        return await asyncio.to_thread(format_pdf, lines, chronicle_title)
 
     async def export_zip(self, chronicle_id: UUID, include_sources: bool = False) -> bytearray:
         """
@@ -228,7 +234,9 @@ class TranscriptService:
                 Path(workspace) / DATABASE_NAME,
                 custom_path=await self._project_path(chronicle_id),
             )
-            return format_bundle(
+            # Off the event loop, like the PDF: with audio this compresses for seconds.
+            return await asyncio.to_thread(
+                format_bundle,
                 snapshot,
                 manifest,
                 root=safe_folder_name(chronicle.title),
