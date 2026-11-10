@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from chronicler.core.models import Chronicle
 from chronicler.core.workspace_lock import WorkspaceLock
@@ -232,6 +233,9 @@ class DatabaseManager:
         """
         The engine for one chronicle, creating and migrating it at most once.
 
+        `NullPool`: a connection lives only as long as its session, so a cached engine holds
+        no thread and no open file. The cache is what remembers that a database is migrated.
+
         One lock for every chronicle, not one per chronicle: Alembic drives migrations
         through a process-global proxy, so two chains running concurrently corrupt each
         other's context even when they target different files. See docs/storage.md.
@@ -252,7 +256,9 @@ class DatabaseManager:
             project_db_path.parent.mkdir(parents=True, exist_ok=True)
 
             engine = create_async_engine(
-                f"sqlite+aiosqlite:///{project_db_path}", connect_args=self._connect_args
+                f"sqlite+aiosqlite:///{project_db_path}",
+                connect_args=self._connect_args,
+                poolclass=NullPool,
             )
             try:
                 async with engine.begin() as conn:
@@ -289,15 +295,13 @@ class DatabaseManager:
         """
         Releases one chronicle's project database, so its file can be moved or removed.
 
-        The pool holds a connection open long after the session that used it was closed,
-        and Windows refuses to delete a file anything still has open - which is why
-        deleting a chronicle failed there and not on Linux. See docs/storage.md.
+        Forgets that the database was migrated, so a file recreated at the same path is
+        migrated again. Connections are not pooled, so none outlive their session; a session
+        still open when this runs keeps its file open until it closes. See docs/storage.md.
         """
         engine = self._project_engines.pop(chronicle_id, None)
-        if engine is None:
-            return
-        logger.debug(f"Closing the project database for chronicle {chronicle_id}")
-        await engine.dispose()
+        if engine is not None:
+            await engine.dispose()
 
     async def close_all(self):
         await self.archive_engine.dispose()

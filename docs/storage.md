@@ -179,20 +179,24 @@ else needs.
 `ChronicleService.delete_chronicle` calls `DatabaseManager.close_project(id)` before it
 touches the filesystem, and that ordering is the whole point of the method.
 
-A project engine is cached for the life of the process, and SQLAlchemy's pool keeps a
-connection open long after the session that used it was closed — `async with session:`
-returns the connection to the pool, it does not close the file. Linux happily unlinks a
-file that is still open, so deleting a chronicle worked there. Windows does not, and
-reported:
+Project engines use `NullPool`: a connection, and the thread and open file behind it,
+lives only as long as the session that took it. Before that, a cached engine kept one
+open per chronicle, so a long-running process that opened 50 chronicles held 50 threads
+and 50 files (2 threads rose to 52), and deleting a chronicle failed on Windows. Linux
+unlinks a file that is still open, but Windows refuses:
 
 ```
 [WinError 32] The process cannot access the file because it is being used by
 another process: '...\chronicles\<id>\project.db'
 ```
 
-`close_project` pops the engine out of the cache and disposes it, which drops the last
-handle. Reopening the chronicle afterwards simply builds a new engine, so this is a
-release rather than a teardown.
+A connection now costs about 2.1 ms to open instead of 0.9 ms from a pool. The engine
+stays cached, because the cache also records that a database has been migrated.
+
+`close_project` pops the engine out of the cache, so a project.db recreated at the same
+path is migrated again. The ordering in `delete_chronicle` still matters: no session may
+be open on the file when it is removed. `remove_directory` keeps its retries, since
+virus scanners also hold files briefly.
 
 A **linked** chronicle is closed the same way and its files are then left alone — the
 `project.db` belongs to whoever the workspace borrowed it from, and deleting the

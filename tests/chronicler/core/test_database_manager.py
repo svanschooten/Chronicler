@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+import threading
 import time
 from contextlib import closing
 
@@ -44,8 +45,7 @@ async def test_database_manager_project_session(tmp_path):
 @pytest.mark.asyncio
 async def test_close_project_releases_the_file_handle(tmp_path):
     """
-    The pool keeps a connection open after the session using it is closed, and Windows
-    refuses to delete a file anything still holds open - see docs/storage.md.
+    Windows refuses to delete a file anything still holds open - see docs/storage.md.
     """
     db_manager = DatabaseManager(tmp_path)
     chronicle_id = "held-open"
@@ -60,6 +60,22 @@ async def test_close_project_releases_the_file_handle(tmp_path):
     assert chronicle_id not in db_manager._project_engines
     assert (tmp_path / "chronicles" / chronicle_id / "project.db").exists()
 
+    await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_opening_many_chronicles_leaves_the_thread_count_flat(tmp_path):
+    db_manager = DatabaseManager(tmp_path)
+    async with await db_manager.get_project_session("first") as session:
+        await session.execute(select(DBSpeaker))
+    baseline = threading.active_count()
+
+    for index in range(20):
+        async with await db_manager.get_project_session(f"chronicle-{index}") as session:
+            await session.execute(select(DBSpeaker))
+    await asyncio.sleep(0.1)
+
+    assert threading.active_count() <= baseline
     await db_manager.close_all()
 
 
