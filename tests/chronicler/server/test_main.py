@@ -145,6 +145,29 @@ def test_a_server_on_an_unwritable_workspace_exits_with_the_reason(
     assert "Permission denied" in str(exit_info.value.code)
 
 
+def test_a_server_on_a_workspace_from_a_newer_chronicler_exits_with_the_reason(
+    tmp_path, isolated_config, monkeypatch
+):
+    """Ticket 074: a plain message and exit status, not a traceback, and the lock is freed."""
+    import sqlite3
+    from contextlib import closing
+
+    with closing(sqlite3.connect(tmp_path / "chronicler.db")) as connection, connection:
+        connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32))")
+        connection.execute("INSERT INTO alembic_version VALUES ('ffffffffffff')")
+    monkeypatch.setattr(
+        "chronicler.server.main.get_settings", lambda: Settings(workspace_path=tmp_path)
+    )
+
+    with patch("chronicler.server.main.uvicorn.Server") as mock_server_cls:
+        with pytest.raises(SystemExit) as exit_info:
+            run_server()
+    mock_server_cls.assert_not_called()
+
+    assert "newer version of Chronicler" in str(exit_info.value.code)
+    WorkspaceLock(tmp_path).acquire()
+
+
 def test_startup_does_not_log_the_api_key(tmp_path, isolated_config, monkeypatch, caplog):
     monkeypatch.setattr(
         "chronicler.server.main.get_settings",

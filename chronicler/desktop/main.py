@@ -6,6 +6,7 @@ from pathlib import Path
 import flet as ft
 
 from chronicler.core.config import get_settings
+from chronicler.core.database_manager import NewerSchemaError
 from chronicler.core.handshake import HandshakeError, perform_handshake
 from chronicler.core.workspace_lock import (
     WorkspaceLockedError,
@@ -114,6 +115,15 @@ async def start(page: ft.Page) -> None:
             settings.dark_mode,
             t("startup.workspace_not_writable", path=error.workspace_path, reason=error.reason),
             hint=t("startup.workspace_not_writable_hint"),
+        )
+        return
+    except NewerSchemaError as error:
+        logger.error(str(error))
+        show_startup_failure(
+            page,
+            settings.dark_mode,
+            t("startup.workspace_newer_version", path=settings.workspace_path),
+            hint=t("startup.workspace_newer_version_hint"),
         )
         return
 

@@ -439,5 +439,11 @@ MESSAGES = {
             "Prüfe die Berechtigungen des Ordners oder wähle einen anderen Arbeitsbereich und "
             "starte Chronicler dann erneut."
         ),
+        "workspace_newer_version": (
+            "Der Arbeitsbereich unter {path} wurde mit einer neueren Chronicler-Version erstellt."
+        ),
+        "workspace_newer_version_hint": (
+            "Aktualisiere Chronicler, um ihn zu öffnen. Im Arbeitsbereich wurde nichts geändert."
+        ),
     },
 }

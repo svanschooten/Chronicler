@@ -427,5 +427,11 @@ MESSAGES = {
             "Controleer de rechten van de map of kies een andere werkruimte en start "
             "Chronicler daarna opnieuw."
         ),
+        "workspace_newer_version": (
+            "De werkruimte in {path} is gemaakt door een nieuwere versie van Chronicler."
+        ),
+        "workspace_newer_version_hint": (
+            "Werk Chronicler bij om haar te openen. Er is niets in de werkruimte gewijzigd."
+        ),
     },
 }

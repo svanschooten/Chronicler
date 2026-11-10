@@ -414,5 +414,11 @@ MESSAGES = {
             "Check the folder's permissions, or choose a different workspace, then start "
             "Chronicler again."
         ),
+        "workspace_newer_version": (
+            "The workspace at {path} was made by a newer version of Chronicler."
+        ),
+        "workspace_newer_version_hint": (
+            "Update Chronicler to open it. Nothing in the workspace was changed."
+        ),
     },
 }
