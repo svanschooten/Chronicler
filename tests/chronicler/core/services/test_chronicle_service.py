@@ -107,8 +107,8 @@ async def test_delete_chronicle_does_not_touch_directory_for_linked_chronicle(tm
 @pytest.mark.asyncio
 async def test_delete_chronicle_closes_the_project_database_before_removing_it(tmp_path):
     """
-    Windows will not delete a file anything still has open, and the connection pool keeps
-    one open long after the last session closed - see docs/storage.md.
+    Windows will not delete a file anything still has open - see docs/storage.md. The row
+    goes before the close, so a concurrent lookup cannot cache it again afterwards.
     """
     chronicle_id = uuid4()
     chronicle_dir = tmp_path / "chronicles" / str(chronicle_id)
@@ -118,7 +118,7 @@ async def test_delete_chronicle_closes_the_project_database_before_removing_it(t
     order = []
     repo = MagicMock(spec=ChronicleRepository)
     repo.get_by_id = AsyncMock(return_value=Chronicle(id=chronicle_id, title="Local"))
-    repo.delete = AsyncMock()
+    repo.delete = AsyncMock(side_effect=lambda _id: order.append("deleted"))
     db_manager = _db_manager(tmp_path)
     db_manager.close_project = AsyncMock(side_effect=lambda _id: order.append("closed"))
 
@@ -129,7 +129,7 @@ async def test_delete_chronicle_closes_the_project_database_before_removing_it(t
         await ChronicleService(repo, db_manager).delete_chronicle(chronicle_id)
 
     db_manager.close_project.assert_awaited_once_with(str(chronicle_id))
-    assert order == ["closed", "removed"]
+    assert order == ["deleted", "closed", "removed"]
 
 
 @pytest.mark.asyncio

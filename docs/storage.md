@@ -183,8 +183,11 @@ chronicles on the same release.
 
 ## Deleting a chronicle closes its database first
 
-`ChronicleService.delete_chronicle` calls `DatabaseManager.close_project(id)` before it
-touches the filesystem, and that ordering is the whole point of the method.
+`ChronicleService.delete_chronicle` deletes the row, then calls
+`DatabaseManager.close_project(id)`, then touches the filesystem. Closing before the files
+go is the whole point of the method. Deleting the row before closing means a task looking
+the chronicle up at the same moment finds no row, instead of caching the old location
+again after `close_project` forgot it.
 
 Project engines use `NullPool`: a connection, and the thread and open file behind it,
 lives only as long as the session that took it. Before that, a cached engine kept one

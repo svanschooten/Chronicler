@@ -116,12 +116,14 @@ class ChronicleService:
         """
         Removes a chronicle, and the files behind it unless they are only linked.
 
-        The project database is closed first, so a file recreated at the same path is
-        migrated again; no session may be open on it. See docs/storage.md.
+        The row goes first, then the project database is closed, then the files. In that
+        order a task looking the chronicle up concurrently cannot cache the row again after
+        `close_project` forgot it. No session may be open on the file when it is removed.
+        See docs/storage.md.
         """
         chronicle = await self.repository.get_by_id(chronicle_id)
-        await self.db_manager.close_project(str(chronicle_id))
         await self.repository.delete(chronicle_id)
+        await self.db_manager.close_project(str(chronicle_id))
 
         if chronicle and chronicle.project_path:
             logger.info(
