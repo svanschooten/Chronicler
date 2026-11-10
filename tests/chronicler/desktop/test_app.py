@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
 from chronicler.core.models import ModelCheck
 from chronicler.desktop.app import DesktopApp
 from chronicler.desktop.runtime import build_runtime
@@ -14,7 +14,7 @@ from chronicler.desktop.state import ViewType
 
 @pytest_asyncio.fixture
 async def desktop_app(tmp_path):
-    settings = Settings(workspace_path=tmp_path, mode="desktop:full_stack")
+    settings = Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK)
     runtime = build_runtime(settings)
     await runtime.db_manager.init_archive()
 
@@ -87,7 +87,7 @@ def test_thin_client_does_not_start_a_worker_manager():
     Thin client has no local tasks to run - the server it's pointed at runs its own
     WorkerManager (Sprint 3 item 4).
     """
-    settings = Settings(server_url="http://upstream", api_key="key", mode="desktop:thin_client")
+    settings = Settings(server_url="http://upstream", api_key="key", mode=Mode.THIN_CLIENT)
     runtime = build_runtime(settings)
     assert runtime.db_manager is None
 
@@ -160,7 +160,7 @@ def test_apply_theme_tolerates_controls_that_do_not_exist_yet():
     from chronicler.desktop.theme import theme_colors
 
     app = DesktopApp(
-        build_runtime(Settings(server_url="http://x", api_key="k", mode="desktop:thin_client"))
+        build_runtime(Settings(server_url="http://x", api_key="k", mode=Mode.THIN_CLIENT))
     )
     app.page = MagicMock()
 
@@ -353,7 +353,7 @@ async def test_thin_client_resolves_a_working_remote_service(tmp_path):
     upstream_app = RpcServer(upstream_container, services=[ChronicleService], api_key="key").build()
 
     try:
-        settings = Settings(server_url="http://upstream", api_key="key", mode="desktop:thin_client")
+        settings = Settings(server_url="http://upstream", api_key="key", mode=Mode.THIN_CLIENT)
         runtime = build_runtime(settings)
         app = DesktopApp(runtime)
 
@@ -380,7 +380,7 @@ async def test_refresh_models_caches_the_provider_listing(tmp_path):
 
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
@@ -401,7 +401,7 @@ async def test_on_llm_change_asks_again(tmp_path):
 
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
@@ -426,7 +426,7 @@ async def test_on_llm_change_re_reads_the_capabilities(tmp_path):
     from chronicler.core.models import ServerInfo
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
     app.capabilities = {"import"}
 
@@ -448,7 +448,7 @@ async def test_refresh_models_reports_an_unreachable_provider_to_the_caller(tmp_
 
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
@@ -467,7 +467,7 @@ async def test_refresh_models_survives_an_unreachable_provider(tmp_path):
 
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
@@ -490,7 +490,7 @@ async def test_refresh_models_also_learns_what_the_server_can_do(tmp_path):
     from chronicler.core.models import ServerInfo
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
@@ -512,7 +512,7 @@ async def test_unreachable_capabilities_leave_every_action_offered(tmp_path):
 
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
@@ -539,7 +539,7 @@ async def test_startup_discovery_does_not_leave_a_session_open(tmp_path):
     """
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     await runtime.db_manager.init_archive()
     app = DesktopApp(runtime)
     try:
@@ -552,7 +552,7 @@ async def test_startup_discovery_does_not_leave_a_session_open(tmp_path):
 
 @pytest.mark.asyncio
 async def test_startup_discovery_still_reports_what_it_found(tmp_path):
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     await runtime.db_manager.init_archive()
     app = DesktopApp(runtime)
     try:
@@ -569,7 +569,7 @@ async def test_cleanup_leaves_no_session_active_anywhere(tmp_path):
     """What the shutdown error actually measures: an unreturned pooled connection."""
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     await runtime.db_manager.init_archive()
     app = DesktopApp(runtime)
     app._maybe_start_worker_manager()
@@ -589,7 +589,7 @@ async def test_cleanup_leaves_no_session_active_anywhere(tmp_path):
 @pytest.mark.asyncio
 async def test_cleanup_stops_the_worker_task_rather_than_only_flagging_it(tmp_path):
     """`stop()` sets a flag; the task itself has to be let go of, or it outlives cleanup."""
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     await runtime.db_manager.init_archive()
     app = DesktopApp(runtime)
     app._maybe_start_worker_manager()

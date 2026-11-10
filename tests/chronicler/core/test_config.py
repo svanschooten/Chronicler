@@ -9,6 +9,7 @@ import yaml
 
 from chronicler.core.config import (
     CONFIG_FILE_ENV_VAR,
+    Mode,
     Settings,
     get_settings,
     is_config_initialized,
@@ -229,36 +230,76 @@ def test_malformed_config_file_logs_warning_instead_of_silent_failure(
 
 def test_server_mode_requires_workspace_and_api_key(tmp_path):
     settings = Settings(workspace_path=None, api_key=None)
-    assert settings.validate_for_mode("server") is False
+    assert settings.validate_for_mode(Mode.SERVER) is False
 
     settings.workspace_path = tmp_path
-    assert settings.validate_for_mode("server") is False
+    assert settings.validate_for_mode(Mode.SERVER) is False
 
     settings.api_key = "some-key"
-    assert settings.validate_for_mode("server") is True
+    assert settings.validate_for_mode(Mode.SERVER) is True
 
 
-def test_desktop_mode_requires_either(tmp_path):
-    settings = Settings(workspace_path=None, server_url=None, api_key=None)
-    assert settings.validate_for_mode("client:desktop") is False
-
-    settings.server_url = ""
-    assert settings.validate_for_mode("client:desktop") is False
+def test_full_stack_requires_a_workspace(tmp_path):
+    settings = Settings(workspace_path=None, server_url="http://localhost:8000", api_key="k")
+    assert settings.validate_for_mode(Mode.FULL_STACK) is False
 
     settings.workspace_path = tmp_path
-    assert settings.validate_for_mode("client:desktop") is True
+    assert settings.validate_for_mode(Mode.FULL_STACK) is True
 
-    settings.workspace_path = None
+
+def test_thin_client_requires_a_server_url_and_api_key(tmp_path):
+    settings = Settings(workspace_path=tmp_path, server_url="", api_key=None)
+    assert settings.validate_for_mode(Mode.THIN_CLIENT) is False
+
     settings.server_url = "http://localhost:8000"
-    assert settings.validate_for_mode("client:desktop") is False
+    assert settings.validate_for_mode(Mode.THIN_CLIENT) is False
 
     settings.api_key = "some-key"
-    assert settings.validate_for_mode("client:desktop") is True
+    assert settings.validate_for_mode(Mode.THIN_CLIENT) is True
 
 
-def test_unknown_mode_is_always_valid():
-    settings = Settings()
-    assert settings.validate_for_mode("some-future-mode") is True
+def test_effective_mode_is_the_stored_mode(tmp_path):
+    settings = Settings(mode=Mode.THIN_CLIENT, workspace_path=tmp_path)
+    assert settings.effective_mode is Mode.THIN_CLIENT
+
+
+def test_effective_mode_is_inferred_when_none_is_stored(tmp_path):
+    assert Settings(server_url="http://server:8000").effective_mode is Mode.THIN_CLIENT
+    assert Settings(workspace_path=tmp_path).effective_mode is Mode.FULL_STACK
+    both = Settings(workspace_path=tmp_path, server_url="http://server:8000")
+    assert both.effective_mode is Mode.FULL_STACK
+    assert Settings().effective_mode is Mode.FULL_STACK
+
+
+def test_a_server_configuration_runs_the_desktop_as_a_full_stack(tmp_path):
+    settings = Settings(mode=Mode.SERVER, workspace_path=tmp_path)
+    assert settings.effective_mode is Mode.SERVER
+    assert settings.desktop_mode is Mode.FULL_STACK
+
+
+@pytest.mark.parametrize(
+    ("stored", "mode"),
+    [
+        ("desktop:full_stack", Mode.FULL_STACK),
+        ("desktop:thin_client", Mode.THIN_CLIENT),
+        ("full_stack", Mode.FULL_STACK),
+        ("thin_client", Mode.THIN_CLIENT),
+        ("server", Mode.SERVER),
+        ("client:web", None),
+        ("some-future-mode", None),
+    ],
+)
+def test_stored_modes_load(isolated_config, stored, mode):
+    (isolated_config / ".chronicler_config.yaml").write_text(yaml.dump({"mode": stored}))
+
+    assert Settings().mode is mode
+
+
+def test_the_mode_is_saved_as_a_plain_string(isolated_config):
+    config_file = Settings(mode=Mode.THIN_CLIENT).save()
+
+    saved = yaml.safe_load(config_file.read_text())
+    assert saved["mode"] == "thin_client"
 
 
 class TestNestedSections:
@@ -469,4 +510,5 @@ def test_a_saved_web_client_mode_reads_as_unset(isolated_config):
     settings = Settings()
 
     assert settings.mode is None
-    assert settings.validate_for_mode("client:desktop") is True
+    assert settings.desktop_mode is Mode.THIN_CLIENT
+    assert settings.validate_for_mode(settings.desktop_mode) is True

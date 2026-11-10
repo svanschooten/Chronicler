@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from chronicler.__main__ import attach_windows_console, main
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
 
 
 def test_main_default_mode():
@@ -39,7 +39,7 @@ def test_main_server_mode():
         main()
 
         mock_run_server.assert_called_once()
-        mock_settings.validate_for_mode.assert_called_with("server")
+        mock_settings.validate_for_mode.assert_called_with(Mode.SERVER)
 
 
 def test_main_verbose_logging():
@@ -101,8 +101,8 @@ def test_main_checks_validity(mock_get_settings, mock_is_init, mock_run_wizard):
     ):
         main()
 
-    mock_settings.validate_for_mode.assert_called_with("server")
-    mock_run_wizard.assert_called_with(mode="server")
+    mock_settings.validate_for_mode.assert_called_with(Mode.SERVER)
+    mock_run_wizard.assert_called_with(mode=Mode.SERVER)
 
 
 @patch("chronicler.core.wizard.run_wizard")
@@ -121,7 +121,7 @@ def test_main_skips_wizard_if_valid(mock_get_settings, mock_is_init, mock_run_wi
     ):
         main()
 
-    mock_settings.validate_for_mode.assert_called_with("server")
+    mock_settings.validate_for_mode.assert_called_with(Mode.SERVER)
     mock_run_wizard.assert_not_called()
 
 
@@ -153,7 +153,7 @@ def test_server_mode_still_uses_the_console_wizard(mock_is_init, mock_run_wizard
     ):
         main()
 
-    mock_run_wizard.assert_called_once_with(mode="server")
+    mock_run_wizard.assert_called_once_with(mode=Mode.SERVER)
 
 
 class TestWithoutTheServerExtra:

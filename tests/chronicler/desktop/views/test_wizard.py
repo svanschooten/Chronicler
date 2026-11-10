@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 import flet as ft
 import pytest
 
-from chronicler.core.config import Settings
-from chronicler.desktop.views.wizard import FULL_STACK, THIN_CLIENT, FletSetupWizard
+from chronicler.core.config import Mode, Settings
+from chronicler.desktop.views.wizard import FletSetupWizard
 from chronicler.i18n import set_locale, t
 from tests.chronicler.desktop.controls import find_controls, text_values
 
@@ -90,7 +90,7 @@ def test_full_stack_run_writes_a_complete_configuration(wizard, tmp_path):
     click(wizard, t("wizard.finish"))
 
     saved = Settings()
-    assert saved.mode == FULL_STACK
+    assert saved.mode is Mode.FULL_STACK
     assert saved.workspace_path == workspace
     assert saved.server_url is None
     assert saved.api_key == generated
@@ -107,7 +107,7 @@ def test_thin_client_run_writes_a_complete_configuration(wizard):
     click(wizard, t("wizard.finish"))
 
     saved = Settings()
-    assert saved.mode == THIN_CLIENT
+    assert saved.mode is Mode.THIN_CLIENT
     assert saved.server_url == "http://remote:8000"
     assert saved.api_key == "the-server-key"
     assert saved.workspace_path is None
