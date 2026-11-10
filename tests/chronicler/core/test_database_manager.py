@@ -67,6 +67,8 @@ async def test_close_project_releases_the_file_handle(tmp_path):
 @pytest.mark.asyncio
 async def test_opening_many_chronicles_leaves_the_thread_count_flat(tmp_path):
     db_manager = DatabaseManager(tmp_path)
+    for chronicle_id in ["first", *(f"chronicle-{index}" for index in range(20))]:
+        await register_chronicle(db_manager, chronicle_id)
     async with await db_manager.get_project_session("first") as session:
         await session.execute(select(DBSpeaker))
     baseline = threading.active_count()
