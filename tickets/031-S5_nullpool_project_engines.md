@@ -35,5 +35,6 @@ works on Windows.
 ### related tickets
 
 - (BLOCKS) [063-F1_full_text_search](063-F1_full_text_search.md): needs cheap opens for the fan-out
+- (BLOCKS) [065-F3_restore_snapshots](065-F3_restore_snapshots.md): swapping a database file needs no connection held open
 - (RELATED) [032-S4_project_db_access](032-S4_project_db_access.md): same class
 - (RELATED) [063-F1_full_text_search](063-F1_full_text_search.md): cheap opens make searching across chronicles viable

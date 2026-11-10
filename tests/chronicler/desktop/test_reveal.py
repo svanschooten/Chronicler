@@ -60,19 +60,21 @@ class TestOpenInFileManager:
                 open_in_file_manager(tmp_path)
 
     def test_wsl_translates_the_path_when_wslpath_succeeds(self, tmp_path):
-        completed = MagicMock(returncode=0, stdout="C:\\\\Users\\\\me\\\\ws\n")
+        completed = MagicMock(returncode=0, stdout="C:\\Users\\me\\ws\n")
         with (
             patch("chronicler.desktop.reveal._is_wsl", return_value=True),
+            patch("chronicler.desktop.reveal.sys.platform", "linux"),
             patch("chronicler.desktop.reveal.subprocess.run", return_value=completed),
             patch("chronicler.desktop.reveal.subprocess.Popen") as popen,
         ):
             open_in_file_manager(tmp_path)
 
-        assert popen.call_args.args[0] == ["explorer.exe", "C:\\\\Users\\\\me\\\\ws"]
+        assert popen.call_args.args[0] == ["explorer.exe", "C:\\Users\\me\\ws"]
 
     def test_wsl_falls_back_to_the_raw_path_when_wslpath_fails(self, tmp_path):
         with (
             patch("chronicler.desktop.reveal._is_wsl", return_value=True),
+            patch("chronicler.desktop.reveal.sys.platform", "linux"),
             patch("chronicler.desktop.reveal.subprocess.run", side_effect=OSError("nope")),
             patch("chronicler.desktop.reveal.subprocess.Popen") as popen,
         ):

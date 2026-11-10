@@ -45,9 +45,11 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         db_line = DBTranscriptLine(
             id=str(line.id),
             speaker_id=str(line.speaker_id) if line.speaker_id else None,
+            source_id=str(line.source_id) if line.source_id else None,
             start_time=line.start_time,
             end_time=line.end_time,
             text=line.text,
+            synthetic_timing=line.synthetic_timing,
         )
         self.session.add(db_line)
         await self.session.flush()
@@ -59,9 +61,11 @@ class SQLiteTranscriptRepository(TranscriptRepository):
             DBTranscriptLine(
                 id=str(line.id),
                 speaker_id=str(line.speaker_id) if line.speaker_id else None,
+                source_id=str(line.source_id) if line.source_id else None,
                 start_time=line.start_time,
                 end_time=line.end_time,
                 text=line.text,
+                synthetic_timing=line.synthetic_timing,
             )
             for line in lines
         ]
@@ -106,9 +110,9 @@ class SQLiteTranscriptRepository(TranscriptRepository):
     async def delete_all_lines(self) -> None:
         await self.session.execute(sa_delete(DBTranscriptLine))
 
-    async def delete_lines_by_speaker(self, speaker_id: UUID) -> None:
+    async def delete_track_lines(self, source_id: UUID) -> None:
         await self.session.execute(
-            sa_delete(DBTranscriptLine).where(DBTranscriptLine.speaker_id == str(speaker_id))
+            sa_delete(DBTranscriptLine).where(DBTranscriptLine.source_id == str(source_id))
         )
 
     async def search(self, query: str) -> list[TranscriptLine]:

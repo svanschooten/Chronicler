@@ -32,8 +32,12 @@
    `ensure_normalized` as a plain function.
 2. Make the dependency required, and delete the guards.
 3. Replace the five backfills with one `reconcile(chronicle_id)`.
-4. Replace `claim_next` with one atomic statement. This sketch has not been run, and needs
-   SQLite 3.35 or newer:
+4. Replace `claim_next` with one statement. Since 008 only one process can open a
+   workspace, and the worker is one coroutine, so nothing else claims concurrently: a
+   plain select-then-update would also do, and is simpler to read.
+   The atomic form, for reference. This sketch has not been run, needs SQLite 3.35 or
+   newer, and predates 022, so it still lacks the `not_before` condition `claim_next`
+   has now:
 
 ```python
 next_id = (
@@ -62,4 +66,5 @@ Done when behaviour is unchanged, and the listed constructs are gone.
 - (BLOCKER) [011-H4_clean_confirm_and_snapshot](011-H4_clean_confirm_and_snapshot.md): edits the clean handler
 - (BLOCKER) [032-S4_project_db_access](032-S4_project_db_access.md): handlers should use the new helper first
 - (BLOCKS) [051-L7_speaker_count_definition](051-L7_speaker_count_definition.md): builds on `reconcile`
-- (BLOCKS) [064-F2_progress_and_cancel](064-F2_progress_and_cancel.md): same handler code
+- (RELATED) [064-F2_progress_and_cancel](064-F2_progress_and_cancel.md): same handler code. Goes first now, so this rebases on it
+- (RELATED) [077-L15_task_history_grows](077-L15_task_history_grows.md): edits `task_repository.py` too

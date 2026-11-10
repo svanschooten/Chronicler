@@ -98,16 +98,27 @@ class TranscribeHandler(NormalizeHandler):
             sources = SQLiteAudioSourceRepository(session)
             try:
                 speaker = await repo.get_or_create_speaker(speaker_name)
-                await repo.delete_lines_by_speaker(speaker.id)
-
-                await self.attach_speakers(repo, lines)
-                await repo.add_lines(lines)
-
-                await sources.register(
+                source = await sources.register(
                     resolved_path.name,
                     content_hash=fingerprint_file(resolved_path),
                     size_bytes=resolved_path.stat().st_size,
                 )
+                offset = source.start_offset
+                if "start_offset" in data:
+                    offset = float(data["start_offset"])
+                    await sources.set_start_offset(resolved_path.name, offset)
+
+                # Only this track's lines. A line with no source_id came from an import, or
+                # from before tracks were recorded and could not be attributed, and is kept.
+                await repo.delete_track_lines(source.id)
+
+                await self.attach_speakers(repo, lines)
+                for line in lines:
+                    line.source_id = source.id
+                    line.start_time += offset
+                    line.end_time += offset
+                await repo.add_lines(lines)
+
                 await sources.set_speaker(resolved_path.name, speaker.id)
                 await sources.mark_transcribed(
                     resolved_path.name,
@@ -132,6 +143,10 @@ class TranscribeHandler(NormalizeHandler):
             f"Transcription finished for chronicle {chronicle_id}: "
             f"{len(lines)} segments for speaker '{speaker_name}'"
         )
+
+    async def abandon_transcribe(self, task: Task) -> None:
+        """Recovery failed this task, so its source must stop showing as transcribing."""
+        await self.release_source(task, transcription=True)
 
     async def _register_source(self, chronicle_id: UUID, filename: str, speaker_name: str) -> None:
         path = (await self.sources_root_for(chronicle_id)) / filename
@@ -184,25 +199,26 @@ class TranscribeHandler(NormalizeHandler):
     async def _backfill_metadata(
         self, chronicle_id: UUID, speakers_count: int, duration_seconds: float
     ) -> None:
-        if not self.chronicle_repo:
+        if not self.archive_sessions:
             return
-        chronicle = await self.chronicle_repo.get_by_id(chronicle_id)
-        if not chronicle:
-            return
+        async with self.chronicles() as chronicles:
+            chronicle = await chronicles.get_by_id(chronicle_id)
+            if not chronicle:
+                return
 
-        changed = False
-        if chronicle.speakers_count != speakers_count:
-            chronicle.speakers_count = speakers_count
-            changed = True
+            changed = False
+            if chronicle.speakers_count != speakers_count:
+                chronicle.speakers_count = speakers_count
+                changed = True
 
-        duration_str = format_duration(duration_seconds)
-        if chronicle.duration != duration_str:
-            chronicle.duration = duration_str
-            changed = True
+            duration_str = format_duration(duration_seconds)
+            if chronicle.duration != duration_str:
+                chronicle.duration = duration_str
+                changed = True
 
-        if chronicle.status == "Imported":
-            chronicle.status = "Transcribed"
-            changed = True
+            if chronicle.status == "Imported":
+                chronicle.status = "Transcribed"
+                changed = True
 
-        if changed:
-            await self.chronicle_repo.update(chronicle)
+            if changed:
+                await chronicles.update(chronicle)

@@ -2,6 +2,7 @@
 
 import io
 import json
+import threading
 import zipfile
 from datetime import datetime
 from uuid import uuid4
@@ -286,3 +287,55 @@ class TestExportZip:
             assert json.loads(bundle.read("C/chronicle.json"))["tags"] == ["campaign"]
 
         await db_manager.close_all()
+
+
+class TestExportsLeaveTheEventLoopFree:
+    """
+    Ticket 028: building a PDF or a zip is seconds of work. On the event loop it froze the
+    desktop UI, and stopped a server answering every client.
+    """
+
+    @staticmethod
+    def _recording_the_thread(monkeypatch, name: str) -> list[threading.Thread]:
+        from chronicler.core.services import pdf, transcript_service
+
+        # format_pdf is imported inside export_pdf, so it is patched where it lives.
+        module = pdf if name == "format_pdf" else transcript_service
+        original = getattr(module, name)
+        seen: list[threading.Thread] = []
+
+        def recording(*args, **kwargs):
+            seen.append(threading.current_thread())
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(module, name, recording)
+        return seen
+
+    @pytest.mark.asyncio
+    async def test_the_pdf_is_built_on_a_worker_thread(self, tmp_path, monkeypatch):
+        seen = self._recording_the_thread(monkeypatch, "format_pdf")
+        db_manager = DatabaseManager(tmp_path)
+        await db_manager.init_archive()
+        chronicle = await _chronicle_with_a_transcript(db_manager)
+        async with db_manager.get_archive_session() as session:
+            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+
+            pdf = await service.export_pdf(chronicle.id, chronicle.title)
+
+        assert bytes(pdf).startswith(b"%PDF")
+        assert seen and seen[0] is not threading.main_thread()
+
+    @pytest.mark.asyncio
+    async def test_the_zip_is_built_on_a_worker_thread(self, tmp_path, monkeypatch):
+        seen = self._recording_the_thread(monkeypatch, "format_bundle")
+        db_manager = DatabaseManager(tmp_path)
+        await db_manager.init_archive()
+        chronicle = await _chronicle_with_a_transcript(db_manager)
+        async with db_manager.get_archive_session() as session:
+            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+
+            archive = await service.export_zip(chronicle.id)
+
+        with _opened(archive) as bundle:
+            assert bundle.testzip() is None
+        assert seen and seen[0] is not threading.main_thread()

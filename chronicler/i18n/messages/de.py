@@ -195,6 +195,12 @@ MESSAGES = {
         "import_transcript": "Transkript importieren",
         "clean": "Transkript bereinigen",
         "clean_queued": "Bereinigungsaufgabe eingereiht",
+        "clean_title": "Transkript bereinigen?",
+        "clean_message": (
+            "Beim Bereinigen von '{title}' werden Füllzeilen und Wiederholungen entfernt und "
+            "aufeinanderfolgende Beiträge zusammengeführt. Vorher wird eine Kopie im Ordner "
+            "snapshots gespeichert."
+        ),
         "identify_speakers": "Sprecher erkennen",
         "speakers_found": "{count} Sprecher gefunden",
         "summarize": "Zusammenfassung erstellen",
@@ -211,6 +217,12 @@ MESSAGES = {
         "deleted": "'{title}' geloescht",
         "delete_failed": "Chronik konnte nicht geloescht werden: {error}",
         "failed": "Fehler: {error}",
+        "link_not_found": "{path} kann nicht verknüpft werden: Die Datei wurde nicht gefunden",
+        "link_not_chronicler": "{path} kann nicht verknüpft werden: Keine Chronicler-Datenbank",
+        "link_newer_version": (
+            "{path} kann nicht verknüpft werden: Mit einer neueren Chronicler-Version erstellt"
+        ),
+        "link_unreadable": ("{path} kann nicht verknüpft werden: Nicht lesbar ({detail})"),
         "transcript_exists_title": "Es gibt schon ein Transkript",
         "transcript_exists_message": (
             "Diese Chronicle hat bereits ein importiertes Transkript. Mit der neuen Datei "
@@ -253,6 +265,12 @@ MESSAGES = {
         "save_speaker": "Nur Sprecher speichern",
         "start": "Transkription starten",
         "start_again": "Erneut transkribieren",
+        "start_offset": "Startversatz (Sekunden)",
+        "start_offset_invalid": "Eine Anzahl Sekunden eingeben, 0 oder mehr",
+        "replaces_edits": (
+            "Diese Spur ist bereits transkribiert. "
+            "Erneutes Transkribieren ersetzt ihre Zeilen, auch bearbeitete."
+        ),
     },
     "recording": {
         "no_devices": "Keine Audioeingabegeräte gefunden. Unter WSL wird dafür WSLg benötigt.",
@@ -352,8 +370,8 @@ MESSAGES = {
                 "Mit einem Chronicler-Server verbinden, der die Arbeit übernimmt."
             ),
             "server_note": (
-                "Chronicler als Server oder Web-Client wird im Terminal eingerichtet: "
-                "mit dem Argument 'server' oder 'web' starten."
+                "Chronicler als Server wird im Terminal eingerichtet: "
+                "mit dem Argument 'server' starten."
             ),
         },
         "workspace": {
@@ -363,6 +381,9 @@ MESSAGES = {
             "browse": "Durchsuchen",
             "picker_title": "Arbeitsordner wählen",
             "required": "Wähle einen Ordner, um fortzufahren.",
+            "not_writable": (
+                "Chronicler kann nicht in diesen Ordner schreiben. Wähle einen anderen."
+            ),
         },
         "api_key": {
             "title": "API-Schlüssel",
@@ -397,6 +418,26 @@ MESSAGES = {
         "hint": (
             "Prüfe die Verbindungseinstellungen in deiner Konfigurationsdatei und starte "
             "Chronicler erneut."
+        ),
+        "workspace_locked": (
+            "Der Arbeitsbereich unter {path} ist bereits in einem anderen Chronicler-Fenster "
+            "oder Server geöffnet."
+        ),
+        "workspace_locked_hint": "Schließe diesen zuerst und starte Chronicler dann erneut.",
+        "workspace_lock_unavailable": (
+            "Chronicler konnte den Arbeitsbereich unter {path} nicht sperren: {reason}."
+        ),
+        "workspace_lock_unavailable_hint": (
+            "Das Dateisystem unterstützt möglicherweise keine Dateisperren, wie manche "
+            "Netzwerk- und FUSE-Einbindungen. Wähle einen Arbeitsbereich auf einem lokalen "
+            "Laufwerk und starte Chronicler dann erneut."
+        ),
+        "workspace_not_writable": (
+            "Chronicler kann nicht in den Arbeitsbereich unter {path} schreiben: {reason}."
+        ),
+        "workspace_not_writable_hint": (
+            "Prüfe die Berechtigungen des Ordners oder wähle einen anderen Arbeitsbereich und "
+            "starte Chronicler dann erneut."
         ),
     },
 }

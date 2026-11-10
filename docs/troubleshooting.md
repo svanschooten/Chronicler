@@ -69,6 +69,14 @@ A project database was migrated by a build that ran Alembic concurrently. See
 [storage.md](storage.md#migrations-are-serialised-process-wide) for why, and for how to
 recover the affected `project.db`.
 
+## A chronicle fails to open with "Can't locate revision"
+
+The chronicle's `project.db` was opened by a newer version of Chronicler, which upgraded
+it, and this version does not know that schema. It happens with shared chronicles: a
+synced folder, a zip from someone else, or a linked database. Update Chronicler to the
+version that last opened it. Nothing is lost; the file is intact. See
+[storage.md](storage.md#opening-a-chronicle-upgrades-it).
+
 ## Recording says the extra is missing after installing it
 
 `sounddevice` is a binding to PortAudio, not a bundle of it. The wheel is 32 kB of pure
@@ -147,3 +155,31 @@ Two rules came out of it, both now enforced by tests in
 
 `WorkerManager.stop()` only asks the loop to finish its current sleep, so `cleanup` now
 also holds the task handle and cancels it rather than leaving it to outlive the shutdown.
+
+## "The workspace is already open in another Chronicler process"
+
+Only one desktop app or server can have a workspace open at a time. Another Chronicler
+on this machine is using it: close that one, or point this one at a different
+workspace (`--config` keeps a second configuration apart, see [HOWTO.md](../HOWTO.md)).
+
+A crashed or killed Chronicler does not cause this, because the OS releases the lock
+when the process ends, so the message means a running process. Do not delete
+`.chronicler.lock` to get past it: on Linux and macOS that lets the second process in
+while the first is still running. See [storage.md](storage.md#one-process-per-workspace).
+
+## "Chronicler cannot write to the workspace"
+
+The workspace folder cannot be created or written to, and the message ends with the
+operating system's reason, such as "Permission denied" or "Read-only file system". Fix the
+folder's permissions, or choose a different workspace.
+
+## "Chronicler could not lock the workspace"
+
+The message ends with the operating system's reason, such as "No locks available" or
+"Operation not supported". No other Chronicler is involved: the filesystem holding the
+workspace refused the lock itself. Some NFS, SMB and FUSE mounts (sshfs, cloud-drive
+mounts) do not support file locks.
+
+Move the workspace to a local disk, or mount the share with locking enabled. Before
+this message existed, these filesystems reported "already open in another Chronicler
+process" on every start.

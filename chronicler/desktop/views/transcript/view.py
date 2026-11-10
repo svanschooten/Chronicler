@@ -5,7 +5,7 @@ from pathlib import Path
 import flet as ft
 
 from chronicler.core import extras
-from chronicler.core.config import Settings, get_settings
+from chronicler.core.config import Mode, Settings, get_settings
 from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.task_service import TaskService
@@ -180,6 +180,12 @@ class TranscriptView(ft.Column):
             ),
             self._can_summarize,
         )
+        self.title_text = ft.Text(size=26, weight=ft.FontWeight.BOLD, color=self.colors.text)
+        self.subtitle_text = ft.Text(color=self.colors.muted)
+        self.status_text = ft.Text(color=self.colors.accent)
+        self.speakers_text = ft.Text(color=self.colors.muted)
+        self.tags_text = ft.Text(color=self.colors.muted)
+        self._show_chronicle()
         self.detail_panel = self._detail_panel()
 
         self.controls = [self._header(), self.actions, self._body()]
@@ -203,12 +209,41 @@ class TranscriptView(ft.Column):
             tooltip=None if usable else t("sources.record_unavailable"),
         )
 
+    def _show_chronicle(self) -> None:
+        """Writes the chronicle's own fields into the header and the detail panel."""
+        chronicle = self.chronicle
+        self.title_text.value = chronicle.title
+        self.subtitle_text.value = (
+            f"{chronicle.kind} · "
+            f"{chronicle.created_at.strftime('%Y-%m-%d')} · "
+            f"{chronicle.duration or 'Unknown'}"
+        )
+        self.status_text.value = chronicle.status
+        self.speakers_text.value = t(
+            "transcript.speakers_identified", count=chronicle.speakers_count
+        )
+        tags = " · ".join(tag.name for tag in chronicle.tags)
+        self.tags_text.value = tags or t("archive.no_tags")
+
     def _can_summarize(self) -> bool:
         """
         Unknown capabilities means "assume it works": the button explaining itself is
         better than one that refuses because a handshake has not landed yet.
         """
         return self.capabilities is None or "summarize" in self.capabilities()
+
+    def _folder_buttons(self) -> list[ft.IconButton]:
+        """The folder is on the server's disk for a thin client, so there is nothing to open."""
+        if self.settings.desktop_mode is Mode.THIN_CLIENT:
+            return []
+        return [
+            ft.IconButton(
+                icon=ft.Icons.FOLDER_OPEN,
+                icon_color=self.colors.muted,
+                tooltip=t("summaries.open_folder"),
+                on_click=self.open_folder_clicked,
+            )
+        ]
 
     def _header(self) -> ft.Row:
         return ft.Row(
@@ -220,20 +255,7 @@ class TranscriptView(ft.Column):
                 ),
                 ft.Column(
                     expand=True,
-                    controls=[
-                        ft.Text(
-                            self.chronicle.title,
-                            size=26,
-                            weight=ft.FontWeight.BOLD,
-                            color=self.colors.text,
-                        ),
-                        ft.Text(
-                            f"{self.chronicle.kind} · "
-                            f"{self.chronicle.created_at.strftime('%Y-%m-%d')} · "
-                            f"{self.chronicle.duration or 'Unknown'}",
-                            color=self.colors.muted,
-                        ),
-                    ],
+                    controls=[self.title_text, self.subtitle_text],
                 ),
                 ft.IconButton(
                     icon=ft.Icons.MENU_BOOK,
@@ -241,12 +263,7 @@ class TranscriptView(ft.Column):
                     tooltip=t("summaries.read_transcript"),
                     on_click=self.read_transcript_clicked,
                 ),
-                ft.IconButton(
-                    icon=ft.Icons.FOLDER_OPEN,
-                    icon_color=self.colors.muted,
-                    tooltip=t("summaries.open_folder"),
-                    on_click=self.open_folder_clicked,
-                ),
+                *self._folder_buttons(),
                 self.exporter.menu(),
             ],
         )
@@ -318,7 +335,6 @@ class TranscriptView(ft.Column):
             await self.load_transcript()
 
     def _detail_panel(self) -> ft.Container:
-        tags = " · ".join([tag.name for tag in self.chronicle.tags])
         return self._panel(
             ft.Column(
                 controls=[
@@ -328,15 +344,12 @@ class TranscriptView(ft.Column):
                         weight=ft.FontWeight.BOLD,
                         color=self.colors.text,
                     ),
-                    ft.Text(self.chronicle.status, color=self.colors.accent),
+                    self.status_text,
                     ft.Divider(color=self.colors.border),
                     t_bold(t("transcript.speakers"), self.colors.text),
-                    ft.Text(
-                        t("transcript.speakers_identified", count=self.chronicle.speakers_count),
-                        color=self.colors.muted,
-                    ),
+                    self.speakers_text,
                     t_bold(t("transcript.tags"), self.colors.text),
-                    ft.Text(tags or t("archive.no_tags"), color=self.colors.muted),
+                    self.tags_text,
                     ft.Divider(color=self.colors.border),
                     ft.Row(controls=[self._record_button()]),
                     self.sources,
@@ -390,6 +403,42 @@ class TranscriptView(ft.Column):
         await self.sources.load()
         await self.summaries.load()
 
+    async def refresh(self) -> None:
+        """
+        Re-reads what a finished task could have changed, on the view that is already on
+        screen: the header, the sources and the summaries. The transcript is left alone
+        while it is being edited, so a task finishing never throws away typed text.
+        """
+        if not await self._refresh_chronicle():
+            await self.on_back()
+            return
+        await self.sources.load()
+        await self.summaries.load()
+        if not self.editing:
+            await self.load_transcript()
+
+    async def _refresh_chronicle(self) -> bool:
+        """
+        Copies the stored chronicle onto the one this view and its panels already share.
+        False when it no longer exists.
+        """
+        if self.chronicle_service is None:
+            return True
+        fresh = await self.chronicle_service.get_chronicle(self.chronicle.id)
+        if fresh is None:
+            return False
+        for name in type(fresh).model_fields:
+            setattr(self.chronicle, name, getattr(fresh, name))
+        self._show_chronicle()
+        _repaint(
+            self.title_text,
+            self.subtitle_text,
+            self.status_text,
+            self.speakers_text,
+            self.tags_text,
+        )
+        return True
+
     async def back_to_archive(self) -> None:
         await self.on_back()
 
@@ -439,7 +488,6 @@ class TranscriptView(ft.Column):
             icon=ft.Icons.FULLSCREEN,
             icon_color=self.colors.muted,
             tooltip=t("transcript.fullscreen"),
-            visible=self._can_go_fullscreen(),
         )
 
         async def toggle_fullscreen(_event):
@@ -473,13 +521,6 @@ class TranscriptView(ft.Column):
             )
 
         await await_dialog(self.page, build)
-
-    def _can_go_fullscreen(self) -> bool:
-        """
-        A browser tab has no window to resize - `page.window` is inert there, so the
-        button would do nothing visible. The web client is the one mode that hits this.
-        """
-        return not getattr(self.page, "web", False)
 
     def _size_reader(self, reader: ft.Container) -> None:
         """

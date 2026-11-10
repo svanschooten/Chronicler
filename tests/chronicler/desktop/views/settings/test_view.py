@@ -5,7 +5,7 @@ import pytest
 import yaml
 
 from chronicler.core.config import CONFIG_FILE_ENV_VAR, Settings, get_settings
-from chronicler.desktop.state import ModelCheck
+from chronicler.core.models import ModelCheck
 from chronicler.desktop.views.settings import SettingsView
 from chronicler.i18n import set_locale
 

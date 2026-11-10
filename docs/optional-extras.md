@@ -2,15 +2,29 @@
 
 `chronicler/core/extras.py`, `chronicler/desktop/extras_prompt.py`
 
-Four features need dependencies too large to ship with the base install. Each is a
+Five features need dependencies that not every install wants. Each is a
 `[project.optional-dependencies]` group in `pyproject.toml` and an entry in `EXTRAS`:
 
-| Extra | Module | Feature | Download |
-| ----- | ------ | ------- | -------- |
+| Extra | Modules | Feature | Download |
+| ----- | ------- | ------- | -------- |
 | `transcription` | `faster_whisper` | Whisper transcription | ~120 MB |
-| `normalization` | `av` | Loudness normalisation | ~35 MB |
+| `normalization` | `av`, `numpy` | Loudness normalisation | ~50 MB |
 | `llm` | `llama_cpp` | Local `.gguf` summarisation | ~30 MB |
 | `recording` | `sounddevice` | Recording from a microphone | ~1 MB |
+| `server` | `fastapi`, `uvicorn`, `python_multipart` | `chronicler server` | ~10 MB |
+
+An extra lists every module its feature imports directly and every requirement its
+`pyproject.toml` group has. `server` is why: FastAPI, Uvicorn and python-multipart are
+three packages, and the server cannot start without any one of them. A test checks the
+requirements against `pyproject.toml`, so the two cannot drift.
+
+`normalization` lists numpy for the same reason. Measuring loudness imports it, and PyAV
+does not depend on it, so an install with only this extra used to report it missing while
+`av` was present. In the embedded runtime numpy is in both the transcription and the
+normalization component locks, so either works alone.
+
+`python_multipart` rather than `multipart`: the old name is a deprecated alias. The real
+module arrived in python-multipart 0.0.13, which is therefore the floor.
 
 ## One registry, not four hand-written strings
 
@@ -18,7 +32,7 @@ Before this existed, each of the four call sites wrote its own "install the extr
 message. They drifted, and the desktop had no way to know *which* extra had failed —
 it could only print whatever string it was handed.
 
-`EXTRAS` is now the single source: the module a guard imports, the pip requirement, what
+`EXTRAS` is now the single source: the modules a guard imports, the pip requirements, what
 the feature is for, roughly how big the download is, and any system package pip cannot
 supply. Every guard asks `missing_message()`; the desktop asks `is_available()`.
 
@@ -38,7 +52,7 @@ package is there and its library is not — a different problem with a different
 
 Since the binaries started being built with the extras installed, a packaged Chronicler
 transcribes, normalises and records out of the box. The release workflow installs
-`.[transcription,normalization,recording]` before PyInstaller runs, and PyInstaller
+`.[transcription,normalization,recording,server]` before PyInstaller runs, and PyInstaller
 collects what it finds — the imports are inside functions, which its analysis follows.
 This is not free: the Linux binary goes from roughly 57 MB to roughly 170 MB.
 
@@ -64,6 +78,14 @@ choice:
 
 So `missing_message()` does not name a pip command in a packaged build. It says the
 feature is not included in this build, which is the whole truth there.
+
+## Server mode checks before it asks anything
+
+`chronicler server` calls `require_server_extra()` before the console wizard, and the
+`chronicler-server` entry point calls it too. Without the extra it exits with
+`missing_message("server")`: the pip command from a checkout, the component command in the
+embedded runtime. Before, it went through the wizard and then failed on `import uvicorn`
+with a traceback.
 
 ## Buttons that go quiet rather than wrong
 

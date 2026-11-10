@@ -5,19 +5,20 @@ from collections.abc import Callable
 import flet as ft
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chronicler.core.config import Mode
 from chronicler.core.container import Container
-from chronicler.core.models import Chronicle
+from chronicler.core.models import Chronicle, ModelCheck
 from chronicler.core.remote import RemoteContainer
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.system_service import SystemService
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.task_events import TaskCompletedEvent, TaskEventBus
-from chronicler.core.worker_wiring import build_worker_runtime
+from chronicler.core.worker_wiring import build_worker_manager
 from chronicler.core.workers import WorkerManager
 from chronicler.desktop.components.sidebar import Sidebar
 from chronicler.desktop.runtime import DesktopRuntime
-from chronicler.desktop.state import AppState, ModelCheck, ViewType
+from chronicler.desktop.state import AppState, ViewType
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.archive import ArchiveView
 from chronicler.desktop.views.settings import SettingsView
@@ -51,7 +52,6 @@ class DesktopApp:
 
         self.worker_manager: WorkerManager | None = None
         self._worker_task: asyncio.Task | None = None
-        self._worker_session: AsyncSession | None = None
         self.event_bus: TaskEventBus | None = None
         self._unsubscribe_task_events: Callable[[], None] | None = None
 
@@ -59,6 +59,7 @@ class DesktopApp:
         self.capabilities: set[str] | None = None
         self.model_error: str | None = None
         self._view_scope: Container | None = None
+        self.current_view: ft.Control | None = None
         logger.debug("DesktopApp constructed")
 
     async def main(self, page: ft.Page):
@@ -117,9 +118,7 @@ class DesktopApp:
         self.event_bus = TaskEventBus()
         self._unsubscribe_task_events = self.event_bus.subscribe(self._on_task_completed)
 
-        worker_runtime = build_worker_runtime(self.db_manager, event_bus=self.event_bus)
-        self.worker_manager = worker_runtime.manager
-        self._worker_session = worker_runtime.session
+        self.worker_manager = build_worker_manager(self.db_manager, event_bus=self.event_bus)
 
         self._worker_task = asyncio.create_task(self.worker_manager.run_forever())
 
@@ -138,9 +137,8 @@ class DesktopApp:
 
         await self._close_view_scope()
         await close_scope(self.resolver)
-        if self._worker_session is not None:
-            await self._worker_session.close()
-            self._worker_session = None
+        if self.runtime.http_client is not None:
+            await self.runtime.http_client.aclose()
         if self.db_manager is not None:
             await self.db_manager.close_all()
 
@@ -159,12 +157,17 @@ class DesktopApp:
 
     async def _on_task_completed(self, event: TaskCompletedEvent) -> None:
         """
-        Refreshes whatever view is currently on screen if a just-finished task could
+        Asks the view on screen to re-read its data if a just-finished task could
         plausibly have changed what it's showing - a chronicle's transcript, speaker
         count, duration, status or tags after import/clean/transcribe, or the task list
         itself.
+
+        The view object stays. Building a new one, as `update_view()` does, would reset
+        search text, detach an open form and drop the transcript out of edit mode along
+        with whatever was being typed. See docs/desktop.md.
         """
-        if self.state.current_view == ViewType.SETTINGS:
+        refresh = getattr(self.current_view, "refresh", None)
+        if refresh is None:
             return
         if (
             self.state.current_view == ViewType.TRANSCRIPT
@@ -175,7 +178,7 @@ class DesktopApp:
             return
 
         logger.debug(f"Refreshing current view after task {event.task_id} completed")
-        await self.update_view()
+        await refresh()
 
     async def on_sidebar_nav_change(self, view_id: str):
         view = ViewType.from_nav_id(view_id)
@@ -199,7 +202,7 @@ class DesktopApp:
             self.sidebar.set_dark_mode(dark_mode)
         await self.update_view()
 
-    async def refresh_models(self, refresh: bool = False) -> ModelCheck:
+    async def refresh_models(self) -> ModelCheck:
         """
         Asks the service layer what it can do.
 
@@ -211,9 +214,6 @@ class DesktopApp:
         configuration decide what the buttons here should offer. `capabilities` stays None
         when the call fails, which every consumer reads as "assume it works" rather than
         greying out half the interface over an unrelated network hiccup.
-
-        `refresh` bypasses the model cache, for when the configuration just changed and
-        the five-minute-old answer is known to be stale.
         """
         scope = (
             self.resolver.create_scope() if isinstance(self.resolver, Container) else self.resolver
@@ -221,8 +221,9 @@ class DesktopApp:
         try:
             system = scope.resolve(SystemService)
             try:
-                self.available_models = await system.list_models(refresh=refresh)
-                self.model_error = await system.model_error()
+                check = await system.list_models()
+                self.available_models = list(check.models)
+                self.model_error = check.error
             except Exception as error:
                 logger.warning("Could not list language models", exc_info=True)
                 self.available_models = []
@@ -248,7 +249,7 @@ class DesktopApp:
         list were read once at startup, so the summarize button stayed greyed out until
         the next launch. See docs/desktop.md.
         """
-        return await self.refresh_models(refresh=True)
+        return await self.refresh_models()
 
     async def on_locale_change(self, _locale: str):
         if self.sidebar is not None:
@@ -280,6 +281,7 @@ class DesktopApp:
         if content is None:
             return
 
+        self.current_view = content
         if self.content_area is not None:
             self.content_area.content = content
             self.content_area.update()
@@ -302,6 +304,7 @@ class DesktopApp:
                 self.file_stager.stage,
                 scope.resolve(TranscriptService),
                 dark_mode=dark_mode,
+                can_link=self.runtime.settings.desktop_mode is not Mode.THIN_CLIENT,
             )
 
         if self.state.current_view == ViewType.TASKS:

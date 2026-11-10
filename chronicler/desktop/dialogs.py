@@ -22,12 +22,21 @@ class Choice(Generic[T]):
 async def await_dialog(
     page: ft.Page,
     dialog_factory: Callable[[Callable[[Callable[[], T]], Any]], ft.AlertDialog],
-) -> T:
+    dismissed: T | None = None,
+) -> T | None:
     """
     Shows the dialog built by `dialog_factory` and resolves to whatever the clicked button
     asked for.
+
+    Clicking outside a dialog or pressing Esc closes it without any button, so that
+    resolves to `dismissed` - the value that means "never mind" for this dialog. Without
+    it the caller would wait forever.
     """
-    future: asyncio.Future[T] = asyncio.get_event_loop().create_future()
+    future: asyncio.Future[T | None] = asyncio.get_event_loop().create_future()
+
+    def on_dismiss(_event) -> None:
+        if not future.done():
+            future.set_result(dismissed)
 
     def on_choice(value_getter: Callable[[], T]) -> Any:
         async def handler(e):
@@ -37,7 +46,9 @@ async def await_dialog(
 
         return handler
 
-    page.show_dialog(dialog_factory(on_choice))
+    dialog = dialog_factory(on_choice)
+    dialog.on_dismiss = on_dismiss
+    page.show_dialog(dialog)
     return await future
 
 
@@ -46,8 +57,14 @@ async def ask_choice(
     title: str,
     message: str,
     choices: Sequence[Choice[T]],
+    *,
+    dismissed: T,
 ) -> T:
-    """A modal question with one button per choice, resolving to the chosen value."""
+    """
+    A question with one button per choice, resolving to the chosen value. Esc or a click
+    outside resolves to `dismissed`, which callers name explicitly - usually the cancel
+    choice's value - so no button's position decides what "never mind" means.
+    """
 
     def build(on_choice) -> ft.AlertDialog:
         return ft.AlertDialog(
@@ -62,7 +79,7 @@ async def ask_choice(
             ],
         )
 
-    return await await_dialog(page, build)
+    return await await_dialog(page, build, dismissed=dismissed)  # type: ignore[return-value]
 
 
 async def confirm(page: ft.Page, title: str, message: str, confirm_label: str = "Delete") -> bool:
@@ -72,6 +89,7 @@ async def confirm(page: ft.Page, title: str, message: str, confirm_label: str = 
         title,
         message,
         [Choice("Cancel", False), Choice(confirm_label, True, primary=True)],
+        dismissed=False,
     )
 
 

@@ -210,6 +210,17 @@ class TestMergeSameSpeaker:
 
         assert texts(result) == ["Hello world", "Hi"]
 
+    def test_a_different_track_breaks_the_run(self):
+        """A merged line must never span two tracks, or re-transcribing one loses both."""
+        part1, part2 = uuid.uuid4(), uuid.uuid4()
+        first = line("end of part one", 0.0, 1.0).model_copy(update={"source_id": part1})
+        second = line("start of part two", 1.0, 2.0).model_copy(update={"source_id": part2})
+
+        result = MergeSameSpeaker().apply([first, second])
+
+        assert texts(result) == ["end of part one", "start of part two"]
+        assert [merged.source_id for merged in result] == [part1, part2]
+
     def test_does_not_mutate_the_input(self):
         first = line("nice", 0.0, 1.0)
         MergeSameSpeaker().apply([first, line("okay", 1.0, 2.0)])

@@ -1,19 +1,20 @@
 """Server identity and health, used by a thin client to verify what it is talking to."""
 
+import asyncio
 import logging
 
 from chronicler import __version__
 from chronicler.core import extras
 from chronicler.core.config import Settings, get_settings
-from chronicler.core.llm import ModelRegistry
-from chronicler.core.models import ServerInfo
+from chronicler.core.llm import discover_models
+from chronicler.core.models import ModelCheck, ServerInfo
 from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.rpc import service
 
 logger = logging.getLogger(__name__)
 
 
-@service(expose=["get_server_info", "list_models", "model_error", "ping"])
+@service(expose=["get_server_info", "list_models", "ping"])
 class SystemService:
     def __init__(
         self,
@@ -22,14 +23,10 @@ class SystemService:
     ):
         self.chronicle_repository = chronicle_repository
         self.settings = settings or get_settings()
-        self._models = ModelRegistry(self.settings.llm)
 
-    async def list_models(self, refresh: bool = False) -> list[str]:
-        """Model ids the configured provider offers, cached between calls."""
-        return await self._models.model_ids(refresh=refresh)
-
-    async def model_error(self) -> str | None:
-        return self._models.last_error
+    async def list_models(self) -> ModelCheck:
+        """The model ids the configured provider offers, and why not if it cannot say."""
+        return await discover_models(self.settings.llm)
 
     async def get_server_info(self) -> ServerInfo:
         chronicle_count = None
@@ -39,10 +36,13 @@ class SystemService:
             except Exception:
                 logger.warning("Could not count chronicles for server info", exc_info=True)
 
+        # Off the event loop: availability means the module really imports, and the first
+        # import of an extra such as faster_whisper takes seconds.
+        capabilities = await asyncio.to_thread(capabilities_for, self.settings)
         return ServerInfo(
             version=__version__,
             chronicle_count=chronicle_count,
-            capabilities=sorted(capabilities_for(self.settings)),
+            capabilities=sorted(capabilities),
         )
 
     async def ping(self) -> str:

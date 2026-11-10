@@ -1,8 +1,11 @@
+import logging
 from abc import ABC, abstractmethod
 
 from chronicler.core.formatting import parse_timestamp
 from chronicler.core.models import TranscriptLine
 from chronicler.core.processing.regex_guard import compile_pattern, run_timed
+
+logger = logging.getLogger(__name__)
 
 
 class Importer(ABC):
@@ -30,6 +33,8 @@ class RegexImporter(Importer):
     def parse(self, content: str, start_offset: float = 0.0) -> list[TranscriptLine]:
         turns = self._collect_turns(content, start_offset)
         self._assign_times(turns, start_offset)
+        for turn in turns:
+            turn.synthetic_timing = self.timestamp_group is None
         return turns
 
     def _collect_turns(self, content: str, start_offset: float) -> list[TranscriptLine]:
@@ -43,6 +48,7 @@ class RegexImporter(Importer):
         speaker: str | None = None
         text: list[str] = []
         start_time = start_offset
+        dropped = 0
 
         def flush() -> None:
             if speaker:
@@ -63,6 +69,8 @@ class RegexImporter(Importer):
             if match is None:
                 if speaker:
                     text.append(line.strip())
+                else:
+                    dropped += 1
                 continue
 
             flush()
@@ -74,6 +82,8 @@ class RegexImporter(Importer):
                 )
 
         flush()
+        if dropped:
+            logger.warning("Dropped %d line(s) before the first speaker", dropped)
         return turns
 
     def _assign_times(self, turns: list[TranscriptLine], start_offset: float) -> None:
@@ -94,4 +104,4 @@ class RegexImporter(Importer):
 
 class DefaultImporter(RegexImporter):
     def __init__(self):
-        super().__init__(r"^([A-Za-z0-9 _]+)\s*:(.*)$")
+        super().__init__(r"^([\w .'-]+?)\s*:(.*)$")

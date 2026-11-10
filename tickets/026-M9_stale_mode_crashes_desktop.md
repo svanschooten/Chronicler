@@ -21,4 +21,5 @@ desktop:full_stack mode requires settings.workspace_path` inside the Flet sessio
 
 ### related tickets
 
-- (CLOSED BY) [025-S9_single_mode_enum](025-S9_single_mode_enum.md): validation and runtime building share one answer
+- (CLOSED BY) [012-S14_remove_web_client](012-S14_remove_web_client.md): its PR reads a saved `client:web` mode as unset, so the desktop infers its mode instead of crashing
+- (RELATED) [025-S9_single_mode_enum](025-S9_single_mode_enum.md): replaces that stopgap with one mode enum

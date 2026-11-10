@@ -149,18 +149,23 @@ class DropRepeats(CleaningRule):
 
 
 class MergeSameSpeaker(CleaningRule):
-    """Joins consecutive turns by one speaker into a single line spanning both times."""
+    """
+    Joins consecutive turns by one speaker into a single line spanning both times. Only
+    lines from the same track are joined, so re-transcribing one track never takes part
+    of another with it.
+    """
 
     def apply(self, lines: list[TranscriptLine]) -> list[TranscriptLine]:
         merged: list[TranscriptLine] = []
         current: TranscriptLine | None = None
         for line in lines:
-            same_speaker = (
+            same_turn = (
                 current is not None
                 and current.speaker_id == line.speaker_id
                 and current.speaker_name == line.speaker_name
+                and current.source_id == line.source_id
             )
-            if same_speaker and current is not None:
+            if same_turn and current is not None:
                 current.text = f"{current.text} {line.text}".strip()
                 current.end_time = line.end_time
                 continue

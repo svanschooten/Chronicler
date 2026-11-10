@@ -69,6 +69,7 @@ def transcribe_audio(
                 text=text,
                 start_time=segment.start,
                 end_time=segment.end,
+                synthetic_timing=False,
             )
         )
     return lines

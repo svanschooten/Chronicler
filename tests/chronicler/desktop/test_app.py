@@ -5,7 +5,8 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
+from chronicler.core.models import ModelCheck
 from chronicler.desktop.app import DesktopApp
 from chronicler.desktop.runtime import build_runtime
 from chronicler.desktop.state import ViewType
@@ -13,7 +14,7 @@ from chronicler.desktop.state import ViewType
 
 @pytest_asyncio.fixture
 async def desktop_app(tmp_path):
-    settings = Settings(workspace_path=tmp_path, mode="desktop:full_stack")
+    settings = Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK)
     runtime = build_runtime(settings)
     await runtime.db_manager.init_archive()
 
@@ -25,23 +26,6 @@ async def desktop_app(tmp_path):
     yield app
 
     await app.cleanup(None)
-
-
-@pytest.mark.asyncio
-async def test_worker_session_is_separate_from_view_session(desktop_app):
-    """
-    The UI and the background WorkerManager loop are separate coroutines on the same event
-    loop; sharing one AsyncSession between them risks IllegalStateChangeError if their
-    operations interleave.
-    """
-    desktop_app._worker_session = desktop_app.db_manager.get_archive_session()
-
-    desktop_app.state.navigate_to(ViewType.ARCHIVE)
-    await desktop_app.update_view()
-
-    assert desktop_app._view_scope is not None
-    view_session = desktop_app._view_scope.resolve(AsyncSession)
-    assert view_session is not desktop_app._worker_session
 
 
 @pytest.mark.asyncio
@@ -83,22 +67,18 @@ async def test_settings_view_has_no_session(desktop_app):
 
 
 @pytest.mark.asyncio
-async def test_cleanup_closes_both_view_and_worker_sessions(desktop_app):
-    desktop_app._worker_session = desktop_app.db_manager.get_archive_session()
+async def test_cleanup_closes_the_view_session_and_stops_the_worker(desktop_app):
     desktop_app.worker_manager = MagicMock()
 
     desktop_app.state.navigate_to(ViewType.ARCHIVE)
     await desktop_app.update_view()
 
     view_session = desktop_app._view_scope.resolve(AsyncSession)
-    worker_session = desktop_app._worker_session
     view_session.close = AsyncMock(wraps=view_session.close)
-    worker_session.close = AsyncMock(wraps=worker_session.close)
 
     await desktop_app.cleanup(None)
 
     view_session.close.assert_awaited_once()
-    worker_session.close.assert_awaited_once()
     desktop_app.worker_manager.stop.assert_called_once()
 
 
@@ -107,7 +87,7 @@ def test_thin_client_does_not_start_a_worker_manager():
     Thin client has no local tasks to run - the server it's pointed at runs its own
     WorkerManager (Sprint 3 item 4).
     """
-    settings = Settings(server_url="http://upstream", api_key="key", mode="desktop:thin_client")
+    settings = Settings(server_url="http://upstream", api_key="key", mode=Mode.THIN_CLIENT)
     runtime = build_runtime(settings)
     assert runtime.db_manager is None
 
@@ -115,7 +95,6 @@ def test_thin_client_does_not_start_a_worker_manager():
     app._maybe_start_worker_manager()
 
     assert app.worker_manager is None
-    assert app._worker_session is None
 
 
 @pytest.mark.asyncio
@@ -129,7 +108,6 @@ async def test_full_stack_starts_a_worker_manager(desktop_app, monkeypatch):
     desktop_app._maybe_start_worker_manager()
 
     assert desktop_app.worker_manager is not None
-    assert desktop_app._worker_session is not None
 
 
 @pytest.mark.asyncio
@@ -182,7 +160,7 @@ def test_apply_theme_tolerates_controls_that_do_not_exist_yet():
     from chronicler.desktop.theme import theme_colors
 
     app = DesktopApp(
-        build_runtime(Settings(server_url="http://x", api_key="k", mode="desktop:thin_client"))
+        build_runtime(Settings(server_url="http://x", api_key="k", mode=Mode.THIN_CLIENT))
     )
     app.page = MagicMock()
 
@@ -235,72 +213,124 @@ async def test_maybe_start_worker_manager_wires_event_bus(desktop_app, monkeypat
     assert desktop_app.worker_manager.event_bus is desktop_app.event_bus
 
 
-@pytest.mark.asyncio
-async def test_on_task_completed_refreshes_transcript_view_for_matching_chronicle(desktop_app):
+def _completed(chronicle_id=None, task_type=None):
+    from uuid import uuid4
+
     from chronicler.core.models import TaskStatus, TaskType
     from chronicler.core.task_events import TaskCompletedEvent
 
+    return TaskCompletedEvent(
+        task_id=uuid4(),
+        task_type=task_type or TaskType.TRANSCRIBE,
+        status=TaskStatus.DONE,
+        chronicle_id=chronicle_id,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("view_type", [ViewType.ARCHIVE, ViewType.TASKS])
+async def test_on_task_completed_refreshes_the_list_view_in_place(desktop_app, view_type):
+    """Ticket 027: a new view would reset the search text and detach an open form."""
+    desktop_app.state.navigate_to(view_type)
+    await desktop_app.update_view()
+    view = desktop_app.content_area.content
+    view.refresh = AsyncMock()
+
+    await desktop_app._on_task_completed(_completed())
+
+    assert desktop_app.content_area.content is view
+    view.refresh.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_on_task_completed_keeps_the_view_session(desktop_app):
+    desktop_app.state.navigate_to(ViewType.ARCHIVE)
+    await desktop_app.update_view()
+    scope = desktop_app._view_scope
+    desktop_app.content_area.content.refresh = AsyncMock()
+
+    await desktop_app._on_task_completed(_completed())
+
+    assert desktop_app._view_scope is scope
+
+
+@pytest.mark.asyncio
+async def test_on_task_completed_refreshes_transcript_view_for_matching_chronicle(desktop_app):
     chronicle = await _create_chronicle(desktop_app, "Recording")
 
     desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
     await desktop_app.update_view()
-    view_before = desktop_app.content_area.content
+    view = desktop_app.content_area.content
+    view.refresh = AsyncMock()
 
-    await desktop_app._on_task_completed(
-        TaskCompletedEvent(
-            task_id=chronicle.id,
-            task_type=TaskType.TRANSCRIBE,
-            status=TaskStatus.DONE,
-            chronicle_id=chronicle.id,
-        )
-    )
+    await desktop_app._on_task_completed(_completed(chronicle.id))
 
-    assert desktop_app.content_area.content is not view_before
+    assert desktop_app.content_area.content is view
+    view.refresh.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_finished_task_shows_in_the_open_transcript_view(desktop_app):
+    """The view on screen picks up what the task changed, without being replaced."""
+    from chronicler.core.services.chronicle_service import ChronicleService
+
+    chronicle = await _create_chronicle(desktop_app, "Recording")
+    desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
+    await desktop_app.update_view()
+    view = desktop_app.content_area.content
+    view.editing = True
+    view.sources.load = AsyncMock()
+    view.summaries.load = AsyncMock()
+
+    scope = desktop_app.resolver.create_scope()
+    stored = await scope.resolve(ChronicleService).get_chronicle(chronicle.id)
+    stored.duration = "1h 0m"
+    await scope.resolve(ChronicleService).update_chronicle(stored)
+    await scope.resolve(AsyncSession).close()
+
+    await desktop_app._on_task_completed(_completed(chronicle.id))
+
+    assert desktop_app.content_area.content is view
+    assert view.editing is True
+    assert "1h 0m" in view.subtitle_text.value
+    assert desktop_app.state.selected_chronicle.duration == "1h 0m"
 
 
 @pytest.mark.asyncio
 async def test_on_task_completed_skips_refresh_for_a_different_chronicle(desktop_app):
     from uuid import uuid4
 
-    from chronicler.core.models import TaskStatus, TaskType
-    from chronicler.core.task_events import TaskCompletedEvent
-
     chronicle = await _create_chronicle(desktop_app, "Recording")
 
     desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
     await desktop_app.update_view()
-    view_before = desktop_app.content_area.content
+    view = desktop_app.content_area.content
+    view.refresh = AsyncMock()
 
-    await desktop_app._on_task_completed(
-        TaskCompletedEvent(
-            task_id=uuid4(),
-            task_type=TaskType.TRANSCRIBE,
-            status=TaskStatus.DONE,
-            chronicle_id=uuid4(),
-        )
-    )
+    await desktop_app._on_task_completed(_completed(uuid4()))
 
-    assert desktop_app.content_area.content is view_before
+    assert desktop_app.content_area.content is view
+    view.refresh.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_on_task_completed_skips_settings_view(desktop_app):
-    from uuid import uuid4
-
-    from chronicler.core.models import TaskStatus, TaskType
-    from chronicler.core.task_events import TaskCompletedEvent
+    from chronicler.core.models import TaskType
 
     desktop_app.state.navigate_to(ViewType.SETTINGS)
     await desktop_app.update_view()
     view_before = desktop_app.content_area.content
 
-    await desktop_app._on_task_completed(
-        TaskCompletedEvent(
-            task_id=uuid4(), task_type=TaskType.IMPORT, status=TaskStatus.DONE, chronicle_id=None
-        )
-    )
+    await desktop_app._on_task_completed(_completed(task_type=TaskType.IMPORT))
 
     assert desktop_app.content_area.content is view_before
+
+
+@pytest.mark.asyncio
+async def test_on_task_completed_before_any_view_is_shown_does_nothing(desktop_app):
+    await desktop_app._on_task_completed(_completed())
+
+    assert desktop_app.current_view is None
 
 
 @pytest.mark.asyncio
@@ -375,7 +405,7 @@ async def test_thin_client_resolves_a_working_remote_service(tmp_path):
     upstream_app = RpcServer(upstream_container, services=[ChronicleService], api_key="key").build()
 
     try:
-        settings = Settings(server_url="http://upstream", api_key="key", mode="desktop:thin_client")
+        settings = Settings(server_url="http://upstream", api_key="key", mode=Mode.THIN_CLIENT)
         runtime = build_runtime(settings)
         app = DesktopApp(runtime)
 
@@ -402,11 +432,11 @@ async def test_refresh_models_caches_the_provider_listing(tmp_path):
 
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
-    system.list_models.return_value = ["qwen3", "llama3"]
+    system.list_models.return_value = ModelCheck(models=["qwen3", "llama3"])
     runtime.resolver.register_instance(SystemService, system)
 
     await app.refresh_models()
@@ -415,25 +445,24 @@ async def test_refresh_models_caches_the_provider_listing(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_on_llm_change_bypasses_the_model_cache(tmp_path):
+async def test_on_llm_change_asks_again(tmp_path):
     """
-    The configuration just changed, so a five-minute-old listing is known to be wrong.
+    The configuration just changed, so the listing is asked for again.
     """
     from unittest.mock import AsyncMock
 
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
-    system.list_models.return_value = ["qwen3"]
-    system.model_error.return_value = None
+    system.list_models.return_value = ModelCheck(models=["qwen3"])
     runtime.resolver.register_instance(SystemService, system)
 
     check = await app.on_llm_change()
 
-    system.list_models.assert_awaited_once_with(refresh=True)
+    system.list_models.assert_awaited_once_with()
     assert check.models == ["qwen3"]
     assert check.reachable
 
@@ -449,12 +478,12 @@ async def test_on_llm_change_re_reads_the_capabilities(tmp_path):
     from chronicler.core.models import ServerInfo
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
     app.capabilities = {"import"}
 
     system = AsyncMock()
-    system.list_models.return_value = []
+    system.list_models.return_value = ModelCheck()
     system.get_server_info.return_value = ServerInfo(
         version="1.0.0", capabilities=["import", "summarize"]
     )
@@ -471,7 +500,7 @@ async def test_refresh_models_reports_an_unreachable_provider_to_the_caller(tmp_
 
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
@@ -490,7 +519,7 @@ async def test_refresh_models_survives_an_unreachable_provider(tmp_path):
 
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
@@ -513,11 +542,11 @@ async def test_refresh_models_also_learns_what_the_server_can_do(tmp_path):
     from chronicler.core.models import ServerInfo
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
-    system.list_models.return_value = []
+    system.list_models.return_value = ModelCheck()
     system.get_server_info.return_value = ServerInfo(
         version="9.9.9", capabilities=["import", "summarize"]
     )
@@ -535,11 +564,11 @@ async def test_unreachable_capabilities_leave_every_action_offered(tmp_path):
 
     from chronicler.core.services.system_service import SystemService
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
-    system.list_models.return_value = []
+    system.list_models.return_value = ModelCheck()
     system.get_server_info.side_effect = RuntimeError("connection refused")
     runtime.resolver.register_instance(SystemService, system)
 
@@ -562,7 +591,7 @@ async def test_startup_discovery_does_not_leave_a_session_open(tmp_path):
     """
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     await runtime.db_manager.init_archive()
     app = DesktopApp(runtime)
     try:
@@ -575,7 +604,7 @@ async def test_startup_discovery_does_not_leave_a_session_open(tmp_path):
 
 @pytest.mark.asyncio
 async def test_startup_discovery_still_reports_what_it_found(tmp_path):
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     await runtime.db_manager.init_archive()
     app = DesktopApp(runtime)
     try:
@@ -592,7 +621,7 @@ async def test_cleanup_leaves_no_session_active_anywhere(tmp_path):
     """What the shutdown error actually measures: an unreturned pooled connection."""
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     await runtime.db_manager.init_archive()
     app = DesktopApp(runtime)
     app._maybe_start_worker_manager()
@@ -612,7 +641,7 @@ async def test_cleanup_leaves_no_session_active_anywhere(tmp_path):
 @pytest.mark.asyncio
 async def test_cleanup_stops_the_worker_task_rather_than_only_flagging_it(tmp_path):
     """`stop()` sets a flag; the task itself has to be let go of, or it outlives cleanup."""
-    runtime = build_runtime(Settings(workspace_path=tmp_path, mode="desktop:full_stack"))
+    runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     await runtime.db_manager.init_archive()
     app = DesktopApp(runtime)
     app._maybe_start_worker_manager()
@@ -620,3 +649,27 @@ async def test_cleanup_stops_the_worker_task_rather_than_only_flagging_it(tmp_pa
     await app.cleanup(None)
 
     assert app._worker_task is None or app._worker_task.done()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_closes_the_shared_http_client(desktop_app):
+    import httpx
+
+    client = httpx.AsyncClient()
+    desktop_app.runtime.http_client = client
+
+    await desktop_app.cleanup(None)
+
+    assert client.is_closed
+
+
+@pytest.mark.asyncio
+async def test_the_archive_offers_link_only_where_the_picked_path_is_the_servers(
+    desktop_app, monkeypatch
+):
+    """A thin client's picker returns a path on its own machine, which the server cannot see."""
+    desktop_app.state.navigate_to(ViewType.ARCHIVE)
+    assert (await desktop_app._build_view()).can_link is True
+
+    monkeypatch.setattr(Settings, "desktop_mode", property(lambda self: Mode.THIN_CLIENT))
+    assert (await desktop_app._build_view()).can_link is False

@@ -17,11 +17,15 @@ COMPONENT_LOCKS = Path("share") / "chronicler" / "locks"
 
 @dataclass(frozen=True)
 class Extra:
-    """One optional dependency group, as declared in pyproject.toml."""
+    """
+    One optional dependency group, as declared in pyproject.toml. `modules` are what its
+    guard imports, one per package the feature imports directly; `requirements` are the
+    group's entries exactly as pyproject.toml lists them.
+    """
 
     name: str
-    module: str
-    requirement: str
+    modules: tuple[str, ...]
+    requirements: tuple[str, ...]
     purpose: str
     download_mb: int
     system_packages: tuple[str, ...] = ()
@@ -32,40 +36,56 @@ class Extra:
     def pip_extra(self) -> str:
         return f"chronicler[{self.name}]"
 
+    @property
+    def requirements_text(self) -> str:
+        """The requirements on one line, for messages."""
+        return ", ".join(self.requirements)
+
 
 EXTRAS: dict[str, Extra] = {
     "transcription": Extra(
         name="transcription",
-        module="faster_whisper",
-        requirement="faster-whisper>=1.1,<2",
+        modules=("faster_whisper",),
+        requirements=("faster-whisper>=1.1,<2",),
         purpose="Transcribing audio with Whisper",
         download_mb=120,
         note="The Whisper model itself is downloaded separately the first time it runs.",
     ),
     "normalization": Extra(
         name="normalization",
-        module="av",
-        requirement="av>=12,<19",
+        modules=("av", "numpy"),
+        requirements=("av>=12,<20", "numpy>=1.26,<3"),
         purpose="Normalizing the loudness of an audio source",
-        download_mb=35,
+        download_mb=50,
     ),
     "llm": Extra(
         name="llm",
-        module="llama_cpp",
-        requirement="llama-cpp-python>=0.3,<1",
+        modules=("llama_cpp",),
+        requirements=("llama-cpp-python>=0.3,<1",),
         purpose="Running a local GGUF language model for summaries",
         download_mb=30,
         note="Only needed for local models; a remote OpenAI-compatible gateway needs nothing.",
     ),
     "recording": Extra(
         name="recording",
-        module="sounddevice",
-        requirement="sounddevice>=0.4,<1",
+        modules=("sounddevice",),
+        requirements=("sounddevice>=0.4,<1",),
         purpose="Recording audio from a microphone",
         download_mb=1,
         system_packages=("libportaudio2",),
         note="sounddevice is a binding, not a bundle: it needs PortAudio from the system.",
         apt_hint="sudo apt install libportaudio2",
+    ),
+    "server": Extra(
+        name="server",
+        modules=("fastapi", "uvicorn", "python_multipart"),
+        requirements=(
+            "fastapi>=0.141.1,<1",
+            "uvicorn[standard]>=0.30,<1",
+            "python-multipart>=0.0.13",
+        ),
+        purpose="Running Chronicler as a server",
+        download_mb=10,
     ),
 }
 
@@ -85,14 +105,15 @@ def get_extra(name: str) -> Extra:
 
 def is_available(name: str) -> bool:
     """
-    Whether `name`'s module can actually be imported right now.
+    Whether all of `name`'s modules can actually be imported right now.
 
     A real import, not a find_spec check: a binding whose system library is absent
     imports and then raises. See docs/optional-extras.md.
     """
     extra = get_extra(name)
     try:
-        importlib.import_module(extra.module)
+        for module in extra.modules:
+            importlib.import_module(module)
     except Exception:
         logger.debug(f"Extra {name!r} is unavailable", exc_info=True)
         return False
@@ -190,7 +211,7 @@ def install_command(name: str) -> list[str]:
     is not published, so resolving itself from an index would fail. See
     docs/optional-extras.md.
     """
-    return [sys.executable, "-m", "pip", "install", get_extra(name).requirement]
+    return [sys.executable, "-m", "pip", "install", *get_extra(name).requirements]
 
 
 def install(name: str) -> InstallResult:

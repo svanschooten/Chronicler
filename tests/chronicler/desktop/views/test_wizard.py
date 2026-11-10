@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 import flet as ft
 import pytest
 
-from chronicler.core.config import Settings
-from chronicler.desktop.views.wizard import FULL_STACK, THIN_CLIENT, FletSetupWizard
+from chronicler.core.config import Mode, Settings
+from chronicler.desktop.views.wizard import FletSetupWizard
 from chronicler.i18n import set_locale, t
 from tests.chronicler.desktop.controls import find_controls, text_values
 
@@ -90,7 +90,7 @@ def test_full_stack_run_writes_a_complete_configuration(wizard, tmp_path):
     click(wizard, t("wizard.finish"))
 
     saved = Settings()
-    assert saved.mode == FULL_STACK
+    assert saved.mode is Mode.FULL_STACK
     assert saved.workspace_path == workspace
     assert saved.server_url is None
     assert saved.api_key == generated
@@ -107,7 +107,7 @@ def test_thin_client_run_writes_a_complete_configuration(wizard):
     click(wizard, t("wizard.finish"))
 
     saved = Settings()
-    assert saved.mode == THIN_CLIENT
+    assert saved.mode is Mode.THIN_CLIENT
     assert saved.server_url == "http://remote:8000"
     assert saved.api_key == "the-server-key"
     assert saved.workspace_path is None
@@ -398,3 +398,27 @@ def test_a_relative_workspace_path_is_resolved(wizard, monkeypatch, tmp_path):
     click(wizard, t("wizard.next"))
 
     assert wizard.workspace_path == Path(tmp_path / "workspace").resolve()
+
+
+def test_an_existing_workspace_that_cannot_be_written_is_refused(wizard, monkeypatch, tmp_path):
+    def refuse(*args, **kwargs):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr("chronicler.core.workspace_lock.tempfile.TemporaryFile", refuse)
+    pick_language(wizard)
+    choose(wizard, t("wizard.mode.full_stack"))
+    field = fields(wizard)[0]
+    field.value = str(tmp_path)
+    click(wizard, t("wizard.next"))
+
+    assert field.error == t("wizard.workspace.not_writable")
+    assert wizard.workspace_path is None
+
+
+def test_a_workspace_that_does_not_exist_yet_is_accepted(wizard, tmp_path):
+    pick_language(wizard)
+    choose(wizard, t("wizard.mode.full_stack"))
+    fields(wizard)[0].value = str(tmp_path / "new")
+    click(wizard, t("wizard.next"))
+
+    assert wizard.workspace_path == tmp_path / "new"

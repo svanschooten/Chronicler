@@ -35,7 +35,7 @@ async def test_export_plaintext_preserves_raw_turn_structure_from_real_example(t
 
         handlers = WorkerHandlers(db_manager)
         staged_file = db_manager.get_imports_path() / "example_transcript_001.txt"
-        staged_file.write_text((EXAMPLES_DIR / "example_transcript_001.txt").read_text())
+        staged_file.write_bytes((EXAMPLES_DIR / "example_transcript_001.txt").read_bytes())
 
         import_task = Task(
             type=TaskType.IMPORT,

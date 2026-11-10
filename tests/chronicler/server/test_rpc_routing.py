@@ -149,9 +149,16 @@ async def test_each_request_gets_a_fresh_session(tmp_path):
     try:
         await db_manager.init_archive()
 
+        # Keep every session alive, so a freed one cannot pass its id() to the next.
+        sessions: list[AsyncSession] = []
+
+        def make_session() -> AsyncSession:
+            sessions.append(db_manager.get_archive_session())
+            return sessions[-1]
+
         container = Container()
         container.register_instance(DatabaseManager, db_manager)
-        container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
+        container.register_factory(AsyncSession, make_session)
         container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
 
         server = RpcServer(container, services=[_SessionIdProbeService], api_key="probe-key")
@@ -259,12 +266,12 @@ async def test_thin_client_full_flow_via_remote_container(tmp_path):
     instead of a Task (fixed in task_service.py).
     """
     from chronicler.core.remote import RemoteContainer
-    from chronicler.core.worker_wiring import build_worker_runtime
+    from chronicler.core.worker_wiring import build_worker_manager
 
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
     try:
         await db_manager.init_archive()
-        worker_runtime = build_worker_runtime(db_manager)
+        worker_manager = build_worker_manager(db_manager)
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -278,13 +285,12 @@ async def test_thin_client_full_flow_via_remote_container(tmp_path):
             task = await task_service.queue_clean(chronicle.id)
             assert task.status.value == "PENDING"
 
-            await worker_runtime.manager.process_tasks()
+            await worker_manager.process_tasks()
 
             tasks = await task_service.list_tasks()
             (updated_task,) = [t for t in tasks if t.id == task.id]
             assert updated_task.status.value == "DONE"
     finally:
-        await worker_runtime.session.close()
         await db_manager.close_all()
 
 

@@ -7,6 +7,8 @@ from pathlib import Path
 
 import httpx
 
+from chronicler.core.remote import RPC_TIMEOUT
+
 
 def sanitize_stage_name(original_filename: str | None) -> str:
     """A uuid4 filename carrying only a whitelisted extension from the original name."""
@@ -70,8 +72,8 @@ class LocalFileStager(FileStager):
 class RemoteFileStager(FileStager):
     """
     Thin-client desktop mode: the worker runs on the remote server, so the picked file has
-    to actually get there first - upload it via the same /upload endpoint the web client's
-    proxy already uses, and return the path the server reports back.
+    to actually get there first - upload it via the server's /upload endpoint, and return
+    the path the server reports back.
     """
 
     def __init__(self, base_url: str, api_key: str | None, client: httpx.AsyncClient | None = None):
@@ -81,7 +83,7 @@ class RemoteFileStager(FileStager):
 
     async def stage(self, local_path: str) -> str:
         headers = {"X-API-Key": self.api_key} if self.api_key else {}
-        client = self._client or httpx.AsyncClient()
+        client = self._client or httpx.AsyncClient(timeout=RPC_TIMEOUT)
         try:
             with open(local_path, "rb") as f:
                 files = {"file": (Path(local_path).name, f)}

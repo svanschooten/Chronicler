@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import flet as ft
 import pytest
 
+from chronicler.core.config import Mode, Settings
 from chronicler.core.models import Chronicle, Tag, TranscriptLine
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.transcript import TranscriptView
@@ -332,21 +333,6 @@ class TestFocusedReader:
         assert reader.width == DEFAULT_PAGE_WIDTH - READER_MARGIN_X
         assert reader.height == DEFAULT_PAGE_HEIGHT - READER_MARGIN_Y
 
-    def test_fullscreen_is_offered_in_the_desktop_window(self, make_view, attach_page):
-        page = attach_page(TranscriptView)
-        page.web = False
-        view = make_view()
-
-        assert view._can_go_fullscreen() is True
-
-    def test_fullscreen_is_hidden_in_a_browser_tab(self, make_view, attach_page):
-        """`page.window` is inert there, so the button would do nothing visible."""
-        page = attach_page(TranscriptView)
-        page.web = True
-        view = make_view()
-
-        assert view._can_go_fullscreen() is False
-
 
 class TestDetailPanelWidth:
     def test_a_wide_window_gets_a_share_of_it(self):
@@ -480,3 +466,101 @@ class TestEditMode:
         await view.reload()
 
         rebuild.assert_not_awaited()
+
+
+class TestRefresh:
+    """Ticket 027: what a finished task changed is re-read into the view already shown."""
+
+    @staticmethod
+    def _stub_panels(view):
+        view.sources.load = AsyncMock()
+        view.summaries.load = AsyncMock()
+        view.load_transcript = AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_it_reloads_the_panels_and_the_transcript(self, make_view):
+        view = make_view()
+        self._stub_panels(view)
+
+        await view.refresh()
+
+        view.sources.load.assert_awaited_once()
+        view.summaries.load.assert_awaited_once()
+        view.load_transcript.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_it_leaves_the_transcript_alone_while_editing(self, make_view):
+        view = make_view()
+        self._stub_panels(view)
+        view.editor.load = AsyncMock()
+        view.editing = True
+
+        await view.refresh()
+
+        view.sources.load.assert_awaited_once()
+        view.summaries.load.assert_awaited_once()
+        view.load_transcript.assert_not_awaited()
+        view.editor.load.assert_not_awaited()
+        assert view.editing is True
+
+    @pytest.mark.asyncio
+    async def test_it_shows_the_stored_chronicle(self, make_view):
+        chronicle = Chronicle(title="Draft", kind="Interview")
+        stored = chronicle.model_copy(
+            update={
+                "title": "Final",
+                "duration": "48m",
+                "status": "Transcribed",
+                "speakers_count": 3,
+                "tags": [Tag(name="product")],
+            }
+        )
+        chronicle_service = AsyncMock()
+        chronicle_service.get_chronicle.return_value = stored
+        view = make_view(chronicle=chronicle, chronicle_service=chronicle_service)
+        self._stub_panels(view)
+
+        await view.refresh()
+
+        values = text_values(view)
+        assert "Final" in values
+        assert any("48m" in v for v in values)
+        assert "Transcribed" in values
+        assert "3 identified" in values
+        assert "product" in values
+
+    @pytest.mark.asyncio
+    async def test_the_panels_keep_sharing_one_chronicle(self, make_view):
+        """The panels hold the same object, so a new title reaches the export filename."""
+        chronicle = Chronicle(title="Draft")
+        chronicle_service = AsyncMock()
+        chronicle_service.get_chronicle.return_value = chronicle.model_copy(
+            update={"title": "Final"}
+        )
+        view = make_view(chronicle=chronicle, chronicle_service=chronicle_service)
+        self._stub_panels(view)
+
+        await view.refresh()
+
+        assert view.chronicle is chronicle
+        assert view.exporter.chronicle.title == "Final"
+
+    @pytest.mark.asyncio
+    async def test_it_goes_back_when_the_chronicle_is_gone(self, make_view):
+        chronicle_service = AsyncMock()
+        chronicle_service.get_chronicle.return_value = None
+        view = make_view(chronicle_service=chronicle_service)
+        self._stub_panels(view)
+
+        await view.refresh()
+
+        view.on_back.assert_awaited_once()
+        view.sources.load.assert_not_awaited()
+
+
+def test_open_folder_is_hidden_for_a_thin_client(make_view):
+    full = make_view(settings=Settings(mode=Mode.FULL_STACK))
+    thin = make_view(settings=Settings(server_url="http://server:8000", workspace_path=None))
+
+    assert len(full._folder_buttons()) == 1
+    assert thin._folder_buttons() == []

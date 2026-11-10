@@ -68,6 +68,11 @@ class SQLiteAudioSourceRepository(AudioSourceRepository):
         row.speaker_id = str(speaker_id) if speaker_id else None
         await self.session.flush()
 
+    async def set_start_offset(self, filename: str, start_offset: float) -> None:
+        row = await self._require(filename)
+        row.start_offset = start_offset
+        await self.session.flush()
+
     async def mark_transcribing(self, filename: str) -> None:
         row = await self._require(filename)
         row.transcription_state = SourceState.RUNNING.value

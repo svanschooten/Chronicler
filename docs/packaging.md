@@ -34,13 +34,13 @@ manager has no controlling terminal either, so `input()` raises `EOFError` there
 
 Desktop mode therefore uses `desktop/views/wizard.py`, which asks the same questions as
 Flet controls inside the window that is already open. `__main__.main()` routes to it by
-not calling `run_wizard` for `client:desktop` at all; `desktop.main.start()` decides,
+not calling `run_wizard` for the desktop at all; `desktop.main.start()` decides,
 using the same `Settings.validate_for_mode` gate the other modes use.
 
 The Flet wizard deliberately covers **only** the two modes a desktop window can run in —
-full stack and thin client. Server and web client are started from a terminal, which is
-exactly where the console wizard works, so they keep it and the desktop wizard does not
-duplicate them.
+full stack and thin client. The server is started from a terminal, which is exactly
+where the console wizard works, so it keeps it and the desktop wizard does not duplicate
+it.
 
 ### `chronicler server` borrows the calling terminal
 
@@ -99,7 +99,7 @@ set, which is how `flet build` output is normally tried out.
 
 ## The optional extras are in the binary
 
-The release workflow installs `.[transcription,normalization,recording]` before running
+The release workflow installs `.[transcription,normalization,recording,server]` before running
 PyInstaller, and on Linux installs `libportaudio2` first. Both matter, and neither is
 optional any more:
 
@@ -175,7 +175,9 @@ from there via `[tool.hatch.version]`, so the wheel filename, the package metada
 `chronicler.__version__` — which the thin-client handshake compares across the wire — all
 follow that single line.
 
-1. Edit `__version__` in `chronicler/__init__.py`.
+1. Edit `__version__` in `chronicler/__init__.py` to the number you are about to tag. This
+   is a required step, not a courtesy: the handshake needs an exact match, so a source
+   checkout with a stale value refuses a server built from the tag.
 2. Commit, tag, push the tag.
 3. Publish the GitHub release for that tag. That fires `release-workflow.yml`, which
    builds both binaries from the spec and attaches them to the release.

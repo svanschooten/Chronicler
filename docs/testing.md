@@ -10,6 +10,7 @@ packages (`__init__.py`) because the mirrored layout repeats module names.
 | Fixture | Defined in | Purpose |
 | ------- | ---------- | ------- |
 | `async_session` | `tests/conftest.py` | An in-memory workspace database session |
+| `two_sessions` | `tests/conftest.py` | A file-backed workspace with two independent sessions on `chronicler.db`, for lock contention |
 | `mock_flet_app` | `tests/conftest.py` | Autouse; stops anything from opening a real window |
 | `attach_page` | `tests/chronicler/desktop/conftest.py` | Gives a Flet control a stand-in `page`, since `Control.page` is a read-only property that raises when unattached |
 
@@ -33,10 +34,14 @@ because the real config supplied a key.
 
 ## Gates
 
-The three checks CI runs, in order:
+CI installs with `pip install -e ".[dev,server]"` and runs these checks, in order:
 
 ```bash
 ruff check chronicler tests
+```
+
+```bash
+ruff format --check chronicler tests
 ```
 
 ```bash
@@ -47,12 +52,13 @@ mypy chronicler tests
 pytest --cov=chronicler --cov-report=term --cov-fail-under=80
 ```
 
-`ruff` and `mypy` are blocking with no per-module exemptions. Prefer a narrow
-`# type: ignore[code]` over widening the configuration.
+The tests run on Ubuntu and Windows; the other checks run once, on Ubuntu.
+All of them are blocking, with no per-module exemptions. Prefer a narrow
+`# type: ignore[code]` over widening the configuration. Run `ruff format chronicler tests`
+before pushing to clear a formatting failure.
 
-`ruff format` is advisory only and reported as a PR comment rather than a gate:
-formatting was never enforced, so drift predates any one PR and failing on it would
-block unrelated work.
+Every job sets up through `.github/actions/setup`, so a new job or platform reuses that
+one step instead of repeating the install.
 
 `faster-whisper` is deliberately **not** installed in CI. It is an optional extra,
 imported lazily, and ships no `py.typed` marker, so mypy has an `ignore_missing_imports`
@@ -60,15 +66,20 @@ override for it.
 
 ## Keeping the developer's own configuration out of the tests
 
-`isolated_config` in `tests/conftest.py` points `HOME` and `CHRONICLER_CONFIG_FILE` at a
-temporary directory and clears the `get_settings` cache. Any test that builds a
+`isolated_config` in `tests/conftest.py` points the home directory, the per-user config
+directory and `CHRONICLER_CONFIG_FILE` at a temporary directory and clears the
+`get_settings` cache. The first two go through `isolate_home` in `tests/isolation.py`,
+which sets `USERPROFILE` as well as `HOME` because Windows ignores `HOME`, and patches
+platformdirs' `user_config_dir` because on Windows it asks the OS for `AppData` rather
+than reading the environment. Any test that builds a
 `Settings()` needs it, or it reads whatever is on the machine running it and passes or
 fails accordingly — which is how a transcribe-dialog test asserting the default language
 is `auto` failed on a laptop with `en` configured.
 
 It started as two near-identical copies in `test_config.py` and `test_wizard_defaults.py`.
 `test_config.py` keeps its own override on purpose: it tests the default config-file
-*search*, so it must not have an explicit file forced on it.
+*search*, so it must not have an explicit file forced on it. It still calls
+`isolate_home`.
 
 **Any test that constructs a bare `Settings()` needs it**, not just the ones about
 configuration. The task-handler tests build one to get the shipped defaults, and without
@@ -113,3 +124,15 @@ It parametrises over modules rather than asserting once, so a failure names the 
 carries a `test_there_are_desktop_modules_to_check` guard so a bad glob cannot make every
 case pass vacuously. `ALLOWED` holds the handful of literals that are genuinely not
 language — separators, `"monospace"`.
+
+## Simulating a locked database
+
+`async_session` is one in-memory connection, so nothing in it can ever wait on a lock.
+Tests for "database is locked" use `two_sessions` instead: a flushed, uncommitted write in
+`first` holds the write lock, and a write in `second` raises `OperationalError`.
+
+Its `DatabaseManager` is built with `busy_timeout=LOCK_TIMEOUT` (0.2 seconds), so that
+error arrives quickly rather than after SQLite's default 5 seconds. Pass
+`two_sessions.db_manager` to code under test that opens its own sessions, such as the
+worker, and those sessions get the same short timeout.
+`test_a_second_writer_fails_fast_while_the_first_holds_the_lock` is the reference example.

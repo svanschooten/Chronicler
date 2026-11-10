@@ -5,9 +5,10 @@ from chronicler.core.config_sections import LlmSettings, SummarySettings
 from chronicler.core.llm import (
     LlmError,
     LlmNotConfiguredError,
-    ModelRegistry,
+    ModelInfo,
     OpenAiCompatibleClient,
     build_client,
+    discover_models,
 )
 from chronicler.core.models import TranscriptLine
 from chronicler.core.processing.summarizer import (
@@ -136,46 +137,30 @@ class TestOpenAiCompatibleClient:
             await client.complete("x")
 
 
-class TestModelRegistry:
+class TestDiscoverModels:
     @pytest.mark.asyncio
     async def test_an_unconfigured_provider_lists_nothing(self):
-        assert await ModelRegistry(LlmSettings()).list_models() == []
+        check = await discover_models(LlmSettings())
+
+        assert check.models == []
+        assert check.reachable
 
     @pytest.mark.asyncio
-    async def test_results_are_cached_between_calls(self, monkeypatch):
+    async def test_it_asks_the_provider_every_time(self, monkeypatch):
         calls = []
 
         class Stub:
             async def list_models(self):
                 calls.append(1)
-                from chronicler.core.llm import ModelInfo
-
                 return [ModelInfo(id="qwen3", provider="openai_compatible")]
 
         monkeypatch.setattr("chronicler.core.llm.registry.build_client", lambda _s: Stub())
-        registry = ModelRegistry(settings())
 
-        await registry.list_models()
-        await registry.list_models()
-
-        assert len(calls) == 1
-
-    @pytest.mark.asyncio
-    async def test_refresh_bypasses_the_cache(self, monkeypatch):
-        calls = []
-
-        class Stub:
-            async def list_models(self):
-                calls.append(1)
-                return []
-
-        monkeypatch.setattr("chronicler.core.llm.registry.build_client", lambda _s: Stub())
-        registry = ModelRegistry(settings())
-
-        await registry.list_models()
-        await registry.list_models(refresh=True)
+        await discover_models(settings())
+        check = await discover_models(settings())
 
         assert len(calls) == 2
+        assert check.models == ["qwen3"]
 
     @pytest.mark.asyncio
     async def test_an_unreachable_provider_falls_back_to_the_configured_model(self, monkeypatch):
@@ -184,10 +169,12 @@ class TestModelRegistry:
                 raise LlmError("connection refused")
 
         monkeypatch.setattr("chronicler.core.llm.registry.build_client", lambda _s: Stub())
-        registry = ModelRegistry(settings())
 
-        assert await registry.model_ids() == ["qwen3"]
-        assert "refused" in registry.last_error
+        check = await discover_models(settings())
+
+        assert check.models == ["qwen3"]
+        assert "refused" in check.error
+        assert not check.reachable
 
 
 class TestChunking:

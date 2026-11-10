@@ -109,7 +109,7 @@ def main() -> int:
         workdir / "client.yaml",
         server_url=url,
         api_key=API_KEY,
-        mode="desktop:thin_client",
+        mode="thin_client",
     )
 
     print(f"Chronicler {__version__} thin-client check")

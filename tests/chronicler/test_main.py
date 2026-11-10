@@ -3,8 +3,10 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from chronicler.__main__ import attach_windows_console, main
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
 
 
 def test_main_default_mode():
@@ -37,24 +39,7 @@ def test_main_server_mode():
         main()
 
         mock_run_server.assert_called_once()
-        mock_settings.validate_for_mode.assert_called_with("server")
-
-
-def test_main_web_mode():
-    with (
-        patch("sys.argv", ["chronicler", "client:web"]),
-        patch("chronicler.core.config.is_config_initialized", return_value=True),
-        patch("chronicler.core.config.get_settings") as mock_get_settings,
-        patch("chronicler.webclient.main.run_server") as mock_run_web_server,
-    ):
-        mock_settings = MagicMock()
-        mock_settings.validate_for_mode.return_value = True
-        mock_get_settings.return_value = mock_settings
-
-        main()
-
-        mock_run_web_server.assert_called_once()
-        mock_settings.validate_for_mode.assert_called_with("client:web")
+        mock_settings.validate_for_mode.assert_called_with(Mode.SERVER)
 
 
 def test_main_verbose_logging():
@@ -75,21 +60,13 @@ def test_main_verbose_logging():
         assert kwargs["level"] == logging.DEBUG
 
 
-def test_main_web_mode_alias():
-    with (
-        patch("sys.argv", ["chronicler", "web"]),
-        patch("chronicler.core.config.is_config_initialized", return_value=True),
-        patch("chronicler.core.config.get_settings") as mock_get_settings,
-        patch("chronicler.webclient.main.run_server") as mock_run_web_server,
-    ):
-        mock_settings = MagicMock()
-        mock_settings.validate_for_mode.return_value = True
-        mock_get_settings.return_value = mock_settings
-
+@pytest.mark.parametrize("mode", ["web", "client:web"])
+def test_the_removed_web_client_modes_are_rejected(mode, capsys):
+    with patch("sys.argv", ["chronicler", mode]), pytest.raises(SystemExit) as exit_info:
         main()
 
-        mock_run_web_server.assert_called_once()
-        mock_settings.validate_for_mode.assert_called_with("client:web")
+    assert exit_info.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
 
 
 def test_main_desktop_mode_alias():
@@ -124,8 +101,8 @@ def test_main_checks_validity(mock_get_settings, mock_is_init, mock_run_wizard):
     ):
         main()
 
-    mock_settings.validate_for_mode.assert_called_with("server")
-    mock_run_wizard.assert_called_with(mode="server")
+    mock_settings.validate_for_mode.assert_called_with(Mode.SERVER)
+    mock_run_wizard.assert_called_with(mode=Mode.SERVER)
 
 
 @patch("chronicler.core.wizard.run_wizard")
@@ -144,7 +121,7 @@ def test_main_skips_wizard_if_valid(mock_get_settings, mock_is_init, mock_run_wi
     ):
         main()
 
-    mock_settings.validate_for_mode.assert_called_with("server")
+    mock_settings.validate_for_mode.assert_called_with(Mode.SERVER)
     mock_run_wizard.assert_not_called()
 
 
@@ -176,7 +153,54 @@ def test_server_mode_still_uses_the_console_wizard(mock_is_init, mock_run_wizard
     ):
         main()
 
-    mock_run_wizard.assert_called_once_with(mode="server")
+    mock_run_wizard.assert_called_once_with(mode=Mode.SERVER)
+
+
+class TestWithoutTheServerExtra:
+    """A missing FastAPI or Uvicorn gets a sentence, not the traceback of `import uvicorn`."""
+
+    @patch("chronicler.core.wizard.run_wizard")
+    @patch("chronicler.core.config.is_config_initialized", return_value=False)
+    def test_server_mode_says_what_is_missing_before_the_wizard(
+        self, mock_is_init, mock_run_wizard
+    ):
+        with (
+            patch.object(sys, "argv", ["chronicler", "server"]),
+            patch("chronicler.core.extras.is_available", return_value=False),
+            patch("chronicler.server.main.run_server") as run_server,
+            pytest.raises(SystemExit) as exited,
+        ):
+            main()
+
+        assert "Running Chronicler as a server" in str(exited.value.code)
+        mock_run_wizard.assert_not_called()
+        run_server.assert_not_called()
+
+    def test_the_server_entry_point_checks_too(self):
+        """`chronicler-server` calls server_main directly, skipping main()."""
+        from chronicler.__main__ import server_main
+
+        with (
+            patch("chronicler.core.extras.is_available", return_value=False),
+            patch("chronicler.server.main.run_server") as run_server,
+            pytest.raises(SystemExit) as exited,
+        ):
+            server_main()
+
+        assert "server" in str(exited.value.code)
+        run_server.assert_not_called()
+
+    @patch("chronicler.core.wizard.run_wizard")
+    def test_desktop_mode_does_not_need_it(self, mock_run_wizard):
+        with (
+            patch.object(sys, "argv", ["chronicler"]),
+            patch("chronicler.core.extras.is_available", return_value=False) as available,
+            patch("chronicler.desktop.main.run_desktop") as run_desktop,
+        ):
+            main()
+
+        available.assert_not_called()
+        run_desktop.assert_called_once()
 
 
 class TestWindowsConsole:

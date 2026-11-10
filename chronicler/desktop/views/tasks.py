@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from uuid import UUID
 
 import flet as ft
@@ -79,6 +80,10 @@ class TasksView(ft.Column):
     def show_snackbar(self, message: str):
         self.page.show_dialog(ft.SnackBar(ft.Text(message)))
 
+    async def refresh(self) -> None:
+        """Re-reads the list after a task finished, keeping the search and the filter."""
+        await self.load_tasks()
+
     async def refresh_clicked(self, e):
         await self.load_tasks()
 
@@ -141,6 +146,12 @@ class TasksView(ft.Column):
     @staticmethod
     def _timestamps(task: Task) -> str:
         parts = [f"Created {task.created_at.strftime(TIMESTAMP_FORMAT)}"]
+        if (
+            task.status == TaskStatus.PENDING
+            and task.not_before
+            and task.not_before > datetime.now()
+        ):
+            parts.append(f"Next attempt {task.not_before.strftime(TIMESTAMP_FORMAT)}")
         if task.claimed_at:
             parts.append(f"Started {task.claimed_at.strftime(TIMESTAMP_FORMAT)}")
         if task.status in (TaskStatus.DONE, TaskStatus.FAILED):

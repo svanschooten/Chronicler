@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import tempfile
 import textwrap
@@ -6,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.database_manager import DatabaseManager, ensure_project_available
 from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import AudioSource, Summary, TranscriptLine
 from chronicler.core.processing.fingerprint import fingerprint_file
@@ -19,7 +20,6 @@ from chronicler.core.services.bundle import (
     safe_folder_name,
 )
 from chronicler.core.services.html import format_html
-from chronicler.core.services.pdf import format_pdf
 from chronicler.core.services.srt import format_srt
 from chronicler.core.sqlite import (
     SQLiteAudioSourceRepository,
@@ -36,7 +36,6 @@ NORMALIZED_SUFFIX = ".normalized.wav"
 @service(
     expose=[
         "assign_speaker",
-        "chronicle_directory",
         "delete_summary",
         "export_html",
         "export_pdf",
@@ -72,7 +71,7 @@ class TranscriptService:
     async def _get_repository(
         self, chronicle_id: UUID
     ) -> tuple[AsyncSession, SQLiteTranscriptRepository]:
-        custom_path = await self._project_path(chronicle_id)
+        custom_path = await self._project_path(chronicle_id, must_exist=True)
         session = await self.db_manager.get_project_session(
             str(chronicle_id), custom_path=custom_path
         )
@@ -156,8 +155,14 @@ class TranscriptService:
                 )
         return "\n".join(formatted)
 
-    async def _project_path(self, chronicle_id: UUID) -> Path | None:
+    async def _project_path(self, chronicle_id: UUID, must_exist: bool = False) -> Path | None:
+        """
+        A linked chronicle's project.db. With `must_exist`, an unknown chronicle or a
+        linked file that has moved raises instead of getting a fresh empty database.
+        """
         chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
+        if must_exist:
+            ensure_project_available(chronicle, chronicle_id)
         if chronicle and chronicle.project_path:
             return Path(chronicle.project_path)
         return None
@@ -171,10 +176,14 @@ class TranscriptService:
     async def source_path(self, chronicle_id: UUID, filename: str) -> Path:
         return (await self.sources_dir(chronicle_id)) / filename
 
+    async def _source_files(self, chronicle_id: UUID) -> list[Path]:
+        directory = await self.sources_dir(chronicle_id)
+        return list(directory.iterdir()) if directory.is_dir() else []
+
     async def _on_disk(self, chronicle_id: UUID) -> list[Path]:
         return sorted(
             path
-            for path in (await self.sources_dir(chronicle_id)).iterdir()
+            for path in await self._source_files(chronicle_id)
             if path.is_file() and not path.name.endswith(NORMALIZED_SUFFIX)
         )
 
@@ -189,9 +198,17 @@ class TranscriptService:
         return format_html(lines, chronicle_title)
 
     async def export_pdf(self, chronicle_id: UUID, chronicle_title: str) -> bytearray:
-        """PDF for a transcribed chronicle."""
+        """
+        PDF for a transcribed chronicle.
+
+        Laid out on a worker thread: a long transcript takes seconds, and the event loop
+        this runs on is also the desktop UI's, or the server's for every other client.
+        """
+        # Imported here: fpdf costs about half a second and few sessions export a PDF.
+        from chronicler.core.services.pdf import format_pdf
+
         lines = await self.get_transcript(chronicle_id)
-        return format_pdf(lines, chronicle_title)
+        return await asyncio.to_thread(format_pdf, lines, chronicle_title)
 
     async def export_zip(self, chronicle_id: UUID, include_sources: bool = False) -> bytearray:
         """
@@ -218,7 +235,9 @@ class TranscriptService:
                 Path(workspace) / DATABASE_NAME,
                 custom_path=await self._project_path(chronicle_id),
             )
-            return format_bundle(
+            # Off the event loop, like the PDF: with audio this compresses for seconds.
+            return await asyncio.to_thread(
+                format_bundle,
                 snapshot,
                 manifest,
                 root=safe_folder_name(chronicle.title),
@@ -244,7 +263,10 @@ class TranscriptService:
         return await self.export_plaintext(chronicle_id, include_timestamps=include_timestamps)
 
     async def chronicle_directory(self, chronicle_id: UUID) -> str:
-        """Where this chronicle's files live, so a client can offer to open it."""
+        """
+        Where this chronicle's files live, so a local client can offer to open it. Not
+        exposed over RPC: on a thin client the path would be the server's.
+        """
         chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
         if chronicle and chronicle.project_path:
             return str(Path(chronicle.project_path).parent)

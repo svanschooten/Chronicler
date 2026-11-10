@@ -7,7 +7,7 @@ This document provides practical guides for configuring and running Chronicler i
 When you run Chronicler for the first time without a configuration file, a configuration wizard will start automatically. Which one you get depends on how you started it:
 
 - **Desktop** (`python -m chronicler`, or double-clicking the packaged app) shows the setup wizard **in the window**. It covers the two modes a desktop window runs in — Full Stack and Thin Client — and asks for your language first, so the rest of the wizard is in it.
-- **Server and Web Client** (`python -m chronicler server` / `web`) use the **console wizard**, since those are started from a terminal anyway.
+- **Server** (`python -m chronicler server`) uses the **console wizard**, since it is started from a terminal anyway.
 
 The packaged desktop build is windowless and has no console to read from, which is why desktop setup happens on screen. The packaged app still accepts `Chronicler server` from a terminal — it borrows that terminal's console on Windows.
 
@@ -24,7 +24,12 @@ Server setup runs in the terminal you start it from.
 
 1. Run `python -m chronicler server`. The console wizard starts if nothing is configured.
 2. Enter the workspace path.
-3. Generate or enter an API key. This key will be required by any Thin Clients or Web Clients connecting to this server.
+3. Generate or enter an API key. This key will be required by any Thin Clients connecting to this server.
+
+The server listens on all interfaces over plain HTTP, so the key travels unencrypted. That
+is fine on a network you trust. Anywhere else, bind it to loopback with
+`--host 127.0.0.1` and put a TLS reverse proxy or a tunnel in front of it. See
+[docs/security.md](docs/security.md#transport).
 
 ### Running as a Thin Client
 
@@ -32,18 +37,6 @@ Server setup runs in the terminal you start it from.
 2. Start Chronicler and pick **Thin Client** in the wizard.
 3. Enter the Server URL (e.g., `http://192.168.1.10:8000`).
 4. Enter the API key from the server. It must match the server's key, so it cannot be generated here — both fields are required.
-
-### Running the Web Client (Server)
-
-1. Ensure you have a Chronicler Server running.
-2. Run `python -m chronicler web`. The console wizard starts if nothing is configured.
-3. Enter the Server URL and API key.
-4. Open your browser at `http://localhost:8080`.
-
-The Web Client allows you to:
-- Browse your Chronicles.
-- Create new Chronicles.
-- Upload audio files or transcripts directly to the server for processing.
 
 ---
 
@@ -88,12 +81,12 @@ workspace_path: /home/user/ChroniclerWorkspace
 api_key: some-secret-key
 server_url: null
 app_name: Chronicler
-mode: desktop:full_stack
+mode: full_stack
 dark_mode: true
 ```
 
-`mode` is one of `desktop:full_stack`, `desktop:thin_client`, `server` or `client:web`,
-and is written by the wizard. A config saved before `mode` existed still works — the
+`mode` is one of `full_stack`, `thin_client` or `server`, and is written by the wizard.
+The older spellings `desktop:full_stack` and `desktop:thin_client` still load. A config saved before `mode` existed still works — the
 mode is inferred from whether a workspace path or a server URL is present.
 
 Chronicler validates the configuration against the mode it is starting in, and re-runs
@@ -111,8 +104,8 @@ Two features need extra dependencies, so a default install stays small:
 pip install -e ".[server]"
 ```
 
-Needed to run `python -m chronicler server` or `python -m chronicler web` (FastAPI,
-Uvicorn, multipart upload support).
+Needed to run `python -m chronicler server` (FastAPI, Uvicorn, multipart upload
+support).
 
 ```bash
 pip install -e ".[transcription]"
@@ -131,7 +124,10 @@ The transcript importer is regex-driven, so most exported formats can be read wi
 pre-processing. In the Import Transcript dialog:
 
 * **Line Regex** — must match one transcript line, with capture groups for the parts you
-  want. The default (`^([A-Za-z0-9 _]+)\s*:(.*)$`) handles `Alice: hello`.
+  want. The default (`^([\w .'-]+?)\s*:(.*)$`) handles `Alice: hello`, including
+  non-ASCII names like `Jürgen`. Lines before the first speaker are dropped and logged.
+  Names may contain `.`, `'` and `-`, so a wrapped line like `Step 1. Do this: now`
+  starts a new turn; use a custom pattern if your text wraps that way.
 * **Speaker Group Index** / **Text Group Index** — which capture groups hold the speaker
   and the text.
 * **Timestamp Group Index** — optional. Set it if your format carries a timestamp, e.g.

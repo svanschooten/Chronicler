@@ -90,6 +90,14 @@ class TaskRepository(ABC):
         pass
 
     @abstractmethod
+    async def recover_interrupted(self, error: str) -> list[Task]:
+        """
+        Puts every WORKING task back in the queue, or fails it once its attempts are used
+        up, recording `error`. Only safe while no worker is running. Returns the tasks.
+        """
+        pass
+
+    @abstractmethod
     async def update_status(self, task_id: UUID, status: str, error: str | None = None) -> None:
         pass
 
@@ -147,13 +155,11 @@ class TranscriptRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete_lines_by_speaker(self, speaker_id: UUID) -> None:
+    async def delete_track_lines(self, source_id: UUID) -> None:
         """
-        Delete only this speaker's lines, leaving every other speaker's lines untouched
-        - used when re-transcribing a single audio source (one source = one speaker's
-        track), not the whole chronicle's transcript.
+        Deletes the lines one audio source produced, before re-transcribing it. Lines with
+        no source are never touched: they were imported, or predate source tracking.
         """
-        pass
 
     @abstractmethod
     async def search(self, query: str) -> list[TranscriptLine]:
@@ -182,6 +188,10 @@ class AudioSourceRepository(ABC):
     @abstractmethod
     async def set_speaker(self, filename: str, speaker_id: UUID | None) -> None:
         pass
+
+    @abstractmethod
+    async def set_start_offset(self, filename: str, start_offset: float) -> None:
+        """Seconds added to every timestamp this track produces."""
 
     @abstractmethod
     async def mark_transcribing(self, filename: str) -> None:

@@ -14,19 +14,20 @@ below and leave the code clean.
 | [configuration.md](configuration.md) | Settings, config file resolution, `--config`, the setup wizard |
 | [configuration-sections.md](configuration-sections.md) | The nested `transcription` / `cleaning` / `normalization` / `llm` / `summary` / `ui` / `extras` groups |
 | [dependency-injection.md](dependency-injection.md) | `Container`, scopes, why each unit of work gets its own session |
-| [deployment-and-rpc.md](deployment-and-rpc.md) | The four modes, the explicitly-exposed HTTP API, remote proxies, the web client |
+| [deployment-and-rpc.md](deployment-and-rpc.md) | The three modes, the explicitly-exposed HTTP API, remote proxies |
 | [storage.md](storage.md) | Archive and project databases, `DatabaseManager`, Alembic without an `alembic.ini` |
 | [tasks.md](tasks.md) | Task lifecycle, atomic claiming, retries, the worker loop, task events |
 | [processing.md](processing.md) | Import, clean and transcribe handlers; importers, cleaners, the transcriber |
 | [cleaning.md](cleaning.md) | The cleaning rule pipeline, hallucination handling, measured results |
 | [transcription.md](transcription.md) | Language, threshold and model resolution; the transcribe dialog; SRT export |
 | [transcript-editing.md](transcript-editing.md) | Correcting a transcript line by line, and why timings are never touched |
+| [pdf-export.md](pdf-export.md) | The bundled font, the CJK fallback and how unrenderable characters are reported |
 | [speakers.md](speakers.md) | Per-chronicle speakers and the workspace-wide name registry |
 | [audio-sources.md](audio-sources.md) | Per-track state: transcription, normalisation, speaker memory, fingerprints |
 | [audio-normalization.md](audio-normalization.md) | The loudness pipeline, why the source is never touched, LUFS vs dBFS |
 | [summarization.md](summarization.md) | LLM providers, model discovery, two-stage summarisation, numbered outputs |
 | [recording.md](recording.md) | In-app capture, and why it needs no new RPC in thin-client mode |
-| [optional-extras.md](optional-extras.md) | The four extras, install-on-demand, and what pip cannot fix |
+| [optional-extras.md](optional-extras.md) | The five extras, install-on-demand, and what pip cannot fix |
 | [i18n.md](i18n.md) | Message maps, `t()`, and the tests that keep translations honest |
 | [security.md](security.md) | Path confinement, filename sanitisation, regex safety, API-key auth, upload limits |
 | [desktop.md](desktop.md) | Flet views, theming, dialog patterns, chronicle actions, the transcribe dialog |

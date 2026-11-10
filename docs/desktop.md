@@ -42,7 +42,7 @@ is why `accent` differs per theme.
 Each navigation gets a fresh `Container` scope, closed when navigating away, rather
 than one held for the app's lifetime. Sequential reuse within one view visit is fine —
 Flet handlers run one at a time. What is not safe is sharing it with the background
-worker loop, which gets its own session.
+worker loop, which opens its own short sessions.
 
 Scope creation is per-branch rather than unconditional: `SettingsView` does not touch
 the database, so it should not cause a session to be opened and immediately closed for
@@ -60,6 +60,31 @@ a background task finishes would still show stale values. A chronicle deleted ou
 under the view sends the user back rather than rendering a transcript for something
 that no longer exists.
 
+## A finished task refreshes the view in place
+
+`DesktopApp._on_task_completed` keeps the view that is on screen and calls its
+`refresh()`. It does not go through `update_view()`, which builds a new view: that reset
+the search text and the hide-completed box, detached an open form, and dropped the
+transcript out of edit mode along with whatever was being typed.
+
+| View | `refresh()` re-reads |
+| ---- | -------------------- |
+| `ArchiveView` | The chronicle list, with the current query |
+| `TasksView` | The task list, with the current query and filter |
+| `TranscriptView` | The chronicle (header and detail panel), sources and summaries. The transcript too, unless it is being edited |
+| `SettingsView` | Nothing; it has no `refresh()` |
+
+`TranscriptView` copies the stored chronicle's fields onto the `Chronicle` object it
+already holds, because its panels and `state.selected_chronicle` share that object. A
+chronicle that no longer exists sends the user back to the archive.
+
+The refresh runs on the worker's task and reads through the view's scope, so it can
+overlap a load the user started in the same view. Ticket 032 gives project database
+access one owner; until then the views do not serialise their loads.
+
+Theme and language changes still rebuild the view, as do the transcript view's own
+actions when not editing.
+
 ## Dialogs
 
 Flet has no built-in "show a modal and await what the user picked", so
@@ -73,6 +98,14 @@ confirms the animation finished. An earlier version called `page.overlay.remove(
 immediately after `open = False`, which dropped the post-animation dismiss callback: the
 buttons worked, the future resolved, the import proceeded — and the dialog visually never
 closed.
+
+Dialogs are not modal, so Esc or a click outside closes them without any button. `await_dialog`
+sets `on_dismiss` to resolve the future with a `dismissed` value, so the awaiting action never
+hangs. `ask_choice` callers name that value explicitly (`"cancel"`, or `False` for `confirm`)
+rather than relying on a button's position; everything else resolves to `None`.
+`show_dialog()` wraps this handler and still calls it once the close animation finishes.
+`TranscribeDialog.ask` keeps its own future, so it sets its own `on_dismiss` to resolve as a
+cancel.
 
 The `on_choice` builder takes a zero-argument *getter* rather than a plain value, so a
 button can resolve to something only known at click time, such as the current contents
@@ -214,4 +247,6 @@ and a per-row fetch would be a query per task. A failure there is not worth fail
 whole view over; rows fall back to showing no chronicle name.
 
 `RETRYABLE_STATUSES` excludes `WORKING` on purpose: it is already running, and
-re-queueing it would let a second worker claim it while the first is still going.
+re-queueing it would let a second worker claim it while the first is still going. A row
+left WORKING by a crash is reset when the worker next starts (see
+[tasks.md](tasks.md#interrupted-tasks)), so a WORKING row is never stuck.

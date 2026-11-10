@@ -153,6 +153,18 @@ class TestTranscribeParameters:
         assert data["model_size"] == "small"
 
     @pytest.mark.asyncio
+    async def test_a_start_offset_is_carried_and_an_omitted_one_is_absent(self):
+        repo = MagicMock(spec=TaskRepository)
+        repo.create = AsyncMock(side_effect=lambda task: task)
+        service = TaskService(repo)
+
+        with_offset = await service.queue_transcribe(uuid4(), "/s/a.wav", "GM", start_offset=90)
+        without = await service.queue_transcribe(uuid4(), "/s/a.wav", "GM")
+
+        assert json.loads(with_offset.data)["start_offset"] == 90
+        assert "start_offset" not in json.loads(without.data)
+
+    @pytest.mark.asyncio
     async def test_omitted_parameters_are_absent_so_settings_apply(self):
         repo = MagicMock(spec=TaskRepository)
         repo.create = AsyncMock(side_effect=lambda task: task)
@@ -263,3 +275,23 @@ class TestQueueSummarize:
         task = await TaskService(_repository()).queue_summarize(uuid4(), title="")
 
         assert "title" not in json.loads(task.data)
+
+
+@pytest.mark.asyncio
+async def test_a_transcription_is_not_retried_automatically():
+    repository = AsyncMock()
+    repository.create = AsyncMock(side_effect=lambda task: task)
+
+    task = await TaskService(repository).queue_transcribe(uuid4(), "/tmp/a.wav", "Alice")
+
+    assert task.max_attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_other_task_types_keep_three_attempts():
+    repository = AsyncMock()
+    repository.create = AsyncMock(side_effect=lambda task: task)
+
+    task = await TaskService(repository).queue_clean(uuid4())
+
+    assert task.max_attempts == 3

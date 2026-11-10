@@ -189,6 +189,11 @@ MESSAGES = {
         "import_transcript": "Import transcript",
         "clean": "Clean transcript",
         "clean_queued": "Clean task queued",
+        "clean_title": "Clean transcript?",
+        "clean_message": (
+            "Cleaning '{title}' drops filler and repeated lines and merges consecutive turns. "
+            "A copy of the transcript is saved first, in the chronicle's snapshots folder."
+        ),
         "identify_speakers": "Identify speakers",
         "speakers_found": "Found {count} speaker(s)",
         "summarize": "Generate summary",
@@ -205,6 +210,10 @@ MESSAGES = {
         "deleted": "Deleted '{title}'",
         "delete_failed": "Could not delete the chronicle: {error}",
         "failed": "Error: {error}",
+        "link_not_found": "Cannot link {path}: the file was not found",
+        "link_not_chronicler": "Cannot link {path}: it is not a Chronicler database",
+        "link_newer_version": "Cannot link {path}: it was made by a newer version of Chronicler",
+        "link_unreadable": "Cannot link {path}: it could not be read ({detail})",
         "transcript_exists_title": "Transcript already exists",
         "transcript_exists_message": (
             "This chronicle already has an imported transcript. Overwrite it with the "
@@ -244,6 +253,12 @@ MESSAGES = {
         "save_speaker": "Save speaker only",
         "start": "Start transcription",
         "start_again": "Transcribe again",
+        "start_offset": "Start offset (seconds)",
+        "start_offset_invalid": "Enter a number of seconds, 0 or more",
+        "replaces_edits": (
+            "This track is already transcribed. "
+            "Transcribing it again replaces its lines, including any edits made to them."
+        ),
     },
     "recording": {
         "no_devices": "No audio input devices were found. On WSL, audio input needs WSLg.",
@@ -337,8 +352,8 @@ MESSAGES = {
             "thin_client": "Thin Client",
             "thin_client_description": "Connect to a Chronicler Server that does the work.",
             "server_note": (
-                "Running Chronicler as a server or web client is set up from a terminal: "
-                "start it with the 'server' or 'web' argument."
+                "Running Chronicler as a server is set up from a terminal: "
+                "start it with the 'server' argument."
             ),
         },
         "workspace": {
@@ -348,6 +363,7 @@ MESSAGES = {
             "browse": "Browse",
             "picker_title": "Choose a workspace folder",
             "required": "Choose a folder to continue.",
+            "not_writable": "Chronicler cannot write to this folder. Choose a different one.",
         },
         "api_key": {
             "title": "API key",
@@ -381,6 +397,22 @@ MESSAGES = {
         "failed": "Chronicler could not start",
         "hint": (
             "Check the connection settings in your configuration file, then start Chronicler again."
+        ),
+        "workspace_locked": (
+            "The workspace at {path} is already open in another Chronicler window or server."
+        ),
+        "workspace_locked_hint": "Close the other one, then start Chronicler again.",
+        "workspace_lock_unavailable": (
+            "Chronicler could not lock the workspace at {path}: {reason}."
+        ),
+        "workspace_lock_unavailable_hint": (
+            "The filesystem it is on may not support file locks, as some network and FUSE "
+            "mounts do not. Choose a workspace on a local disk, then start Chronicler again."
+        ),
+        "workspace_not_writable": ("Chronicler cannot write to the workspace at {path}: {reason}."),
+        "workspace_not_writable_hint": (
+            "Check the folder's permissions, or choose a different workspace, then start "
+            "Chronicler again."
         ),
     },
 }

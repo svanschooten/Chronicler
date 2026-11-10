@@ -2,9 +2,15 @@ version: 2
 updates:
 - package-ecosystem: "pip"
   directory: "/"
+  # Only open a PR when a release falls outside the allowed range. The default raises
+  # lower bounds, which changes nothing CI installs.
+  versioning-strategy: "increase-if-necessary"
   schedule:
     interval: "weekly"
 - package-ecosystem: "github-actions"
-  directory: "/"
+  # "/" is .github/workflows/; the composite setup action lives under .github/actions/.
+  directories:
+  - "/"
+  - "/.github/actions/*"
   schedule:
     interval: "weekly"

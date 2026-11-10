@@ -70,8 +70,36 @@ submission time, so an overlong or invalid pattern is refused before a task exis
 An `X-API-Key` header, compared with `secrets.compare_digest`. `RpcServer` generates a
 key if none is configured, so it is never accidentally unauthenticated.
 
-The web client never hands the browser the upstream key. `/config` returns only
-`{"connected": bool}`, and the `/api/...` proxy routes inject the header server-side.
+The key is never logged. At startup the server logs only its last four characters, which
+is enough to tell which key it expects. A server started with no key configured generates
+one and saves it to the config file, because a key that existed only in the process
+could not be handed to any client. Keys set through the environment are not copied
+into the config file, and that file is owner-only on POSIX. See
+[configuration.md](configuration.md#environment-values-are-not-saved).
+
+There is no browser client and no CORS middleware. The web client this replaced was a
+reverse proxy that answered every request with the server's key and asked for no login
+of its own, so anyone who could reach it had the whole API.
+
+## Transport
+
+The server speaks plain HTTP and listens on every interface (`0.0.0.0`) unless `--host`
+says otherwise. The API key therefore crosses the network unencrypted on every request,
+and anyone who can see the traffic can read it and then use the whole API.
+
+That is acceptable on a network you trust, such as a home LAN, and nowhere else. To
+reach a server from anywhere less trusted:
+
+* **Put it behind a TLS-terminating reverse proxy** (Caddy, nginx, Traefik) and bind the
+  server itself to loopback with `--host 127.0.0.1`, so only the proxy reaches it. Point
+  thin clients at the proxy's `https://` URL.
+* **Or reach it over a tunnel**: an SSH port forward, WireGuard or Tailscale, again with
+  the server bound to loopback or to the tunnel's address.
+
+For a server only this machine uses, `--host 127.0.0.1` is enough on its own.
+
+Chronicler has no TLS of its own, and the default stays `0.0.0.0` because a thin client
+on another machine is the reason server mode exists.
 
 ## Uploads
 
@@ -81,8 +109,13 @@ chunks, checking the running total as it goes rather than trusting a declared
 
 ## What is deliberately still open
 
-* **`create_chronicle(project_path=...)`** lets a caller name a path outside the
-  workspace. That is the intentional "linked chronicle" feature for local desktop use;
-  it is worth revisiting for hardened server deployments.
+* **A caller can name any `project_path`.** `create_chronicle`, `link_external_chronicle`
+  and `update_chronicle` all accept one, which is the "linked chronicle" feature for local
+  desktop use. Over RPC it reaches further than it looks: adding a source creates
+  `sources/` beside that path and moves an uploaded file into it, cleaning creates
+  `snapshots/` there, opening the chronicle runs the project migrations against whatever
+  SQLite file it names, and a zip export with sources reads everything in that
+  `sources/`. So anyone holding the API key can write wherever the server process can.
+  Ticket 076 confines it.
 * **No per-user identity.** One API key grants full access. Multi-user access control is
   not designed yet.

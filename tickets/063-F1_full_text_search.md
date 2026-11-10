@@ -38,4 +38,5 @@ Done when a search for a spoken phrase finds the chronicle and the line.
 - (BLOCKER) [032-S4_project_db_access](032-S4_project_db_access.md): uses the project database helper
 - (BLOCKER) [031-S5_nullpool_project_engines](031-S5_nullpool_project_engines.md): needs cheap opens for the fan-out
 - (BLOCKER) [020-M3_explicit_timing_flag](020-M3_explicit_timing_flag.md): same migration chain, so this rebases on it
+- (BLOCKER) [074-A2_schema_versions_for_shared_chronicles](074-A2_schema_versions_for_shared_chronicles.md): this migration makes every searched chronicle unreadable to older versions, so the rule comes first
 - (RELATED) [031-S5_nullpool_project_engines](031-S5_nullpool_project_engines.md): cheap opens make searching across chronicles viable

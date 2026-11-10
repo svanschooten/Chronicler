@@ -6,6 +6,7 @@ makes it work identically in full-stack and thin-client mode.
 """
 
 import logging
+import shutil
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -83,8 +84,10 @@ class RecordingDialog:
 
         def build(on_choice) -> ft.AlertDialog:
             async def finish(_event):
-                await self._finish(name_field.value)
-                on_choice(lambda: None)
+                # A failed save keeps the dialog open, so the recording can be saved again
+                # rather than discarded when the dialog closes.
+                if await self._finish(name_field.value):
+                    await on_choice(lambda: None)(_event)
 
             return ft.AlertDialog(
                 title=ft.Text(t("recording.title")),
@@ -97,11 +100,25 @@ class RecordingDialog:
                 ],
             )
 
-        await await_dialog(page, build)
-        if self.recorder is not None and self.recorder.is_recording:
-            self.recorder.stop()
+        try:
+            await await_dialog(page, build)
+        finally:
+            # However the dialog went away - Close, Save or Esc - the microphone goes off.
+            if self.recorder is not None and self.recorder.is_recording:
+                self.recorder.stop()
+            self._discard_recording()
+
+    def _discard_recording(self) -> None:
+        """
+        Removes the recording's temp folder; a saved one was copied by the stager. Runs when
+        the dialog closes and when a new take starts, which replaces an unsaved one.
+        """
+        if self.temp_path is not None:
+            shutil.rmtree(self.temp_path.parent, ignore_errors=True)
+            self.temp_path = None
 
     async def _start(self, device_index, status, button, device_field) -> None:
+        self._discard_recording()
         self.temp_path = Path(tempfile.mkdtemp(prefix="chronicler-rec-")) / "recording.wav"
         self.recorder = Recorder(self.temp_path, device=device_index)
         try:
@@ -127,11 +144,12 @@ class RecordingDialog:
         button.content = t("recording.start")
         _refresh(status, button)
 
-    async def _finish(self, name: str) -> None:
+    async def _finish(self, name: str) -> bool:
+        """Saves the recording. False if that failed and the recording is still unsaved."""
         if self.recorder is not None and self.recorder.is_recording:
             self.recorder.stop()
         if self.temp_path is None or not self.temp_path.exists():
-            return
+            return True
 
         filename = (name or t("recording.default_name")).strip()
         if not filename.lower().endswith(".wav"):
@@ -143,9 +161,10 @@ class RecordingDialog:
         except Exception as error:
             logger.exception("Could not store the recording")
             self.show_snackbar(t("recording.failed", error=error))
-            return
+            return False
 
         self.show_snackbar(t("recording.saved", name=filename))
+        return True
 
 
 def _refresh(*controls: ft.Control) -> None:

@@ -1,2 +1,0 @@
-# Headless Chronicler server runtime.
--e .[server]

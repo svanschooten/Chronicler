@@ -10,10 +10,14 @@ Chronicle, survive restarts, and carry a type plus a JSON payload.
 
 ```
 PENDING ──claim_next()──> WORKING ──success──> DONE
-   ^                         │
-   │                         └──failure──> attempts exhausted? ──> FAILED
-   └─────────────────────────────────────── no ──┘
+   ^  ^                      │
+   │  │                      └──failure or interruption──> attempts exhausted? ──> FAILED
+   │  └──────────────────────────────────────────────────────────── no ──┘
+   └──── worker stopped, no attempt used ──── WORKING
 ```
+
+An interruption is a task found `WORKING` when the worker starts; see
+[Interrupted tasks](#interrupted-tasks).
 
 ## Atomic claiming
 
@@ -27,19 +31,23 @@ and waiting for the next poll cycle. It guards against pathologically unlucky
 contention without looping forever; in practice a single caller almost always claims
 its first candidate.
 
-## Why `process_tasks` is bounded
+## Retry backoff
 
-The loop is bounded to what was pending *before* the cycle started.
+`mark_failed_or_retry()` puts a task back to `PENDING` with a `not_before` time: 30 seconds
+after the first failure and 5 minutes after the second (`RETRY_DELAYS`; a later retry
+waits the last delay). `claim_next()` skips rows that are not due yet, so a transient
+failure such as a restarting gateway has time to clear, and `process_tasks` can simply run
+until nothing is due. `retry_task` and `update_status(PENDING)` clear `not_before`, so a
+manual retry runs at once. The Tasks view shows the next attempt time.
 
-A task that `mark_failed_or_retry()` puts back to `PENDING` mid-cycle is immediately
-re-claimable, and an unbounded claim loop would burn through all of a task's retries in
-one instant burst instead of spreading them across poll cycles. That defeats the point
-of retrying at all — an instant re-attempt gives a transient failure no time to clear.
+`TaskService` sets `max_attempts` per task type (`MAX_ATTEMPTS`): a transcription is not
+retried automatically, because a late failure would repeat hours of work and a manual
+retry exists. Every other type keeps 3.
 
 ## Returning a task to the queue
 
 Both `mark_failed_or_retry()` and `update_status(PENDING)` clear `claimed_by`,
-`claimed_at`, `error` and `progress`. From the queue's point of view the task has not
+`claimed_at` and `progress` (`update_status` also clears `error` and `not_before`). From the queue's point of view the task has not
 been attempted, so the previous run's state is stale. Leaving `claimed_by`/`claimed_at`
 behind made the Tasks view keep showing the *previous* run's start time until something
 claimed it again.
@@ -48,6 +56,54 @@ claimed it again.
 exactly one attempt: the automatic retry budget is already spent by the time a task
 reaches `FAILED`, and refilling it would make a deterministically failing task (a bad
 regex, a missing file) fail three more times per click instead of once.
+
+## Interrupted tasks
+
+A task can be left `WORKING` with nothing running it: the process crashed or was killed,
+or its final status write was still locked after `STATUS_WRITE_TIMEOUT`. Only one
+process can open a workspace (see [storage.md](storage.md#one-process-per-workspace)),
+so any `WORKING` row the worker finds when it starts is one of these.
+
+`run_forever` first calls `recover_interrupted()`, which puts each of them back to
+`PENDING` with "Interrupted before finishing" as its error. Nothing is claimed until that
+has worked once; a task claimed earlier would look interrupted to it. If it fails, for
+example on a locked database, the next poll cycle tries again.
+
+Each recovery costs an attempt, and a task with none left is `FAILED` instead. A task
+that takes the process down every time it runs would otherwise run on every start,
+forever. A task recovery fails publishes a `TaskCompletedEvent`, like any other failure.
+
+Its handler never saw that failure, so the cleanup a handler does on its own failure path
+never ran. `register_cleanup` gives a task type a hook for that case. TRANSCRIBE and
+NORMALIZE use it to mark their audio source `FAILED` where it still says `RUNNING`, or
+the Sources panel would show the track as transcribing for good. A source already past
+`RUNNING` is left alone: the crash came after its work was saved.
+
+Stopping the worker is different. Closing the desktop app or stopping the server cancels
+the running task, and `_execute_task` catches the `CancelledError`, returns the task to
+`PENDING` without using an attempt, and re-raises. The task did nothing wrong. That write
+is tried once, so a locked database holds up shutdown for at most its busy timeout (5 s);
+if it fails, the task is still `WORKING` and the next start's recovery picks it up, at the
+cost of an attempt. The source of a stopped transcription keeps saying `RUNNING` until the
+task runs again.
+
+A stop can also land after the handler finished, while `_record_outcome` is waiting out a
+lock to write `DONE` or the failure. The work is done by then, so instead of giving up it
+makes one last direct try at that write before stopping. Only if that fails too does the
+task stay `WORKING` and run again after the next start: harmless for an import or a
+transcription, which replace their lines, but a summary pays for its model call twice.
+
+Cancelling does not stop work running in a thread. A transcription is
+`asyncio.to_thread`, so Whisper carries on in the background and its result is thrown
+away, and closing the app waits for the interpreter to finish that thread. Real cancel is
+[064-F2](../tickets/064-F2_progress_and_cancel.md).
+
+Recovery commits every row first, then runs each failed task's cleanup and publishes its
+event. One task's cleanup or event failing is logged and does not stop the next one's: a
+second recovery would find nothing left `WORKING` to retry them with.
+
+The Tasks view does not offer retry on `WORKING`. With recovery in place, a `WORKING` row
+really is running, and retrying it would run it twice.
 
 ## No handler registered
 
@@ -58,14 +114,15 @@ through repeated claim/no-handler/reclaim cycles.
 
 ## Worker wiring
 
-`build_worker_runtime` is the one place that maps `TaskType` to handler methods. Both
+`build_worker_manager` is the one place that maps `TaskType` to handler methods. Both
 entry points that run tasks — the desktop app in full-stack mode and the server — need
 identical wiring, and a handler registered in only one of them is a task type that
 silently never runs in the other.
 
-`worker_id` identifies a `WorkerManager` instance for the `claimed_by` column. It
-matters when more than one process (desktop plus server) points at the same workspace,
-and for any future stale-claim recovery.
+`worker_id` identifies a `WorkerManager` instance for the `claimed_by` column, for
+logs and debugging. Only one process can open a workspace at a time (see
+[storage.md](storage.md#one-process-per-workspace)), so it never has to tell two live
+workers apart.
 
 ## Task events
 

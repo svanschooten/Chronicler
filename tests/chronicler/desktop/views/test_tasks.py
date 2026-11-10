@@ -299,3 +299,23 @@ async def test_load_tasks_reports_a_service_failure_in_place(make_view):
     await view.load_tasks()
 
     assert "queue unreachable" in view.task_list.controls[0].value
+
+
+@pytest.mark.asyncio
+async def test_refresh_keeps_the_search_and_the_filter(make_view):
+    """Ticket 027: a task finishing must not reset what the user set up."""
+    task_service = AsyncMock()
+    task_service.search_tasks.return_value = [
+        Task(type=TaskType.IMPORT, status=TaskStatus.DONE),
+    ]
+    view = make_view(task_service=task_service)
+    view.query = "IMPORT"
+    view.hide_completed = False
+
+    await view.refresh()
+
+    task_service.search_tasks.assert_awaited_once_with("IMPORT")
+    task_service.list_tasks.assert_not_awaited()
+    assert view.query == "IMPORT"
+    assert view.hide_completed is False
+    assert len(view.task_list.controls) == 1

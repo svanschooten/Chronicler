@@ -3,7 +3,8 @@ from unittest.mock import patch
 
 import pytest
 
-from chronicler.core.config import Settings
+from chronicler.core import workspace_lock
+from chronicler.core.config import Mode, Settings
 from chronicler.core.wizard import ConfigWizard
 
 
@@ -35,7 +36,7 @@ def test_wizard_full_stack(tmp_path):
         assert saved_settings.server_url is None
         assert saved_settings.api_key is not None
         assert len(saved_settings.api_key) > 0
-        assert saved_settings.mode == "desktop:full_stack"
+        assert saved_settings.mode is Mode.FULL_STACK
 
 
 def test_wizard_full_stack_manual_api_key(tmp_path):
@@ -79,7 +80,7 @@ def test_wizard_thin_client(tmp_path):
         assert saved_settings.server_url == "http://remote:8000"
         assert saved_settings.api_key == "secret-key"
         assert saved_settings.workspace_path is None
-        assert saved_settings.mode == "desktop:thin_client"
+        assert saved_settings.mode is Mode.THIN_CLIENT
 
 
 def test_wizard_reports_correct_path(tmp_path):
@@ -118,26 +119,7 @@ def test_wizard_server(tmp_path):
         saved_settings = Settings()
         assert saved_settings.workspace_path == tmp_path / "srv-workspace"
         assert saved_settings.api_key is not None
-        assert saved_settings.mode == "server"
-
-
-def test_wizard_web_client(tmp_path):
-    config_dir_patch = patch(
-        "chronicler.core.config.user_config_dir",
-        side_effect=lambda name: str(tmp_path / name),
-    )
-    with (
-        config_dir_patch,
-        patch("builtins.input", side_effect=["1", "4", "http://server:8000", "web-key"]),
-        patch("builtins.print"),
-    ):
-        wizard = ConfigWizard()
-        wizard.run()
-
-        saved_settings = Settings()
-        assert saved_settings.server_url == "http://server:8000"
-        assert saved_settings.api_key == "web-key"
-        assert saved_settings.mode == "client:web"
+        assert saved_settings.mode is Mode.SERVER
 
 
 def test_api_key_step_generates_on_empty_input():
@@ -190,25 +172,11 @@ def test_wizard_run_server_mode(mock_api, mock_ws, tmp_path):
     ):
         settings = Settings(workspace_path=None)
         wizard = ConfigWizard(settings=settings)
-        wizard.run(mode="server")
+        wizard.run(mode=Mode.SERVER)
 
     mock_ws.assert_called_once()
     mock_api.assert_called_once()
-    assert settings.mode == "server"
-
-
-@patch("chronicler.core.wizard.RemoteServerStep.run")
-def test_wizard_run_webclient_mode(mock_remote, tmp_path):
-    with (
-        patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)),
-        patch("chronicler.core.wizard.LanguageStep.run"),
-    ):
-        settings = Settings(server_url=None)
-        wizard = ConfigWizard(settings=settings)
-        wizard.run(mode="client:web")
-
-    mock_remote.assert_called_once()
-    assert settings.mode == "client:web"
+    assert settings.mode is Mode.SERVER
 
 
 @patch("chronicler.core.wizard.ConfigWizard._show_main_choice")
@@ -216,7 +184,7 @@ def test_wizard_run_desktop_mode_missing(mock_choice, tmp_path):
     with patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)):
         settings = Settings(workspace_path=None, server_url=None)
         wizard = ConfigWizard(settings=settings)
-        wizard.run(mode="client:desktop")
+        wizard.run(mode=Mode.FULL_STACK)
 
     mock_choice.assert_called_once()
 
@@ -231,7 +199,7 @@ def test_wizard_skips_satisfied_steps(tmp_path):
             patch("chronicler.core.wizard.ApiKeyStep.run") as mock_api,
             patch("chronicler.core.wizard.LanguageStep.run"),
         ):
-            wizard.run(mode="server")
+            wizard.run(mode=Mode.SERVER)
 
             mock_ws.assert_called_once()
             mock_api.assert_not_called()
@@ -247,7 +215,32 @@ def test_wizard_desktop_choice_skips_satisfied_steps(tmp_path):
             patch("chronicler.core.wizard.WorkspaceStep.run") as mock_ws,
             patch("chronicler.core.wizard.ApiKeyStep.run") as mock_api,
         ):
-            wizard.run(mode="client:desktop")
+            wizard.run(mode=Mode.FULL_STACK)
 
             mock_ws.assert_called_once()
             mock_api.assert_not_called()
+
+
+def test_workspace_step_reprompts_on_an_unwritable_folder(tmp_path, monkeypatch):
+    from chronicler.core.wizard import WorkspaceStep
+
+    unwritable = tmp_path / "locked"
+    unwritable.mkdir()
+    writable = tmp_path / "fine"
+
+    def probe(path):
+        if path == unwritable:
+            raise PermissionError("denied")
+        workspace_lock.probe_writable(path)
+
+    monkeypatch.setattr("chronicler.core.config.probe_writable", probe)
+    settings = Settings()
+
+    with (
+        patch("builtins.input", side_effect=[str(unwritable), str(writable)]),
+        patch("sys.stdout", new=StringIO()) as fake_out,
+    ):
+        WorkspaceStep().run(settings)
+
+    assert settings.workspace_path == writable
+    assert f"cannot write to {unwritable}" in fake_out.getvalue()

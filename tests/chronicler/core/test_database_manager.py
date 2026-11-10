@@ -1,11 +1,15 @@
 import asyncio
+import threading
+import time
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
 
 from chronicler.core.database import DBChronicle
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.project_database import DBSpeaker
+from chronicler.core.workspace_lock import WorkspaceLockedError
 
 
 @pytest.mark.asyncio
@@ -39,8 +43,7 @@ async def test_database_manager_project_session(tmp_path):
 @pytest.mark.asyncio
 async def test_close_project_releases_the_file_handle(tmp_path):
     """
-    The pool keeps a connection open after the session using it is closed, and Windows
-    refuses to delete a file anything still holds open - see docs/storage.md.
+    Windows refuses to delete a file anything still holds open - see docs/storage.md.
     """
     db_manager = DatabaseManager(tmp_path)
     chronicle_id = "held-open"
@@ -55,6 +58,22 @@ async def test_close_project_releases_the_file_handle(tmp_path):
     assert chronicle_id not in db_manager._project_engines
     assert (tmp_path / "chronicles" / chronicle_id / "project.db").exists()
 
+    await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_opening_many_chronicles_leaves_the_thread_count_flat(tmp_path):
+    db_manager = DatabaseManager(tmp_path)
+    async with await db_manager.get_project_session("first") as session:
+        await session.execute(select(DBSpeaker))
+    baseline = threading.active_count()
+
+    for index in range(20):
+        async with await db_manager.get_project_session(f"chronicle-{index}") as session:
+            await session.execute(select(DBSpeaker))
+    await asyncio.sleep(0.1)
+
+    assert threading.active_count() <= baseline
     await db_manager.close_all()
 
 
@@ -317,3 +336,68 @@ class TestProjectSnapshots:
         assert destination.exists()
 
         await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_a_second_writer_fails_fast_while_the_first_holds_the_lock(two_sessions):
+    two_sessions.first.add(DBChronicle(title="held"))
+    await two_sessions.first.flush()
+
+    two_sessions.second.add(DBChronicle(title="blocked"))
+    started = time.monotonic()
+    with pytest.raises(OperationalError, match="database is locked"):
+        await two_sessions.second.flush()
+
+    assert time.monotonic() - started < 1.0
+    await two_sessions.second.rollback()
+
+    await two_sessions.first.commit()
+    titles = (await two_sessions.second.execute(select(DBChronicle.title))).scalars().all()
+    assert titles == ["held"]
+
+
+class TestWorkspaceLock:
+    @pytest.mark.asyncio
+    async def test_a_second_manager_cannot_open_an_open_workspace(self, tmp_path):
+        """One workspace belongs to one process; see docs/storage.md."""
+        first = DatabaseManager(tmp_path)
+        await first.init_archive()
+        second = DatabaseManager(tmp_path)
+        try:
+            with pytest.raises(WorkspaceLockedError):
+                await second.init_archive()
+        finally:
+            await second.close_all()
+            await first.close_all()
+
+    @pytest.mark.asyncio
+    async def test_close_all_frees_the_workspace(self, tmp_path):
+        first = DatabaseManager(tmp_path)
+        await first.init_archive()
+        await first.close_all()
+
+        second = DatabaseManager(tmp_path)
+        await second.init_archive()
+        await second.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_failure_creating_imports_releases_the_workspace(self, tmp_path):
+        """Ticket 068: the mkdir ran outside the try that releases the lock."""
+        (tmp_path / "imports").write_text("a file where the directory should be")
+        manager = DatabaseManager(tmp_path)
+
+        with pytest.raises(FileExistsError):
+            await manager.init_archive()
+
+        assert not manager._workspace_lock.held
+        await manager.close_all()
+
+
+def test_sources_path_for_is_a_pure_lookup(tmp_path):
+    db_manager = DatabaseManager(tmp_path)
+
+    path = db_manager.sources_path_for("abc")
+
+    assert not path.exists()
+    assert db_manager.ensure_sources_path_for("abc") == path
+    assert path.is_dir()

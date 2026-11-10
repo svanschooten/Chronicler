@@ -190,6 +190,11 @@ MESSAGES = {
         "import_transcript": "Transcript importeren",
         "clean": "Transcript opschonen",
         "clean_queued": "Opschoontaak in de wachtrij",
+        "clean_title": "Transcript opschonen?",
+        "clean_message": (
+            "Opschonen van '{title}' verwijdert opvulling en herhaalde regels en voegt "
+            "opeenvolgende beurten samen. Eerst wordt een kopie bewaard in de map snapshots."
+        ),
         "identify_speakers": "Sprekers herkennen",
         "speakers_found": "{count} spreker(s) gevonden",
         "summarize": "Samenvatting maken",
@@ -206,6 +211,12 @@ MESSAGES = {
         "deleted": "'{title}' verwijderd",
         "delete_failed": "Kon de kroniek niet verwijderen: {error}",
         "failed": "Fout: {error}",
+        "link_not_found": "Kan {path} niet koppelen: het bestand is niet gevonden",
+        "link_not_chronicler": "Kan {path} niet koppelen: het is geen Chronicler-database",
+        "link_newer_version": (
+            "Kan {path} niet koppelen: het is gemaakt door een nieuwere versie van Chronicler"
+        ),
+        "link_unreadable": "Kan {path} niet koppelen: het kon niet worden gelezen ({detail})",
         "transcript_exists_title": "Er is al een transcript",
         "transcript_exists_message": (
             "Deze Chronicle heeft al een geimporteerd transcript. Overschrijven met het "
@@ -247,6 +258,12 @@ MESSAGES = {
         "save_speaker": "Alleen spreker opslaan",
         "start": "Transcriptie starten",
         "start_again": "Opnieuw transcriberen",
+        "start_offset": "Startverschuiving (seconden)",
+        "start_offset_invalid": "Voer een aantal seconden in, 0 of meer",
+        "replaces_edits": (
+            "Dit spoor is al getranscribeerd. "
+            "Opnieuw transcriberen vervangt de regels ervan, ook als je ze hebt bewerkt."
+        ),
     },
     "recording": {
         "no_devices": "Geen audio-invoerapparaten gevonden. Op WSL is WSLg nodig voor invoer.",
@@ -343,8 +360,8 @@ MESSAGES = {
             "thin_client": "Thin client",
             "thin_client_description": "Verbinden met een Chronicler Server die het werk doet.",
             "server_note": (
-                "Chronicler als server of webclient draaien stel je in vanaf een terminal: "
-                "start met het argument 'server' of 'web'."
+                "Chronicler als server draaien stel je in vanaf een terminal: "
+                "start met het argument 'server'."
             ),
         },
         "workspace": {
@@ -354,6 +371,7 @@ MESSAGES = {
             "browse": "Bladeren",
             "picker_title": "Kies een werkmap",
             "required": "Kies een map om door te gaan.",
+            "not_writable": "Chronicler kan niet naar deze map schrijven. Kies een andere.",
         },
         "api_key": {
             "title": "API-sleutel",
@@ -388,6 +406,26 @@ MESSAGES = {
         "hint": (
             "Controleer de verbindingsinstellingen in je configuratiebestand en start "
             "Chronicler opnieuw."
+        ),
+        "workspace_locked": (
+            "De werkruimte in {path} is al geopend in een ander Chronicler-venster of een "
+            "andere server."
+        ),
+        "workspace_locked_hint": "Sluit die eerst en start Chronicler daarna opnieuw.",
+        "workspace_lock_unavailable": (
+            "Chronicler kon de werkruimte in {path} niet vergrendelen: {reason}."
+        ),
+        "workspace_lock_unavailable_hint": (
+            "Het bestandssysteem ondersteunt mogelijk geen bestandsvergrendeling, zoals "
+            "sommige netwerk- en FUSE-koppelingen. Kies een werkruimte op een lokale schijf "
+            "en start Chronicler daarna opnieuw."
+        ),
+        "workspace_not_writable": (
+            "Chronicler kan niet schrijven naar de werkruimte in {path}: {reason}."
+        ),
+        "workspace_not_writable_hint": (
+            "Controleer de rechten van de map of kies een andere werkruimte en start "
+            "Chronicler daarna opnieuw."
         ),
     },
 }

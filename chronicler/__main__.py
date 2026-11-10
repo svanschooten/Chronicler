@@ -46,8 +46,8 @@ def main():
 
     Setup is split by where each mode can actually ask a question. Desktop collects its
     configuration on screen, in `desktop.views.wizard`, because the packaged build is
-    windowless and has nothing for `input()` to read from. Server and web client keep the
-    console wizard in `core.wizard`, since a terminal is where they are started anyway.
+    windowless and has nothing for `input()` to read from. The server keeps the console
+    wizard in `core.wizard`, since a terminal is where it is started anyway.
     See docs/configuration.md.
     """
     attach_windows_console()
@@ -57,18 +57,18 @@ def main():
         "mode",
         nargs="?",
         default="desktop",
-        choices=["desktop", "server", "web", "client:web", "client:desktop"],
+        choices=["desktop", "server"],
         help="Run mode (default: %(default)s)",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
     parser.add_argument(
         "--host",
-        help="Address to bind when running as a server or web client (default: 0.0.0.0)",
+        help="Address to bind when running as a server (default: 0.0.0.0)",
     )
     parser.add_argument(
         "--port",
         type=int,
-        help="Port to bind when running as a server or web client",
+        help="Port to bind when running as a server",
     )
     parser.add_argument(
         "--config",
@@ -87,32 +87,26 @@ def main():
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
 
-    from chronicler.core.config import get_settings, is_config_initialized, set_config_file_override
+    from chronicler.core.config import (
+        Mode,
+        get_settings,
+        is_config_initialized,
+        set_config_file_override,
+    )
 
     if args.config:
         set_config_file_override(args.config)
 
-    mode_map = {
-        "desktop": "client:desktop",
-        "web": "client:web",
-        "server": "server",
-        "client:web": "client:web",
-        "client:desktop": "client:desktop",
-    }
-    mode = mode_map.get(args.mode, args.mode)
+    if args.mode == "server":
+        # Before the wizard, so nobody answers its questions only to hit a traceback.
+        require_server_extra()
 
-    if mode != "client:desktop":
         from chronicler.core.wizard import run_wizard
 
-        if not is_config_initialized() or not get_settings().validate_for_mode(mode):
-            run_wizard(mode=mode)
+        if not is_config_initialized() or not get_settings().validate_for_mode(Mode.SERVER):
+            run_wizard(mode=Mode.SERVER)
 
-    if mode == "server":
         server_main(host=args.host, port=args.port)
-        return
-
-    if mode == "client:web":
-        webclient_main(host=args.host, port=args.port)
         return
 
     from chronicler.desktop.main import run_desktop
@@ -120,13 +114,19 @@ def main():
     run_desktop()
 
 
-def webclient_main(host: str | None = None, port: int | None = None):
-    from chronicler.webclient.main import run_server
+def require_server_extra() -> None:
+    """
+    Exits with a readable message when FastAPI and Uvicorn are not installed, instead of
+    the traceback `import uvicorn` would give. See docs/optional-extras.md.
+    """
+    from chronicler.core import extras
 
-    run_server(**_binding(host, port, default_port=8080))
+    if not extras.is_available("server"):
+        raise SystemExit(extras.missing_message("server"))
 
 
 def server_main(host: str | None = None, port: int | None = None):
+    require_server_extra()
     from chronicler.server.main import run_server
 
     run_server(**_binding(host, port, default_port=8000))

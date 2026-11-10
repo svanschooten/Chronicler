@@ -7,6 +7,10 @@ from chronicler.core.processing.regex_guard import assert_safe_pattern
 from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import service
 
+# A rerun of a transcription is expensive and a manual retry exists, so it is not repeated
+# automatically. Every other type keeps the model's default.
+MAX_ATTEMPTS: dict[TaskType, int] = {TaskType.TRANSCRIBE: 1}
+
 
 @service(
     expose=[
@@ -23,6 +27,11 @@ from chronicler.core.rpc import service
 class TaskService:
     def __init__(self, repository: TaskRepository):
         self.repository = repository
+
+    async def _create(self, task: Task) -> Task:
+        """Every queued task goes through here, so its type's attempt budget applies."""
+        task.max_attempts = MAX_ATTEMPTS.get(task.type, task.max_attempts)
+        return await self.repository.create(task)
 
     async def list_tasks(self) -> list[Task]:
         return await self.repository.get_all()
@@ -53,14 +62,14 @@ class TaskService:
             chronicle_id=chronicle_id,
             data=json.dumps(data),
         )
-        return await self.repository.create(task)
+        return await self._create(task)
 
     async def queue_clean(self, chronicle_id: UUID) -> Task:
         task = Task(
             type=TaskType.CLEAN,
             chronicle_id=chronicle_id,
         )
-        return await self.repository.create(task)
+        return await self._create(task)
 
     async def queue_transcribe(
         self,
@@ -71,8 +80,12 @@ class TaskService:
         no_speech_threshold: float | None = None,
         model_size: str | None = None,
         normalize_first: bool | None = None,
+        start_offset: float | None = None,
     ) -> Task:
-        """Queues one track. Omitted parameters fall back to the configured defaults."""
+        """
+        Queues one track. Omitted parameters fall back to the configured defaults, and an
+        omitted `start_offset` keeps the one stored on the track.
+        """
         data: dict[str, Any] = {"file_path": file_path, "speaker_name": speaker_name}
         if language is not None:
             data["language"] = language
@@ -82,13 +95,15 @@ class TaskService:
             data["model_size"] = model_size
         if normalize_first is not None:
             data["normalize_first"] = normalize_first
+        if start_offset is not None:
+            data["start_offset"] = start_offset
 
         task = Task(
             type=TaskType.TRANSCRIBE,
             chronicle_id=chronicle_id,
             data=json.dumps(data),
         )
-        return await self.repository.create(task)
+        return await self._create(task)
 
     async def queue_normalize(
         self, chronicle_id: UUID, file_path: str, force: bool = False
@@ -97,7 +112,7 @@ class TaskService:
         data: dict[str, Any] = {"file_path": file_path}
         if force:
             data["force"] = True
-        return await self.repository.create(
+        return await self._create(
             Task(type=TaskType.NORMALIZE, chronicle_id=chronicle_id, data=json.dumps(data))
         )
 
@@ -128,7 +143,7 @@ class TaskService:
         if summary:
             data["summary"] = summary
 
-        return await self.repository.create(
+        return await self._create(
             Task(type=TaskType.SUMMARIZE, chronicle_id=chronicle_id, data=json.dumps(data))
         )
 

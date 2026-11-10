@@ -40,5 +40,6 @@ segment.
 
 - (BLOCKER) [009-C4_task_recovery](009-C4_task_recovery.md): cancel must interact correctly with task recovery
 - (BLOCKER) [022-M6_retry_backoff](022-M6_retry_backoff.md): cancel must not be retried
-- (BLOCKER) [040-S6_worker_and_handlers](040-S6_worker_and_handlers.md): same handler code
+- (RELATED) [040-S6_worker_and_handlers](040-S6_worker_and_handlers.md): same handler code. Not a blocker any more: progress and cancel are what users wait for, and the overlap is small, so this goes first and 040 rebases on it
+- (RELATED) [077-L15_task_history_grows](077-L15_task_history_grows.md): bounds the list this polls, so take it first
 - (RELATED) [027-M7_refresh_view_in_place](027-M7_refresh_view_in_place.md): both change how the Tasks view refreshes

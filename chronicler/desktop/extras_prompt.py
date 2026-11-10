@@ -37,7 +37,9 @@ class ExtraInstaller:
 
     async def ensure(self, page: ft.Page, name: str) -> bool:
         """True when `name` is usable by the time this returns."""
-        if extras.is_available(name):
+        # A real import, on a worker thread: the first import of an extra takes seconds, and
+        # a failed one is not cached, so a broken extra would stall the UI on every click.
+        if await asyncio.to_thread(extras.is_available, name):
             return True
 
         if not extras.can_install():
@@ -61,7 +63,7 @@ class ExtraInstaller:
                 t(
                     "extras.message",
                     purpose=extra.purpose,
-                    requirement=extra.requirement,
+                    requirement=extra.requirements_text,
                     size=extras.download_estimate(name),
                 ),
                 color=self.colors.text,
@@ -98,12 +100,16 @@ class ExtraInstaller:
     async def _install(self, name: str) -> bool:
         extra = extras.get_extra(name)
         self.show_snackbar(
-            t("extras.installing", name=extra.requirement, size=extras.download_estimate(name))
+            t(
+                "extras.installing",
+                name=extra.requirements_text,
+                size=extras.download_estimate(name),
+            )
         )
 
         result = await asyncio.to_thread(extras.install, name)
         if result.ok:
-            self.show_snackbar(t("extras.installed", name=extra.requirement))
+            self.show_snackbar(t("extras.installed", name=extra.requirements_text))
         else:
             self.show_snackbar(t("extras.failed", name=extra.name, error=result.output))
         return result.ok

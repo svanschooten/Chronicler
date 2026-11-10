@@ -2,17 +2,19 @@
 
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from chronicler.core.config import Settings, get_settings
-from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.database_manager import DatabaseManager, ensure_project_available
 from chronicler.core.file_staging import confine_to_directory
 from chronicler.core.models import Task, TranscriptLine
-from chronicler.core.repositories import ChronicleRepository
-from chronicler.core.sqlite import SQLiteTranscriptRepository
+from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +25,22 @@ class HandlerBase:
     def __init__(
         self,
         db_manager: DatabaseManager,
-        chronicle_repo: ChronicleRepository | None = None,
+        archive_sessions: Callable[[], AsyncSession] | None = None,
         settings: Settings | None = None,
     ):
         self.db_manager = db_manager
-        self.chronicle_repo = chronicle_repo
+        self.archive_sessions = archive_sessions
         self.settings = settings or get_settings()
+
+    @asynccontextmanager
+    async def chronicles(self) -> AsyncIterator[SQLiteChronicleRepository]:
+        """
+        A chronicle repository on a short archive session of its own. Without
+        `archive_sessions` a handler skips its chronicle bookkeeping, so check that first.
+        """
+        assert self.archive_sessions is not None
+        async with self.archive_sessions() as session:
+            yield SQLiteChronicleRepository(session)
 
     @staticmethod
     def require_chronicle_id(task: Task) -> UUID:
@@ -57,9 +69,10 @@ class HandlerBase:
         A linked chronicle's project.db lives wherever the user put it, outside the
         workspace - None means the default in-workspace location.
         """
-        if not self.chronicle_repo:
+        if not self.archive_sessions:
             return None
-        chronicle = await self.chronicle_repo.get_by_id(chronicle_id)
+        async with self.chronicles() as chronicles:
+            chronicle = await chronicles.get_by_id(chronicle_id)
         if chronicle and chronicle.project_path:
             return Path(chronicle.project_path)
         return None
@@ -71,6 +84,14 @@ class HandlerBase:
         )
 
     async def project_session(self, chronicle_id: UUID):
+        """
+        Raises LookupError for a chronicle with no row (deleted while the task waited) and
+        FileNotFoundError for a linked one whose file has moved, instead of creating a
+        new empty database. Without `archive_sessions` there is no row to check.
+        """
+        if self.archive_sessions:
+            async with self.chronicles() as chronicles:
+                ensure_project_available(await chronicles.get_by_id(chronicle_id), chronicle_id)
         return await self.db_manager.get_project_session(
             str(chronicle_id), custom_path=await self.project_path_for(chronicle_id)
         )
@@ -92,13 +113,15 @@ class HandlerBase:
         return speaker_map
 
     async def tag_as_transcript(self, chronicle_id: UUID) -> None:
-        if self.chronicle_repo:
-            await self.chronicle_repo.add_tag(chronicle_id, "Transcript")
+        if self.archive_sessions:
+            async with self.chronicles() as chronicles:
+                await chronicles.add_tag(chronicle_id, "Transcript")
 
     async def backfill_speakers_count(self, chronicle_id: UUID, count: int) -> None:
-        if not self.chronicle_repo:
+        if not self.archive_sessions:
             return
-        chronicle = await self.chronicle_repo.get_by_id(chronicle_id)
-        if chronicle and chronicle.speakers_count != count:
-            chronicle.speakers_count = count
-            await self.chronicle_repo.update(chronicle)
+        async with self.chronicles() as chronicles:
+            chronicle = await chronicles.get_by_id(chronicle_id)
+            if chronicle and chronicle.speakers_count != count:
+                chronicle.speakers_count = count
+                await chronicles.update(chronicle)

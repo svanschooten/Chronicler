@@ -103,8 +103,7 @@ async def test_local_file_stager_copies_into_imports_dir(tmp_path):
 async def test_remote_file_stager_uploads_and_returns_server_path(tmp_path):
     """
     Same primitive as LocalFileStager (turn a local path into something safe to queue), but
-    for thin-client mode: actually upload it via /upload, the same endpoint the web client's
-    proxy already uses.
+    for thin-client mode: actually upload it via the server's /upload endpoint.
     """
     db_manager = DatabaseManager(tmp_path)
     try:

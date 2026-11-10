@@ -2,22 +2,38 @@
 
 import importlib
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import tomllib
 
 from chronicler.core import extras
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _pyproject_extras() -> dict[str, list[str]]:
+    with (REPO_ROOT / "pyproject.toml").open("rb") as handle:
+        return tomllib.load(handle)["project"]["optional-dependencies"]
 
 
 class TestRegistry:
     def test_every_extra_declared_in_pyproject_is_registered(self):
-        assert set(extras.EXTRAS) == {"transcription", "normalization", "llm", "recording"}
+        assert set(extras.EXTRAS) == set(_pyproject_extras()) - {"dev"}
 
-    def test_an_extra_knows_the_module_its_guard_imports(self):
-        assert extras.get_extra("recording").module == "sounddevice"
-        assert extras.get_extra("normalization").module == "av"
-        assert extras.get_extra("transcription").module == "faster_whisper"
-        assert extras.get_extra("llm").module == "llama_cpp"
+    def test_an_extra_lists_exactly_what_pyproject_declares(self):
+        """An install from the registry must get what `pip install .[name]` would."""
+        declared = _pyproject_extras()
+        for name, extra in extras.EXTRAS.items():
+            assert list(extra.requirements) == declared[name], name
+
+    def test_an_extra_knows_the_modules_its_guard_imports(self):
+        assert extras.get_extra("recording").modules == ("sounddevice",)
+        assert extras.get_extra("normalization").modules == ("av", "numpy")
+        assert extras.get_extra("transcription").modules == ("faster_whisper",)
+        assert extras.get_extra("llm").modules == ("llama_cpp",)
+        assert extras.get_extra("server").modules == ("fastapi", "uvicorn", "python_multipart")
 
     def test_an_unknown_extra_is_a_key_error_naming_it(self):
         with pytest.raises(KeyError, match="banjo"):
@@ -31,6 +47,26 @@ class TestRegistry:
 
 
 class TestAvailability:
+    def test_every_module_of_an_extra_has_to_import(self):
+        """The server needs FastAPI and Uvicorn both; one of them is not enough."""
+
+        def only_fastapi(module):
+            if module != "fastapi":
+                raise ImportError(module)
+            return MagicMock()
+
+        with patch.object(extras.importlib, "import_module", side_effect=only_fastapi):
+            assert not extras.is_available("server")
+
+    def test_an_extra_with_several_packages_installs_all_of_them(self):
+        command = extras.install_command("server")
+
+        assert command[4:] == [
+            "fastapi>=0.141.1,<1",
+            "uvicorn[standard]>=0.30,<1",
+            "python-multipart>=0.0.13",
+        ]
+
     def test_it_agrees_with_a_real_import_attempt(self):
         try:
             importlib.import_module("av")
@@ -125,7 +161,7 @@ class TestInstallCommand:
         """
         command = extras.install_command("recording")
 
-        assert command[-1] == extras.get_extra("recording").requirement
+        assert command[-1] == "sounddevice>=0.4,<1"
         assert not any("chronicler" in part for part in command)
 
 

@@ -22,6 +22,44 @@ user put it, outside the workspace. `delete_chronicle` must never remove that di
 — only a chronicle whose data actually lives under `<workspace>/chronicles/<id>/` gets
 its directory removed.
 
+## One process per workspace
+
+`chronicler/core/workspace_lock.py`
+
+A workspace belongs to one process at a time. `init_archive` takes an exclusive OS lock
+on `<workspace>/.chronicler.lock` (`fcntl.flock` on Linux and macOS, `msvcrt.locking` on
+Windows), and `close_all` releases it. A second desktop app or server on the same
+workspace gets `WorkspaceLockedError`: the desktop shows it on the startup screen, and
+the server exits with status 1 and the message.
+
+The lock call can also fail because the filesystem cannot take a lock at all: some NFS,
+SMB and FUSE mounts answer `flock` with `ENOLCK`, `EINVAL` or `EOPNOTSUPP`. That raises
+`WorkspaceLockUnavailableError`, reported the same two ways but naming the OS error and
+suggesting a local disk. Only "held by someone else" counts as locked: `EWOULDBLOCK`,
+`EAGAIN` or `EACCES` from `flock`, and `EACCES` or `EDEADLOCK` from `msvcrt.locking`.
+
+Before locking, the workspace is probed by creating and removing a file in it (`os.access`
+ignores ACLs on Windows). A folder that cannot be created or written to raises
+`WorkspaceNotWritableError`, reported the same two ways with the OS reason.
+`Settings.is_workspace_valid` uses the same probe, and both setup wizards call it to refuse
+an existing folder that cannot be written to. A folder that does not exist yet is
+accepted there and created at startup.
+
+`init_archive` releases the lock again if anything after taking it fails, including
+creating `imports/`. After `close_all` the manager no longer holds the lock, but its
+engines would reconnect if used; nothing reuses a closed manager today.
+
+Sharing a workspace between processes would need task leases and heartbeats so a crashed
+worker's tasks could be told apart from a live one's. Ruling it out keeps task recovery a
+plain reset at startup.
+
+The OS drops the lock when the process ends, however it ends, so a crash or a kill never
+leaves a stale lock behind. The lock file itself stays and is harmless.
+
+The lock is local to one machine. Two machines opening a synced copy of one workspace
+(Dropbox, OneDrive, a network share) do not see each other's lock, so only open a synced
+workspace on one machine at a time.
+
 ## Alembic without an `alembic.ini`
 
 `_run_alembic_upgrade` runs one chain against an already-open sync connection, handed
@@ -71,32 +109,79 @@ sources; only speaker assignments and summaries are lost.
 `get_archive_session()` returns a new session each call. Project engines are cached per
 chronicle id, because creating one runs the migration chain.
 
-The rule that matters: **the worker loop's session is never shared with the UI or with
-HTTP request handling.** Those run as separate coroutines on the same event loop, so an
-await in either can interleave with the other's in-flight operation, and `AsyncSession`
-does not allow that on a shared instance. `build_worker_runtime` therefore hands its
-session back to the caller rather than hiding it — whoever starts the loop owns closing
-it.
+The rule that matters: **the worker holds no session across steps.** `WorkerManager` and
+the task handlers take a session factory and open a short session for each group of
+repository calls, the way the RPC layer scopes each request. Two things follow:
+
+- Nothing is shared with the UI or HTTP request handling. Those run as separate
+  coroutines on the same event loop, and `AsyncSession` does not allow interleaved
+  operations on a shared instance.
+- A `database is locked` error poisons only the session it happened on. One long-lived
+  session would need a rollback nobody issues, and every later poll would fail with
+  `PendingRollbackError`.
+
+Progress updates are best effort: a locked write is logged and skipped. A task's final
+status write retries for up to `STATUS_WRITE_TIMEOUT` (30 seconds), so a brief lock does
+not lose a finished result.
+
+## Journal mode and foreign keys
+
+Both databases run in SQLite's default rollback journal, not WAL, and foreign keys are not
+enforced (`PRAGMA foreign_keys` is never turned on).
+
+**Rollback journal.** A writer briefly locks readers out, which is where most `database is
+locked` errors come from. The busy timeout (5 seconds), the worker's short sessions and its
+retried status writes absorb that (see [Sessions](#sessions)). WAL would let readers and
+the writer run together, but it keeps two extra files, `-wal` and `-shm`, beside each
+database, and the database is only consistent with all three together. Sync tools such as
+Dropbox and OneDrive copy files independently and can ship a `project.db` without its
+`-wal`, which loses or corrupts recent writes on the other machine. The README promotes
+exactly that kind of storage, so the default journal stays until there is a reason to
+trade that safety away. A chronicle that is copied or shared should be copied while
+Chronicler is closed either way.
+
+**Foreign keys.** The schemas declare them, but SQLite ignores them unless the pragma is
+on for each connection. The code does what cascades would do instead:
+`SQLiteChronicleRepository.delete` removes a chronicle's tasks and tag links in the same
+transaction, and a transcript line keeps its speaker row because speakers outlive their
+lines on purpose. Turning the pragma on now would first need a check that no existing
+workspace holds a dangling reference.
+
+## Opening a chronicle upgrades it
+
+The first open of a project database in a process runs its migration chain to head (see
+[Migrations are serialised process-wide](#migrations-are-serialised-process-wide)), so the
+file moves to the newest schema in place. An older Chronicler cannot open it afterwards:
+Alembic stops with `Can't locate revision identified by '…'`.
+
+This matters for anything shared: a chronicle in a synced folder, one sent as a zip, or a
+linked `project.db`. Whoever opens it with the newest version decides the version
+everyone else needs. Until ticket 074 settles a compatibility rule, keep everyone sharing
+chronicles on the same release.
 
 ## Deleting a chronicle closes its database first
 
 `ChronicleService.delete_chronicle` calls `DatabaseManager.close_project(id)` before it
 touches the filesystem, and that ordering is the whole point of the method.
 
-A project engine is cached for the life of the process, and SQLAlchemy's pool keeps a
-connection open long after the session that used it was closed — `async with session:`
-returns the connection to the pool, it does not close the file. Linux happily unlinks a
-file that is still open, so deleting a chronicle worked there. Windows does not, and
-reported:
+Project engines use `NullPool`: a connection, and the thread and open file behind it,
+lives only as long as the session that took it. Before that, a cached engine kept one
+open per chronicle, so a long-running process that opened 50 chronicles held 50 threads
+and 50 files (2 threads rose to 52), and deleting a chronicle failed on Windows. Linux
+unlinks a file that is still open, but Windows refuses:
 
 ```
 [WinError 32] The process cannot access the file because it is being used by
 another process: '...\chronicles\<id>\project.db'
 ```
 
-`close_project` pops the engine out of the cache and disposes it, which drops the last
-handle. Reopening the chronicle afterwards simply builds a new engine, so this is a
-release rather than a teardown.
+A connection now costs about 2.1 ms to open instead of 0.9 ms from a pool. The engine
+stays cached, because the cache also records that a database has been migrated.
+
+`close_project` pops the engine out of the cache, so a project.db recreated at the same
+path is migrated again. The ordering in `delete_chronicle` still matters: no session may
+be open on the file when it is removed. `remove_directory` keeps its retries, since
+virus scanners also hold files briefly.
 
 A **linked** chronicle is closed the same way and its files are then left alone — the
 `project.db` belongs to whoever the workspace borrowed it from, and deleting the
@@ -163,6 +248,17 @@ database was.
 The title comes from the containing directory, falling back to the filename when that
 directory is the generic `chronicles`.
 
+Before anything is registered, `check_linkable_project` opens the file read-only and
+refuses it with a `LinkRefusedError` when it does not exist, is not a Chronicler project
+database (no `alembic_version` table: another app's SQLite file, an empty file, or not
+SQLite at all), or carries a revision this version does not know, meaning a newer
+Chronicler made it. This check comes first because opening a project runs its migrations,
+which would otherwise write Chronicler's tables into whatever file was picked. A file that
+passes but then fails while being read is unregistered again and refused as unreadable.
+Either way the chronicle count is unchanged, and the error's `reason` lets the desktop say
+why in the user's language. A thin client does not offer *Link*: the picker returns a path
+on the client's machine, and the server would look for it on its own disk.
+
 `hydrate_from_project` is separate from the link so it can be re-run — the chronicle
 view's *Identify speakers* covers the speaker half of the same job.
 
@@ -182,6 +278,18 @@ Everything sits under one folder named after the chronicle, so unpacking it into
 directory leaves one directory behind rather than loose files. That folder name is also
 what `link_external_chronicle` reads the title from, so an unpacked archive comes back
 named correctly even if nothing reads the manifest.
+
+### Off the event loop
+
+`export_zip` runs `format_bundle` through `asyncio.to_thread`. Compressing 200 MB of
+audio takes seconds, and the event loop it would otherwise block is the desktop UI's, or
+the server's for every client.
+
+`format_bundle` writes the zip straight into the `bytearray` it returns. Writing to a
+`BytesIO` and copying it out at the end was one step that held the GIL for long enough
+to stall the loop from the worker thread. Because that target cannot seek, each entry's
+sizes follow its data (a data descriptor) instead of sitting in its local header. Every
+common zip reader handles that.
 
 ### Why a manifest
 

@@ -17,6 +17,13 @@ priority order:
 
 The `.json` entry is legacy and read-only. `Settings.save()` always writes YAML.
 
+Config files are read and written as UTF-8 on every platform. A file that is not valid
+UTF-8 is read in the locale's encoding instead (an "ANSI" file from an older Windows
+editor), and the next save rewrites it as UTF-8. `save()` writes a temp file beside the
+config, syncs it, and swaps it in, so a crash cannot truncate it. A symlinked config is
+written where the link points. If the existing file cannot be parsed, it is copied to
+`<name>.bak`, readable by its owner only, before being replaced.
+
 `_read_config` warns and falls back to defaults on a parse failure rather than raising.
 A corrupt config should not make the app unstartable — the wizard can then fix it. It
 names the offending file in the warning; this was once a bare `except: pass`, which
@@ -55,20 +62,48 @@ called it directly.
 
 ## `Settings.mode`
 
-One of `server`, `client:web`, `desktop:full_stack`, `desktop:thin_client`, set by
-`ConfigWizard` once it knows which of the four concrete setups was chosen.
+One `Mode` enum (`core/config.py`) names the three setups everywhere: `full_stack`,
+`thin_client` and `server`. The wizards store it once they know which was chosen.
 
-It is recorded rather than re-derived because desktop's two sub-modes are not otherwise
+It is recorded rather than re-derived because desktop's two modes are not otherwise
 distinguishable from settings alone — both can have `workspace_path` and `server_url`
 set at once, for example after switching modes once.
 
-`DesktopRuntime` infers the mode the way `desktop/main.py` used to for configs saved
-before this field existed, rather than forcing a re-run of the wizard.
+Loading accepts what earlier versions saved: `desktop:full_stack` and
+`desktop:thin_client` map to the new values, and `client:web` or any unknown value reads
+as unset, with a warning.
+
+Three members of `Settings` answer every mode question, so validation, `build_runtime`
+and the Settings page cannot disagree:
+
+| Member | Answers |
+| ------ | ------- |
+| `effective_mode` | The stored mode. Without one: thin client when there is a server URL and no workspace, else full stack |
+| `desktop_mode` | `effective_mode`, with `server` read as full stack: a server's configuration opens its workspace locally |
+| `validate_for_mode(mode)` | Whether the settings are complete for that mode: a workspace for full stack, a server URL and API key for thin client, a workspace and API key for server |
+
+The command line takes `desktop` or `server`. `desktop` runs in `desktop_mode`.
 
 ## Serialisation
 
 `save()` round-trips through JSON before dumping YAML, so pydantic serialises `Path`
 and enum values into plain YAML scalars rather than Python object tags.
+
+### Environment values are not saved
+
+A setting that came from the environment (`CHRONICLER_API_KEY`,
+`CHRONICLER_LLM__API_KEY`, ...) or from a `.env` file is left out of what `save()` writes.
+The file keeps whatever value it already had for that setting, or none. A file value
+equal to the environment's is dropped as well: that is a secret an earlier version leaked
+into the file, and the environment still supplies it. Before this, the
+first save after any change, even toggling dark mode, copied environment secrets into the
+file in plain text.
+
+The consequence: a setting the environment overrides cannot be changed from the app.
+Unset the variable first.
+
+The file is written with mode 600 on POSIX, because it can hold `api_key` and
+`llm.api_key`. An existing file is restricted before anything is written to it.
 
 ## The two wizards
 
@@ -77,12 +112,12 @@ console to ask questions through.
 
 | Mode | Wizard | Where |
 | ---- | ------ | ----- |
-| `client:desktop` | `FletSetupWizard` | `desktop/views/wizard.py`, on screen |
-| `server`, `client:web` | `ConfigWizard` | `core/wizard.py`, on stdin |
+| desktop | `FletSetupWizard` | `desktop/views/wizard.py`, on screen |
+| `server` | `ConfigWizard` | `core/wizard.py`, on stdin |
 
 The split exists because the packaged desktop build is windowless and has no stdin at
 all — see [packaging.md](packaging.md). `__main__.main()` simply does not call
-`run_wizard` for `client:desktop`; `desktop.main.start()` gates the Flet one on the same
+`run_wizard` for the desktop; `desktop.main.start()` gates the Flet one on the same
 `validate_for_mode()` check, inside the Flet session so it can draw.
 
 Both write the same `Settings` fields, so a config produced by either is

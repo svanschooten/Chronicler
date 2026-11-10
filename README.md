@@ -1,7 +1,7 @@
 # Chronicler
 
 ![CI](https://github.com/svanschooten/Chronicler/actions/workflows/continuous-integration-workflow.yml/badge.svg)
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![License](https://img.shields.io/github/license/svanschooten/Chronicler)
 ![Version](https://img.shields.io/github/v/tag/svanschooten/Chronicler?label=version)
 ![Status](https://img.shields.io/badge/status-alpha-blue)
@@ -56,7 +56,7 @@ The application is built around a shared service layer. Whether running locally 
 
 ## Deployment modes
 
-Chronicler supports four deployment modes.
+Chronicler supports three deployment modes.
 
 The active mode is determined by the application configuration and the command used to start the application.
 
@@ -93,12 +93,6 @@ A lightweight client containing:
 
 All processing, storage, and AI models remain on the server.
 
-### Web Client (Server)
-
-A browser-based client providing access to a remote Chronicler server.
-
-The web client is served by a lightweight web server and communicates with the Chronicler server via its HTTP API.
-
 ```mermaid
 flowchart LR
 
@@ -125,14 +119,7 @@ subgraph Thin Client
     UI2 --> Proxy
 end
 
-subgraph Web Client
-    Browser[Web Browser]
-    WS[Web Client Server + Proxy]
-    Browser --> WS
-end
-
 Proxy --> API
-WS --> API
 ```
 
 ## Storage
@@ -222,6 +209,12 @@ Examples:
 * Share a single Chronicle with someone else using FTP, Nextcloud, or any other file sharing solution.
 
 Because every Chronicle is self-contained, projects can be shared independently without exposing the rest of the workspace.
+
+> **Open a synced workspace on one machine at a time.** Chronicler locks a workspace so a
+> second app or server on the same machine cannot open it, but that lock does not travel
+> through Dropbox or other sync tools. Two machines working in one synced workspace at once
+> can corrupt its databases. Close Chronicler on one machine and let the sync finish before
+> opening it on another.
 
 ## Background processing
 
@@ -314,7 +307,7 @@ More detailed documentation is available in:
 
 | Component  | Technology                    |
 | ---------- | ----------------------------- |
-| Language   | Python 3.10+                  |
+| Language   | Python 3.12+                  |
 | UI         | Flet                          |
 | Database   | SQLite (via aiosqlite)        |
 | ORM        | SQLAlchemy 2 (async)          |
@@ -350,14 +343,14 @@ python -m venv .venv && source .venv/bin/activate
 ```
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,server]"
 ```
 
 Optional extras, each absent by default and imported lazily:
 
 | Extra | Provides | Needed for |
 | ----- | -------- | ---------- |
-| `server` | FastAPI, Uvicorn | Running as a server or web client |
+| `server` | FastAPI, Uvicorn | Running as a server |
 | `transcription` | faster-whisper | `TRANSCRIBE` tasks |
 | `normalization` | PyAV | `NORMALIZE` tasks (already present with `transcription`) |
 | `llm` | llama-cpp-python | Running a local `.gguf`; not needed for a model server |
@@ -398,20 +391,6 @@ python -m chronicler server
 The server exposes the generated HTTP API and runs the background worker loop on the
 same event loop, so tasks queued by any client are actually executed.
 
-#### Web Client (Server)
-
-```bash
-python -m chronicler web
-```
-
-or:
-
-```bash
-python -m chronicler client:web
-```
-
-The web client server hosts the web-based user interface. It requires a configuration that points to a **Chronicler Server** (similar to a Thin Client setup).
-
 ### Command Line Options
 
 Chronicler supports several command-line options:
@@ -420,7 +399,7 @@ Chronicler supports several command-line options:
 python -m chronicler [mode] [-v|--verbose] [--config PATH] [--help]
 ```
 
-- `mode`: The run mode. One of `desktop`, `server`, `web`.
+- `mode`: The run mode. One of `desktop` or `server`.
 - `-v`, `--verbose`: Enable debug logging (sets log level to DEBUG).
 - `--config PATH`: Read *and write* configuration at `PATH` instead of the default
   location. Use it to run an isolated instance, or to keep several workspaces on one
@@ -429,10 +408,14 @@ python -m chronicler [mode] [-v|--verbose] [--config PATH] [--help]
 
 ### Quality checks
 
-The same three checks CI runs, in the order it runs them:
+The same four checks CI runs, in the order it runs them:
 
 ```bash
 ruff check chronicler tests
+```
+
+```bash
+ruff format --check chronicler tests
 ```
 
 ```bash
@@ -443,7 +426,7 @@ mypy chronicler tests
 pytest --cov=chronicler --cov-report=term --cov-fail-under=80
 ```
 
-Both `ruff` and `mypy` are blocking gates with no per-module exemptions — if you need to
+All four are blocking gates with no per-module exemptions — if you need to
 suppress something, prefer a narrow `# type: ignore[code]` with a comment explaining why
 over widening the configuration.
 

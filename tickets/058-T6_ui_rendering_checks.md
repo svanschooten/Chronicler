@@ -22,3 +22,4 @@ is not yet known what Flet 0.86 offers for testing a rendered app.
 ### related tickets
 
 - (RELATED) [027-M7_refresh_view_in_place](027-M7_refresh_view_in_place.md): the kind of bug this would catch
+- (RELATED) [073-M14_dismissed_dialogs_hang](073-M14_dismissed_dialogs_hang.md): another, found only by reading Flet's source

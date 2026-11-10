@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from uuid import UUID
 
-from chronicler.core.models import AudioSource, Task
+from chronicler.core.models import AudioSource, SourceState, Task
 from chronicler.core.processing.fingerprint import fingerprint_file
 from chronicler.core.processing.handlers.base import HandlerBase, ProgressCallback
 from chronicler.core.sqlite import SQLiteAudioSourceRepository
@@ -31,6 +31,36 @@ class NormalizeHandler(HandlerBase):
         if result is None:
             logger.info(f"{resolved.name} is already normalized; nothing to do")
         return result
+
+    async def abandon_normalize(self, task: Task) -> None:
+        """Recovery failed this task, so its source must stop showing as normalizing."""
+        await self.release_source(task, transcription=False)
+
+    async def release_source(self, task: Task, transcription: bool) -> None:
+        """
+        Marks the task's source FAILED wherever it still says RUNNING. A crash skipped the
+        handler's own failure path, so without this the Sources panel shows the work as
+        running for good. A state that got past RUNNING is left alone.
+        """
+        chronicle_id = self.require_chronicle_id(task)
+        file_path = self.require_field(self.task_data(task), "file_path", task.type.value)
+        resolved = self.confine_to(
+            file_path,
+            await self.sources_root_for(chronicle_id),
+            "the chronicle's sources directory",
+        )
+        session = await self.project_session(chronicle_id)
+        async with session:
+            repo = SQLiteAudioSourceRepository(session)
+            source = await repo.get_by_filename(resolved.name)
+            if source is None:
+                return
+            error = task.error or "Interrupted before finishing"
+            if transcription and source.transcription_state == SourceState.RUNNING:
+                await repo.mark_transcription_failed(resolved.name, error)
+            if source.normalization_state == SourceState.RUNNING:
+                await repo.mark_normalization_failed(resolved.name, error)
+            await session.commit()
 
     async def ensure_normalized(
         self, chronicle_id: UUID, source: Path, force: bool = False

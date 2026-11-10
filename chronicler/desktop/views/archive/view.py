@@ -28,6 +28,7 @@ class ArchiveView(ft.Column):
         stage_file: Callable[[str], Awaitable[str]],
         transcript_service: TranscriptService,
         dark_mode: bool = True,
+        can_link: bool = True,
     ):
         logger.debug("ArchiveView constructed")
         self.chronicle_service = chronicle_service
@@ -35,6 +36,7 @@ class ArchiveView(ft.Column):
         self.transcript_service = transcript_service
         self.on_open_chronicle = on_open_chronicle
         self.colors = theme_colors(dark_mode)
+        self.can_link = can_link
         self.query = ""
         self.file_picker: ft.FilePicker | None = None
         self.picker = FilePickerFlow(lambda: self.file_picker, self.show_snackbar)
@@ -56,6 +58,18 @@ class ArchiveView(ft.Column):
         )
 
         super().__init__(expand=True, spacing=16, controls=self._build_controls())
+
+    def _link_items(self) -> list[ft.PopupMenuItem]:
+        """Link names a file on this machine, which a thin client's server cannot see."""
+        if not self.can_link:
+            return []
+        return [
+            ft.PopupMenuItem(
+                content=ft.Text(t("archive.link")),
+                icon=ft.Icons.LINK,
+                on_click=self.link_chronicle_clicked,
+            )
+        ]
 
     def _build_controls(self) -> list[ft.Control]:
         return [
@@ -85,11 +99,7 @@ class ArchiveView(ft.Column):
                                 icon=ft.Icons.DESCRIPTION,
                                 on_click=self.import_transcript_clicked,
                             ),
-                            ft.PopupMenuItem(
-                                content=ft.Text(t("archive.link")),
-                                icon=ft.Icons.LINK,
-                                on_click=self.link_chronicle_clicked,
-                            ),
+                            *self._link_items(),
                         ],
                     ),
                     amber_button(t("archive.new"), ft.Icons.ADD, on_click=self.show_create_dialog),
@@ -146,6 +156,10 @@ class ArchiveView(ft.Column):
 
     def show_snackbar(self, message: str):
         self.page.show_dialog(ft.SnackBar(ft.Text(message)))
+
+    async def refresh(self) -> None:
+        """Re-reads the list after a task finished, keeping the search and any open form."""
+        await self.load_chronicles()
 
     async def refresh_clicked(self, e):
         await self.load_chronicles()

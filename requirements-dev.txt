@@ -1,2 +1,0 @@
-# Includes Chronicler's runtime dependencies and developer tooling.
--e .[dev]

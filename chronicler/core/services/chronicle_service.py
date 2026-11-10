@@ -4,9 +4,13 @@ import shutil
 from pathlib import Path
 from uuid import UUID
 
-from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.database_manager import (
+    DatabaseManager,
+    LinkRefusedError,
+    check_linkable_project,
+)
 from chronicler.core.file_staging import confine_to_directory, safe_display_name
-from chronicler.core.formatting import format_duration
+from chronicler.core.formatting import format_duration, looks_synthetic
 from chronicler.core.models import Chronicle
 from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.rpc import service
@@ -60,8 +64,19 @@ class ChronicleService:
         "Imported" with no speakers is the state this replaces. See docs/storage.md.
         """
         path = Path(project_path)
+        await asyncio.to_thread(check_linkable_project, path)
         chronicle = await self.create_chronicle(_title_for(path), project_path=str(path))
-        return await self.hydrate_from_project(chronicle.id)
+        try:
+            return await self.hydrate_from_project(chronicle.id)
+        except Exception as error:
+            # Leave nothing behind that opens onto the same error again. A failure to
+            # clean up is logged, so it does not hide why the link failed.
+            try:
+                await self.delete_chronicle(chronicle.id)
+            except Exception:
+                logger.exception(f"Could not remove the failed link {chronicle.id}")
+            detail = str(getattr(error, "orig", None) or error)
+            raise LinkRefusedError(path, "unreadable", detail) from error
 
     async def hydrate_from_project(self, chronicle_id: UUID) -> Chronicle:
         """Fills in speaker count, duration and status from what the project db holds."""
@@ -79,8 +94,9 @@ class ChronicleService:
 
         chronicle = await self.repository.get_by_id(chronicle_id) or chronicle
         chronicle.speakers_count = speakers
-        if lines:
+        if lines and not looks_synthetic(lines):
             chronicle.duration = format_duration(max(line.end_time for line in lines))
+        if lines:
             chronicle.status = "Transcribed"
         logger.info(f"Hydrated chronicle {chronicle_id}: {speakers} speakers, {len(lines)} lines")
         return await self.repository.update(chronicle)
@@ -125,7 +141,7 @@ class ChronicleService:
         TranscriptService.list_audio_sources) is actually readable.
         """
         chronicle = await self.repository.get_by_id(chronicle_id)
-        sources_dir = self.db_manager.sources_path_for(
+        sources_dir = self.db_manager.ensure_sources_path_for(
             str(chronicle_id),
             Path(chronicle.project_path) if chronicle and chronicle.project_path else None,
         )

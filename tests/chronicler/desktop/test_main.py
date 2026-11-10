@@ -1,11 +1,17 @@
 """Desktop startup: setup wizard, then services, then the app - all in one Flet session."""
 
+import errno
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
 from chronicler.core.handshake import HandshakeError
+from chronicler.core.workspace_lock import (
+    WorkspaceLockedError,
+    WorkspaceLockUnavailableError,
+    WorkspaceNotWritableError,
+)
 from chronicler.desktop import main as desktop_main
 from tests.chronicler.desktop.controls import text_values
 
@@ -48,7 +54,7 @@ async def test_start_runs_the_wizard_when_the_configuration_is_unusable(
     unconfigured desktop launch has to collect its settings on screen.
     """
     settings = Settings()
-    assert not settings.validate_for_mode("client:desktop"), "fixture must start unconfigured"
+    assert not settings.validate_for_mode(settings.desktop_mode), "fixture must start unconfigured"
 
     wizard = stub_wizard(monkeypatch)
     app = stub_app(monkeypatch)
@@ -68,7 +74,7 @@ async def test_start_runs_the_wizard_when_the_configuration_is_unusable(
 async def test_start_skips_the_wizard_when_the_configuration_is_usable(
     page, isolated_config, monkeypatch, tmp_path
 ):
-    settings = Settings(workspace_path=tmp_path, mode="desktop:full_stack")
+    settings = Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK)
     wizard = stub_wizard(monkeypatch)
     stub_app(monkeypatch)
     monkeypatch.setattr(desktop_main, "get_settings", lambda: settings)
@@ -132,7 +138,7 @@ async def test_an_unreachable_server_is_reported_on_screen_rather_than_exiting(
     This used to `sys.exit(1)`. In a windowless build that is a window that flashes up and
     vanishes with nothing said - the user has no way to learn the server was unreachable.
     """
-    settings = Settings(server_url="http://remote", api_key="k", mode="desktop:thin_client")
+    settings = Settings(server_url="http://remote", api_key="k", mode=Mode.THIN_CLIENT)
     app = stub_app(monkeypatch)
     monkeypatch.setattr(desktop_main, "get_settings", lambda: settings)
     monkeypatch.setattr(desktop_main, "build_runtime", lambda s: runtime_for(s))
@@ -145,6 +151,70 @@ async def test_an_unreachable_server_is_reported_on_screen_rather_than_exiting(
     app.return_value.main.assert_not_awaited()
     shown = text_values(page.add.call_args[0][0])
     assert "server is down" in shown
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_open_elsewhere_is_reported_on_screen(
+    page, isolated_config, monkeypatch, tmp_path
+):
+    """One workspace belongs to one process; a second launch says so instead of sharing it."""
+    settings = Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK)
+    app = stub_app(monkeypatch)
+    db_manager = AsyncMock()
+    db_manager.init_archive.side_effect = WorkspaceLockedError(tmp_path)
+    monkeypatch.setattr(desktop_main, "get_settings", lambda: settings)
+    monkeypatch.setattr(desktop_main, "build_runtime", lambda s: runtime_for(s, db_manager))
+
+    await desktop_main.start(page)
+
+    app.return_value.main.assert_not_awaited()
+    shown = text_values(page.add.call_args[0][0])
+    assert any(str(tmp_path) in text and "already open" in text for text in shown)
+    assert any("Close the other one" in text for text in shown)
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_that_cannot_be_locked_is_reported_on_screen(
+    page, isolated_config, monkeypatch, tmp_path
+):
+    """Ticket 068: a filesystem without lock support is not "already open" anywhere."""
+    settings = Settings(workspace_path=tmp_path, mode="desktop:full_stack")
+    app = stub_app(monkeypatch)
+    db_manager = AsyncMock()
+    db_manager.init_archive.side_effect = WorkspaceLockUnavailableError(
+        tmp_path, OSError(errno.ENOLCK, "No locks available")
+    )
+    monkeypatch.setattr(desktop_main, "get_settings", lambda: settings)
+    monkeypatch.setattr(desktop_main, "build_runtime", lambda s: runtime_for(s, db_manager))
+
+    await desktop_main.start(page)
+
+    app.return_value.main.assert_not_awaited()
+    shown = text_values(page.add.call_args[0][0])
+    assert any(str(tmp_path) in text and "No locks available" in text for text in shown)
+    assert any("local disk" in text for text in shown)
+    assert not any("already open" in text for text in shown)
+
+
+@pytest.mark.asyncio
+async def test_start_shows_an_unwritable_workspace_on_the_startup_screen(
+    page, monkeypatch, tmp_path
+):
+    settings = Settings(workspace_path=tmp_path, mode="desktop:full_stack")
+    app = stub_app(monkeypatch)
+    db_manager = AsyncMock()
+    db_manager.init_archive.side_effect = WorkspaceNotWritableError(
+        tmp_path, PermissionError(errno.EACCES, "Permission denied")
+    )
+    monkeypatch.setattr(desktop_main, "get_settings", lambda: settings)
+    monkeypatch.setattr(desktop_main, "build_runtime", lambda s: runtime_for(s, db_manager))
+
+    await desktop_main.start(page)
+
+    app.return_value.main.assert_not_awaited()
+    shown = text_values(page.add.call_args[0][0])
+    assert any(str(tmp_path) in text and "Permission denied" in text for text in shown)
+    assert any("permissions" in text for text in shown)
 
 
 def test_show_startup_failure_names_the_reason(page):

@@ -1,9 +1,9 @@
 import asyncio
 import logging
+import sqlite3
 from pathlib import Path
+from uuid import UUID
 
-from alembic import command
-from alembic.config import Config
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -11,6 +11,10 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
+
+from chronicler.core.models import Chronicle
+from chronicler.core.workspace_lock import WorkspaceLock
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +27,10 @@ def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
     connection - see chronicler/migrations/<chain>/env.py, which picks this connection up
     via config.attributes["connection"] instead of opening its own engine.
     """
+    # Imported here: thin clients never migrate, and alembic costs about half a second.
+    from alembic import command
+    from alembic.config import Config
+
     logger.info(f"Running {chain} migrations")
     cfg = Config()
     cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / chain))
@@ -30,23 +38,114 @@ def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
     command.upgrade(cfg, "head")
 
 
+class LinkRefusedError(ValueError):
+    """
+    A file that cannot be linked as a chronicle. `reason` is one of `REASONS`, so a client
+    can say why in its own language; `detail` is the underlying error, if any.
+    """
+
+    REASONS = {
+        "not_found": "no such file",
+        "not_chronicler": "not a Chronicler database",
+        "newer_version": "made by a newer version of Chronicler",
+        "unreadable": "could not be read",
+    }
+
+    def __init__(self, path: Path | str, reason: str, detail: str = ""):
+        self.path = str(path)
+        self.reason = reason
+        self.detail = detail
+        suffix = f" ({detail})" if detail else ""
+        super().__init__(f"Cannot link {path}: {self.REASONS[reason]}{suffix}")
+
+
+def _known_project_revisions() -> set[str]:
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
+    return {script.revision for script in ScriptDirectory.from_config(cfg).walk_revisions()}
+
+
+def check_linkable_project(path: Path) -> None:
+    """
+    Raises LinkRefusedError unless `path` is a project.db this version of Chronicler can
+    open. Read-only, and before anything is registered: opening a project runs its
+    migrations, which would write Chronicler's tables into any SQLite file it was given.
+    """
+    if not path.is_file():
+        raise LinkRefusedError(path, "not_found")
+    try:
+        connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    except sqlite3.Error as error:
+        raise LinkRefusedError(path, "unreadable", str(error)) from error
+    try:
+        revisions = {
+            row[0] for row in connection.execute("SELECT version_num FROM alembic_version")
+        }
+    except sqlite3.DatabaseError as error:
+        # "file is not a database", or "no such table" for a SQLite file of something else.
+        if "locked" in str(error) or "busy" in str(error):
+            raise LinkRefusedError(path, "unreadable", str(error)) from error
+        raise LinkRefusedError(path, "not_chronicler") from error
+    finally:
+        connection.close()
+    if not revisions:
+        raise LinkRefusedError(path, "not_chronicler")
+    if not revisions <= _known_project_revisions():
+        raise LinkRefusedError(path, "newer_version")
+
+
+def ensure_project_available(chronicle: Chronicle | None, chronicle_id: UUID) -> None:
+    """
+    Reading a chronicle must never create its database. Raises LookupError when there is
+    no such chronicle, and FileNotFoundError when a linked one's project.db has moved -
+    opening it anyway would silently start a new empty database at the old path.
+    """
+    if chronicle is None:
+        raise LookupError(f"No chronicle {chronicle_id}")
+    if chronicle.project_path and not Path(chronicle.project_path).is_file():
+        raise FileNotFoundError(
+            f"The linked project database {chronicle.project_path} was not found"
+        )
+
+
 class DatabaseManager:
-    def __init__(self, workspace_path: Path):
+    def __init__(self, workspace_path: Path, busy_timeout: float = 5.0):
+        """
+        `busy_timeout` is how many seconds a connection waits on another one's write lock
+        before raising "database is locked". Tests lower it so contention fails fast.
+        """
         self.workspace_path = workspace_path
         self.archive_db_path = workspace_path / "chronicler.db"
-        self.archive_engine = create_async_engine(f"sqlite+aiosqlite:///{self.archive_db_path}")
+        self._connect_args = {"timeout": busy_timeout}
+        self.archive_engine = create_async_engine(
+            f"sqlite+aiosqlite:///{self.archive_db_path}", connect_args=self._connect_args
+        )
         self.archive_session_factory = async_sessionmaker(
             self.archive_engine, expire_on_commit=False
         )
         self._project_engines: dict[str, AsyncEngine] = {}
         self._migration_lock = asyncio.Lock()
+        self._workspace_lock = WorkspaceLock(workspace_path)
 
     async def init_archive(self):
-        self.workspace_path.mkdir(parents=True, exist_ok=True)
-        (self.workspace_path / "imports").mkdir(parents=True, exist_ok=True)
-        async with self._migration_lock:
-            async with self.archive_engine.begin() as conn:
-                await conn.run_sync(_run_alembic_upgrade, "archive")
+        """
+        Opens the workspace for this process. Raises WorkspaceLockedError if another
+        process has it open: one workspace belongs to one process. Raises
+        WorkspaceLockUnavailableError if its filesystem cannot take the lock at all, and
+        WorkspaceNotWritableError if the folder cannot be written to. See docs/storage.md.
+        """
+        self._workspace_lock.acquire()
+        try:
+            (self.workspace_path / "imports").mkdir(parents=True, exist_ok=True)
+            async with self._migration_lock:
+                async with self.archive_engine.begin() as conn:
+                    await conn.run_sync(_run_alembic_upgrade, "archive")
+        except Exception:
+            self._workspace_lock.release()
+            raise
 
     def get_imports_path(self) -> Path:
         path = self.workspace_path / "imports"
@@ -59,22 +158,35 @@ class DatabaseManager:
         get_imports_path()'s shared scratch space, which a worker is free to
         overwrite/lose).
         """
-        return self.sources_path_for(chronicle_id)
+        return self.ensure_sources_path_for(chronicle_id)
 
     def sources_path_for(self, chronicle_id: str, project_path: Path | None = None) -> Path:
         """
         A chronicle's audio directory: beside a linked project.db, otherwise in the
         workspace. A linked chronicle's files were never in the workspace, so looking
         there made every one of its sources read as missing. See docs/storage.md.
+
+        A pure lookup: reading must not create folders. Use `ensure_sources_path_for`
+        when about to write audio.
         """
-        root = (
-            project_path.parent
-            if project_path is not None
-            else self.workspace_path / "chronicles" / chronicle_id
-        )
-        path = root / "sources"
+        return self._chronicle_root(chronicle_id, project_path) / "sources"
+
+    def ensure_sources_path_for(self, chronicle_id: str, project_path: Path | None = None) -> Path:
+        path = self.sources_path_for(chronicle_id, project_path)
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def snapshots_path_for(self, chronicle_id: str, project_path: Path | None = None) -> Path:
+        """Where copies of a chronicle's database go before a destructive change."""
+        path = self._chronicle_root(chronicle_id, project_path) / "snapshots"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _chronicle_root(self, chronicle_id: str, project_path: Path | None) -> Path:
+        """The directory a chronicle's project.db lives in, linked or not."""
+        if project_path is not None:
+            return project_path.parent
+        return self.workspace_path / "chronicles" / chronicle_id
 
     def get_archive_session(self) -> AsyncSession:
         return self.archive_session_factory()
@@ -90,6 +202,9 @@ class DatabaseManager:
     ) -> AsyncEngine:
         """
         The engine for one chronicle, creating and migrating it at most once.
+
+        `NullPool`: a connection lives only as long as its session, so a cached engine holds
+        no thread and no open file. The cache is what remembers that a database is migrated.
 
         One lock for every chronicle, not one per chronicle: Alembic drives migrations
         through a process-global proxy, so two chains running concurrently corrupt each
@@ -110,7 +225,11 @@ class DatabaseManager:
                 project_db_path = self.workspace_path / "chronicles" / chronicle_id / "project.db"
             project_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-            engine = create_async_engine(f"sqlite+aiosqlite:///{project_db_path}")
+            engine = create_async_engine(
+                f"sqlite+aiosqlite:///{project_db_path}",
+                connect_args=self._connect_args,
+                poolclass=NullPool,
+            )
             try:
                 async with engine.begin() as conn:
                     await conn.run_sync(_run_alembic_upgrade, "project")
@@ -146,18 +265,17 @@ class DatabaseManager:
         """
         Releases one chronicle's project database, so its file can be moved or removed.
 
-        The pool holds a connection open long after the session that used it was closed,
-        and Windows refuses to delete a file anything still has open - which is why
-        deleting a chronicle failed there and not on Linux. See docs/storage.md.
+        Forgets that the database was migrated, so a file recreated at the same path is
+        migrated again. Connections are not pooled, so none outlive their session; a session
+        still open when this runs keeps its file open until it closes. See docs/storage.md.
         """
         engine = self._project_engines.pop(chronicle_id, None)
-        if engine is None:
-            return
-        logger.debug(f"Closing the project database for chronicle {chronicle_id}")
-        await engine.dispose()
+        if engine is not None:
+            await engine.dispose()
 
     async def close_all(self):
         await self.archive_engine.dispose()
         for engine in self._project_engines.values():
             await engine.dispose()
         self._project_engines.clear()
+        self._workspace_lock.release()
