@@ -34,7 +34,7 @@ manager has no controlling terminal either, so `input()` raises `EOFError` there
 
 Desktop mode therefore uses `desktop/views/wizard.py`, which asks the same questions as
 Flet controls inside the window that is already open. `__main__.main()` routes to it by
-not calling `run_wizard` for `client:desktop` at all; `desktop.main.start()` decides,
+not calling `run_wizard` for the desktop at all; `desktop.main.start()` decides,
 using the same `Settings.validate_for_mode` gate the other modes use.
 
 The Flet wizard deliberately covers **only** the two modes a desktop window can run in —

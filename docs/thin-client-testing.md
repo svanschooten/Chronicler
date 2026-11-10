@@ -100,7 +100,7 @@ WSL's IP **changes on restart**, so the `portproxy` rule needs re-adding after a
 ```yaml
 server_url: http://192.168.1.20:8000
 api_key: <the server's key>
-mode: desktop:thin_client
+mode: thin_client
 ```
 
 Then `python -m chronicler desktop`. Use `--config` to keep it separate from a full-stack
