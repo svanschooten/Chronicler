@@ -136,7 +136,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [x] [027-M7 A finished task rebuilds the view on screen](027-M7_refresh_view_in_place.md) · medium · M
 
-- [ ] [028-P1 PDF and zip exports freeze the app](028-P1_exports_off_event_loop.md) · medium · XS
+- [x] [028-P1 PDF and zip exports freeze the app](028-P1_exports_off_event_loop.md) · medium · XS
 
 - [ ] [067-M11 The normalization extra does not install numpy, which normalizing needs](067-M11_normalization_extra_numpy.md) · medium · XS
 
