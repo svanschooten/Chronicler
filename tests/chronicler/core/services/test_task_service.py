@@ -29,7 +29,7 @@ async def test_search_tasks():
 
 
 @pytest.mark.asyncio
-async def test_queue_import_rejects_catastrophic_regex():
+async def test_queue_import_rejects_an_invalid_regex():
     repo = MagicMock(spec=TaskRepository)
     repo.create = AsyncMock(side_effect=lambda x: x)
 
@@ -37,7 +37,7 @@ async def test_queue_import_rejects_catastrophic_regex():
 
     with pytest.raises(UnsafePatternError):
         await service.queue_import(
-            chronicle_id=uuid4(), file_path="/imports/x.txt", regex=r"(a+)+$"
+            chronicle_id=uuid4(), file_path="/imports/x.txt", regex=r"(unclosed"
         )
 
     repo.create.assert_not_called()

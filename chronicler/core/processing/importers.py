@@ -1,9 +1,8 @@
-import re
 from abc import ABC, abstractmethod
 
 from chronicler.core.formatting import parse_timestamp
 from chronicler.core.models import TranscriptLine
-from chronicler.core.processing.regex_guard import assert_safe_pattern
+from chronicler.core.processing.regex_guard import compile_pattern, run_timed
 
 
 class Importer(ABC):
@@ -23,8 +22,7 @@ class RegexImporter(Importer):
         text_group: int = 2,
         timestamp_group: int | None = None,
     ):
-        assert_safe_pattern(line_regex)
-        self.line_regex = re.compile(line_regex)
+        self.line_regex = compile_pattern(line_regex)
         self.speaker_group = speaker_group
         self.text_group = text_group
         self.timestamp_group = timestamp_group
@@ -61,7 +59,7 @@ class RegexImporter(Importer):
             if not line.strip():
                 continue
 
-            match = self.line_regex.match(line)
+            match = run_timed(self.line_regex, self.line_regex.match, line)
             if match is None:
                 if speaker:
                     text.append(line.strip())

@@ -1,5 +1,6 @@
 """The IMPORT task handler - parse a text transcript file into a chronicle's project database."""
 
+import asyncio
 import logging
 
 from chronicler.core.models import Task
@@ -40,7 +41,7 @@ class ImportHandler(HandlerBase):
                     start_offset = 0.0
                     await repo.delete_all_lines()
 
-                lines = importer.parse(content, start_offset=start_offset)
+                lines = await asyncio.to_thread(importer.parse, content, start_offset=start_offset)
                 logger.info(f"Parsed {len(lines)} lines from {file_path}")
 
                 await update_progress(50)

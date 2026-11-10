@@ -142,7 +142,7 @@ class TestListSettings:
         settings_editor, _ = editor
 
         with pytest.raises(ValueError):
-            settings_editor.set("cleaning.strip_patterns", "(a+)+$")
+            settings_editor.set("cleaning.strip_patterns", "(unclosed")
 
     def test_lists_round_trip_through_the_config_file(self, editor):
         settings_editor, _ = editor

@@ -298,7 +298,7 @@ class TestEditing:
     async def test_an_unsafe_pattern_is_rejected(self, view):
         built, _ = view
 
-        assert await built.apply("cleaning.strip_patterns", "(a+)+$") is False
+        assert await built.apply("cleaning.strip_patterns", "(unclosed") is False
 
     @pytest.mark.asyncio
     async def test_a_control_change_routes_through_apply(self, view):

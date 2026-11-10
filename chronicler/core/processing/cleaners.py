@@ -1,11 +1,13 @@
 """The transcript cleaning pipeline: an ordered, configurable set of single-purpose rules."""
 
-import re
 import unicodedata
 from abc import ABC, abstractmethod
 
+import regex
+
 from chronicler.core.config_sections import CleaningSettings, HallucinationMatch
 from chronicler.core.models import TranscriptLine
+from chronicler.core.processing.regex_guard import compile_pattern, run_timed
 
 
 def normalize_for_comparison(text: str) -> str:
@@ -41,7 +43,7 @@ class StripPatterns(CleaningRule):
     """Removes every match of the configured patterns from each line."""
 
     def __init__(self, patterns: list[str]):
-        self._patterns = [re.compile(pattern) for pattern in patterns]
+        self._patterns = [compile_pattern(pattern) for pattern in patterns]
 
     def apply(self, lines: list[TranscriptLine]) -> list[TranscriptLine]:
         if not self._patterns:
@@ -50,7 +52,7 @@ class StripPatterns(CleaningRule):
         for line in lines:
             text = line.text
             for pattern in self._patterns:
-                text = pattern.sub("", text)
+                text = run_timed(pattern, pattern.sub, "", text)
             copy = line.model_copy()
             copy.text = text
             result.append(copy)
@@ -73,7 +75,9 @@ class DropHallucinations(CleaningRule):
         self._exact = set(phrases)
         self._normalized = {normalize_for_comparison(phrase) for phrase in phrases}
         self._regexes = (
-            [re.compile(phrase, re.IGNORECASE) for phrase in phrases] if match == "regex" else []
+            [compile_pattern(phrase, regex.IGNORECASE) for phrase in phrases]
+            if match == "regex"
+            else []
         )
 
     def apply(self, lines: list[TranscriptLine]) -> list[TranscriptLine]:
@@ -85,7 +89,9 @@ class DropHallucinations(CleaningRule):
         if self._match == "exact":
             return text in self._exact
         if self._match == "regex":
-            return any(pattern.fullmatch(text.strip()) for pattern in self._regexes)
+            return any(
+                run_timed(pattern, pattern.fullmatch, text.strip()) for pattern in self._regexes
+            )
         return normalize_for_comparison(text) in self._normalized
 
 

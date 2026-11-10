@@ -1,127 +1,50 @@
-"""Static rejection of regex patterns shaped for catastrophic backtracking (ReDoS)."""
+"""User-supplied regex patterns: a length cap, and a time bound on every match."""
 
-import re
-from re import _parser as sre_parser  # type: ignore[attr-defined]
+import regex
 
 MAX_PATTERN_LENGTH = 500
-
-_REPEAT_OPS = {"MAX_REPEAT", "MIN_REPEAT"}
-_MAX_RANGE_SPAN = 64
+MATCH_TIMEOUT_SECONDS = 5.0
 
 
 class UnsafePatternError(ValueError):
     pass
 
 
-def _op_name(op) -> str:
-    return getattr(op, "name", str(op))
+class PatternTimeoutError(RuntimeError):
+    pass
 
 
-def _leading_chars(subpattern) -> set[int] | None:
-    """Best-effort set of literal codepoints `subpattern` could start matching with."""
-    if not subpattern.data:
-        return None
-    op, av = subpattern.data[0]
-    name = _op_name(op)
-    if name == "LITERAL":
-        return {av}
-    if name == "IN":
-        chars: set[int] = set()
-        for item_op, item_av in av:
-            item_name = _op_name(item_op)
-            if item_name == "LITERAL":
-                chars.add(item_av)
-            elif item_name == "RANGE":
-                lo, hi = item_av
-                if hi - lo > _MAX_RANGE_SPAN:
-                    return None
-                chars.update(range(lo, hi + 1))
-            else:
-                return None
-        return chars
-    if name == "SUBPATTERN":
-        _group, _add_flags, _del_flags, body = av
-        return _leading_chars(body)
-    return None
-
-
-def _branches_overlap(branches) -> bool:
-    leading_sets = [_leading_chars(b) for b in branches]
-    for i in range(len(leading_sets)):
-        for j in range(i + 1, len(leading_sets)):
-            a, b = leading_sets[i], leading_sets[j]
-            if a is None or b is None or (a & b):
-                return True
-    return False
-
-
-def _is_dangerous_body(subpattern) -> bool:
+def compile_pattern(pattern: str, flags: int = 0) -> "regex.Pattern[str]":
     """
-    True if `subpattern` (the body of some enclosing repeat) contains, anywhere within it,
-    another repeat or an alternation with overlapping branches - both let the backtracking
-    engine explore exponentially many equivalent ways to match the same input.
-    """
-    for op, av in subpattern.data:
-        name = _op_name(op)
-        if name in _REPEAT_OPS:
-            return True
-        if name == "BRANCH":
-            _, branches = av
-            if _branches_overlap(branches):
-                return True
-            if any(_is_dangerous_body(branch) for branch in branches):
-                return True
-        elif name == "SUBPATTERN":
-            _group, _add_flags, _del_flags, body = av
-            if _is_dangerous_body(body):
-                return True
-        elif name in ("ASSERT", "ASSERT_NOT"):
-            _direction, body = av
-            if _is_dangerous_body(body):
-                return True
-    return False
+    Compile a user-supplied pattern, rejecting one that is too long or not valid.
 
-
-def _find_unsafe_repeat(subpattern) -> bool:
-    """Walk the whole parsed pattern for a repeat node whose body is dangerous."""
-    for op, av in subpattern.data:
-        name = _op_name(op)
-        if name in _REPEAT_OPS:
-            _min, _max, body = av
-            if _is_dangerous_body(body) or _find_unsafe_repeat(body):
-                return True
-        elif name == "SUBPATTERN":
-            _group, _add_flags, _del_flags, body = av
-            if _find_unsafe_repeat(body):
-                return True
-        elif name == "BRANCH":
-            _, branches = av
-            if any(_find_unsafe_repeat(branch) for branch in branches):
-                return True
-        elif name in ("ASSERT", "ASSERT_NOT"):
-            _direction, body = av
-            if _find_unsafe_repeat(body):
-                return True
-    return False
-
-
-def assert_safe_pattern(pattern: str) -> None:
-    """
-    Raise UnsafePatternError if `pattern` is too long or structurally shaped for
-    catastrophic backtracking.
+    Match with `run_timed` so one pattern can neither hold the GIL nor run forever.
     """
     if len(pattern) > MAX_PATTERN_LENGTH:
         raise UnsafePatternError(
             f"Pattern exceeds maximum length of {MAX_PATTERN_LENGTH} characters"
         )
-
     try:
-        parsed = sre_parser.parse(pattern)
-    except re.error as e:
-        raise UnsafePatternError(f"Invalid regular expression: {e}") from e
+        return regex.compile(pattern, flags)
+    except regex.error as error:
+        raise UnsafePatternError(f"Invalid regular expression: {error}") from error
 
-    if _find_unsafe_repeat(parsed):
-        raise UnsafePatternError(
-            "Pattern contains a nested or ambiguous repeat (e.g. (a+)+ or (a|a)*), "
-            "which can cause catastrophic backtracking"
-        )
+
+def assert_safe_pattern(pattern: str) -> None:
+    compile_pattern(pattern)
+
+
+def run_timed(pattern: "regex.Pattern[str]", method, *args):
+    """
+    Call `method` (a bound match, fullmatch, sub... of `pattern`) with a time limit.
+
+    `concurrent=True` releases the GIL while matching, so a slow pattern in a worker
+    thread does not stall the event loop.
+    """
+    try:
+        return method(*args, timeout=MATCH_TIMEOUT_SECONDS, concurrent=True)
+    except TimeoutError as error:
+        raise PatternTimeoutError(
+            f"Pattern {pattern.pattern!r} took longer than {MATCH_TIMEOUT_SECONDS:g} seconds "
+            "on one line. Simplify the pattern."
+        ) from error
