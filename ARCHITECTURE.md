@@ -4,7 +4,7 @@ This document describes the architectural principles behind Chronicler.
 
 The goal of the architecture is to keep the application simple to extend while supporting multiple deployment modes without duplicating business logic.
 
-> **Intent vs. implementation.** Chronicler is pre-alpha, and this document describes the
+> **Intent vs. implementation.** Chronicler is alpha, and this document describes the
 > target architecture. Sections that describe something not yet built are marked
 > **Planned**; [TODO.md](TODO.md) is the authoritative list of what actually works today.
 > Where current behaviour differs from the design, that is called out inline rather than
