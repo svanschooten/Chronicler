@@ -10,6 +10,7 @@ from chronicler.core.database import DBChronicle
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.project_database import DBSpeaker
 from chronicler.core.workspace_lock import WorkspaceLockedError
+from tests.projects import forget_chronicle, register_chronicle
 
 
 @pytest.mark.asyncio
@@ -31,6 +32,7 @@ async def test_database_manager_project_session(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     chronicle_id = "test-chronicle"
 
+    await register_chronicle(db_manager, chronicle_id)
     async with await db_manager.get_project_session(chronicle_id) as session:
         result = await session.execute(select(DBSpeaker))
         assert result.scalars().all() == []
@@ -48,6 +50,7 @@ async def test_close_project_releases_the_file_handle(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     chronicle_id = "held-open"
 
+    await register_chronicle(db_manager, chronicle_id)
     async with await db_manager.get_project_session(chronicle_id) as session:
         await session.execute(select(DBSpeaker))
 
@@ -92,6 +95,7 @@ async def test_a_closed_project_can_be_reopened(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     chronicle_id = "reopened"
 
+    await register_chronicle(db_manager, chronicle_id)
     async with await db_manager.get_project_session(chronicle_id) as session:
         await session.execute(select(DBSpeaker))
     await db_manager.close_project(chronicle_id)
@@ -154,6 +158,7 @@ async def test_init_archive_twice_is_a_noop_not_an_error(tmp_path):
 async def test_project_session_stamps_alembic_head(tmp_path):
     db_manager = DatabaseManager(tmp_path)
 
+    await register_chronicle(db_manager, "test-chronicle")
     session = await db_manager.get_project_session("test-chronicle")
     async with session:
         result = await session.execute(text("SELECT version_num FROM alembic_version"))
@@ -167,6 +172,7 @@ async def test_project_session_opened_twice_is_a_noop_not_an_error(tmp_path):
     """Simulates navigating to the same chronicle's transcript view twice."""
     db_manager = DatabaseManager(tmp_path)
 
+    await register_chronicle(db_manager, "test-chronicle")
     session1 = await db_manager.get_project_session("test-chronicle")
     await session1.close()
     session2 = await db_manager.get_project_session("test-chronicle")
@@ -247,6 +253,7 @@ class TestProjectSnapshots:
         db_manager = DatabaseManager(tmp_path)
         chronicle_id = "snapshot-me"
 
+        await register_chronicle(db_manager, chronicle_id)
         async with await db_manager.get_project_session(chronicle_id) as session:
             session.add(DBSpeaker(name="Maldal"))
             await session.commit()
@@ -256,7 +263,8 @@ class TestProjectSnapshots:
 
         assert destination.exists()
         copy = DatabaseManager(tmp_path / "elsewhere")
-        async with await copy.get_project_session("read-back", custom_path=destination) as session:
+        await register_chronicle(copy, "read-back", destination)
+        async with await copy.get_project_session("read-back") as session:
             names = (await session.execute(select(DBSpeaker.name))).scalars().all()
         assert list(names) == ["Maldal"]
 
@@ -269,6 +277,7 @@ class TestProjectSnapshots:
         db_manager = DatabaseManager(tmp_path)
         chronicle_id = "still-live"
 
+        await register_chronicle(db_manager, chronicle_id)
         async with await db_manager.get_project_session(chronicle_id) as session:
             session.add(DBSpeaker(name="Before"))
             await session.commit()
@@ -289,12 +298,13 @@ class TestProjectSnapshots:
         linked = tmp_path / "elsewhere" / "project.db"
         linked.parent.mkdir(parents=True)
 
-        async with await db_manager.get_project_session("linked", custom_path=linked) as session:
+        await register_chronicle(db_manager, "linked", linked)
+        async with await db_manager.get_project_session("linked") as session:
             session.add(DBSpeaker(name="Windrider"))
             await session.commit()
 
         destination = tmp_path / "out" / "project.db"
-        await db_manager.snapshot_project("linked", destination, custom_path=linked)
+        await db_manager.snapshot_project("linked", destination)
 
         assert destination.exists()
         assert not (tmp_path / "chronicles" / "linked").exists()
@@ -326,6 +336,7 @@ class TestProjectSnapshots:
         """
         db_manager = DatabaseManager(tmp_path)
 
+        await register_chronicle(db_manager, "quoted")
         async with await db_manager.get_project_session("quoted") as session:
             session.add(DBSpeaker(name="Sergus"))
             await session.commit()
@@ -401,3 +412,72 @@ def test_sources_path_for_is_a_pure_lookup(tmp_path):
     assert not path.exists()
     assert db_manager.ensure_sources_path_for("abc") == path
     assert path.is_dir()
+
+
+class TestTransaction:
+    @pytest.mark.asyncio
+    async def test_it_commits_when_the_block_ends(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        await register_chronicle(db_manager, "committed")
+
+        async with db_manager.transaction("committed", must_exist=False) as session:
+            session.add(DBSpeaker(name="Alice"))
+
+        async with await db_manager.get_project_session("committed") as session:
+            names = (await session.execute(select(DBSpeaker.name))).scalars().all()
+        assert names == ["Alice"]
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_it_rolls_back_when_the_block_raises(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        await register_chronicle(db_manager, "rolled-back")
+
+        with pytest.raises(RuntimeError):
+            async with db_manager.transaction("rolled-back") as session:
+                session.add(DBSpeaker(name="Alice"))
+                await session.flush()
+                raise RuntimeError("boom")
+
+        async with await db_manager.get_project_session("rolled-back") as session:
+            names = (await session.execute(select(DBSpeaker.name))).scalars().all()
+        assert names == []
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_chronicle_is_refused_rather_than_created(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        await db_manager.init_archive()
+
+        with pytest.raises(LookupError):
+            async with db_manager.transaction("never-registered"):
+                pass
+
+        assert not (tmp_path / "chronicles" / "never-registered").exists()
+        await db_manager.close_all()
+
+
+class TestLinkedLocation:
+    @pytest.mark.asyncio
+    async def test_the_location_is_read_once_and_forgotten_on_close(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        linked = tmp_path / "elsewhere" / "project.db"
+        await register_chronicle(db_manager, "linked", linked)
+
+        assert await db_manager.project_path_for("linked") == linked
+        await forget_chronicle(db_manager, "linked")
+        await register_chronicle(db_manager, "linked")
+
+        assert await db_manager.project_path_for("linked") is None
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_linked_file_that_has_moved_is_refused(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        await register_chronicle(db_manager, "moved", tmp_path / "gone" / "project.db")
+
+        with pytest.raises(FileNotFoundError):
+            await db_manager.get_project_session("moved", must_exist=True)
+
+        assert not (tmp_path / "gone").exists()
+        await db_manager.close_all()
