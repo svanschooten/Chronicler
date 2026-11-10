@@ -110,7 +110,7 @@ is used only when audio is added. Reading a chronicle that has no row, or whose 
 new empty database.
 
 A linked chronicle's files were never in the workspace, so looking there made every one
-of its sources read as missing while `chronicle_directory()` — used by *Open folder* —
+of its sources read as missing while `chronicle_directory()` — used by *Open folder* on a full stack —
 correctly resolved the external path. The two disagreed.
 
 `TranscriptService.sources_dir` and `HandlerBase.sources_root_for` both go through that

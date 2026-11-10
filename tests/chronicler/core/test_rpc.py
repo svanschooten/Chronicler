@@ -303,6 +303,7 @@ class TestTheRealServices:
         published = exposed_methods(TranscriptService)
 
         assert "sources_dir" not in published
+        assert "chronicle_directory" not in published
         assert "source_path" not in published
         assert "mark_source_transcribed" not in published
 
@@ -332,7 +333,7 @@ class TestTheRealServices:
 
         assert surface == {
             "ChronicleService": 8,
-            "TranscriptService": 16,
+            "TranscriptService": 15,
             "TaskService": 8,
             "SystemService": 3,
         }
