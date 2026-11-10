@@ -70,11 +70,13 @@ class DatabaseManager:
     async def init_archive(self):
         """
         Opens the workspace for this process. Raises WorkspaceLockedError if another
-        process has it open: one workspace belongs to one process. See docs/storage.md.
+        process has it open: one workspace belongs to one process. Raises
+        WorkspaceLockUnavailableError if its filesystem cannot take the lock at all. See
+        docs/storage.md.
         """
         self._workspace_lock.acquire()
-        (self.workspace_path / "imports").mkdir(parents=True, exist_ok=True)
         try:
+            (self.workspace_path / "imports").mkdir(parents=True, exist_ok=True)
             async with self._migration_lock:
                 async with self.archive_engine.begin() as conn:
                     await conn.run_sync(_run_alembic_upgrade, "archive")
