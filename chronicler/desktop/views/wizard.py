@@ -17,7 +17,7 @@ from pathlib import Path
 
 import flet as ft
 
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
 from chronicler.core.wizard import LANGUAGE_NAMES, default_workspace_path, supported_languages
 from chronicler.desktop.picking import FilePickerFlow
 from chronicler.desktop.theme import theme_colors
@@ -25,8 +25,6 @@ from chronicler.i18n import set_locale, t
 
 logger = logging.getLogger(__name__)
 
-FULL_STACK = "desktop:full_stack"
-THIN_CLIENT = "desktop:thin_client"
 
 CARD_WIDTH = 560
 
@@ -47,7 +45,7 @@ class FletSetupWizard:
         self.picker = FilePickerFlow(lambda: self.file_picker, self.show_snackbar)
 
         self.language = settings.ui.locale or supported_languages()[0]
-        self.mode = FULL_STACK
+        self.mode: Mode = Mode.FULL_STACK
         self.workspace_path: Path | None = settings.workspace_path
         self.server_url = settings.server_url or ""
         self.api_key: str | None = settings.api_key
@@ -100,7 +98,7 @@ class FletSetupWizard:
         self.settings.ui.locale = self.language
         self.settings.transcription.language = self.language
         self.settings.mode = self.mode
-        if self.mode == FULL_STACK:
+        if self.mode is Mode.FULL_STACK:
             self.settings.workspace_path = self.workspace_path
             self.settings.server_url = None
         else:
@@ -182,7 +180,7 @@ class FletSetupWizard:
 
     def _total_steps(self) -> int:
         """Thin client asks for a server instead of a workspace *and* a key, so it is shorter."""
-        return 4 if self.mode == FULL_STACK else 3
+        return 4 if self.mode is Mode.FULL_STACK else 3
 
     def _back(self, target) -> ft.Control:
         return ft.TextButton(t("wizard.back"), on_click=lambda _event: target())
@@ -216,10 +214,10 @@ class FletSetupWizard:
     # -- step 2: mode ---------------------------------------------------------
 
     def show_mode(self) -> None:
-        def choose(mode: str):
+        def choose(mode: Mode):
             def handler(_event) -> None:
                 self.mode = mode
-                self.show_workspace() if mode == FULL_STACK else self.show_server()
+                self.show_workspace() if mode is Mode.FULL_STACK else self.show_server()
 
             return handler
 
@@ -232,13 +230,13 @@ class FletSetupWizard:
                     ft.Icons.COMPUTER,
                     t("wizard.mode.full_stack"),
                     t("wizard.mode.full_stack_description"),
-                    choose(FULL_STACK),
+                    choose(Mode.FULL_STACK),
                 ),
                 self._choice_card(
                     ft.Icons.CLOUD_OUTLINED,
                     t("wizard.mode.thin_client"),
                     t("wizard.mode.thin_client_description"),
-                    choose(THIN_CLIENT),
+                    choose(Mode.THIN_CLIENT),
                 ),
                 ft.Text(t("wizard.mode.server_note"), size=12, color=self.colors.muted),
             ],

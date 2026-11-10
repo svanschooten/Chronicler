@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.file_staging import FileStager, LocalFileStager, RemoteFileStager
@@ -28,17 +28,9 @@ class DesktopRuntime:
 def build_runtime(settings: Settings) -> DesktopRuntime:
     set_locale(settings.ui.locale)
 
-    mode = settings.mode
-    if mode is None:
-        mode = (
-            "desktop:thin_client"
-            if settings.server_url and not settings.workspace_path
-            else "desktop:full_stack"
-        )
-
-    if mode == "desktop:thin_client":
+    if settings.desktop_mode is Mode.THIN_CLIENT:
         if not settings.server_url:
-            raise ValueError("desktop:thin_client mode requires settings.server_url")
+            raise ValueError("thin_client mode requires settings.server_url")
         http_client = httpx.AsyncClient(timeout=RPC_TIMEOUT)
         resolver: Container | RemoteContainer = RemoteContainer(
             settings.server_url, client=http_client, api_key=settings.api_key
@@ -55,7 +47,7 @@ def build_runtime(settings: Settings) -> DesktopRuntime:
         )
 
     if not settings.workspace_path:
-        raise ValueError("desktop:full_stack mode requires settings.workspace_path")
+        raise ValueError("full_stack mode requires settings.workspace_path")
     db_manager = DatabaseManager(settings.workspace_path)
     container = Container()
     register_local_repositories(container, db_manager)

@@ -3,7 +3,7 @@ from collections.abc import Awaitable, Callable
 
 import flet as ft
 
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
 from chronicler.core.config_sections import WHISPER_MODEL_SIZES, language_choices
 from chronicler.core.models import ModelCheck
 from chronicler.desktop.reveal import describe_desktop_integration_error
@@ -53,7 +53,7 @@ class SettingsView(ft.Column):
     @property
     def is_thin_client(self) -> bool:
         """Whether the work this page configures happens on a server instead."""
-        return bool(self.settings.server_url)
+        return self.settings.desktop_mode is Mode.THIN_CLIENT
 
     # -- sections -------------------------------------------------------------
 
