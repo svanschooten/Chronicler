@@ -52,7 +52,7 @@ transcription = [
     "faster-whisper>=1.1,<2",
 ]
 normalization = [
-    "av>=12,<19",
+    "av>=12,<20",
     "numpy>=1.26,<3",
 ]
 llm = [
