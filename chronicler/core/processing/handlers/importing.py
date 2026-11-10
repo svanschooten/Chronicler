@@ -29,33 +29,27 @@ class ImportHandler(HandlerBase):
 
         append = bool(data.get("append"))
 
-        session = await self.project_session(chronicle_id)
-        async with session:
+        async with self.transaction(chronicle_id) as session:
             repo = SQLiteTranscriptRepository(session)
-            try:
-                if append:
-                    existing_lines = await repo.get_lines()
-                    start_offset = max((line.end_time for line in existing_lines), default=0.0)
-                else:
-                    existing_lines = []
-                    start_offset = 0.0
-                    await repo.delete_all_lines()
+            if append:
+                existing_lines = await repo.get_lines()
+                start_offset = max((line.end_time for line in existing_lines), default=0.0)
+            else:
+                existing_lines = []
+                start_offset = 0.0
+                await repo.delete_all_lines()
 
-                lines = await asyncio.to_thread(importer.parse, content, start_offset=start_offset)
-                logger.info(f"Parsed {len(lines)} lines from {file_path}")
+            lines = await asyncio.to_thread(importer.parse, content, start_offset=start_offset)
+            logger.info(f"Parsed {len(lines)} lines from {file_path}")
 
-                await update_progress(50)
+            await update_progress(50)
 
-                speaker_map = await self.attach_speakers(repo, lines)
-                await repo.add_lines(lines)
-                await session.commit()
+            speaker_map = await self.attach_speakers(repo, lines)
+            await repo.add_lines(lines)
 
-                final_speaker_count = len(
-                    {line.speaker_name for line in existing_lines} | set(speaker_map)
-                )
-            except Exception:
-                await session.rollback()
-                raise
+            final_speaker_count = len(
+                {line.speaker_name for line in existing_lines} | set(speaker_map)
+            )
 
         await self.tag_as_transcript(chronicle_id)
         await self.backfill_speakers_count(chronicle_id, final_speaker_count)

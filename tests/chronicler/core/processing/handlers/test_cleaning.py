@@ -18,6 +18,7 @@ from chronicler.core.sqlite import (
     SQLiteTranscriptRepository,
 )
 from tests.chronicler.core.processing.handlers.helpers import read_chronicle
+from tests.projects import register_chronicle
 
 
 @pytest.fixture(autouse=True)
@@ -85,6 +86,7 @@ async def test_handle_clean_keeps_each_lines_track(tmp_path):
     try:
         handlers = WorkerHandlers(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         session = await db_manager.get_project_session(str(chronicle_id))
         async with session:
             repo = SQLiteTranscriptRepository(session)
@@ -347,7 +349,8 @@ async def test_handle_clean_rejects_an_unsafe_override_pattern(tmp_path):
 
 
 async def _chronicle_with_lines(db_manager, chronicle_id, *texts, custom_path=None):
-    session = await db_manager.get_project_session(str(chronicle_id), custom_path=custom_path)
+    await register_chronicle(db_manager, chronicle_id, custom_path)
+    session = await db_manager.get_project_session(str(chronicle_id))
     async with session:
         repo = SQLiteTranscriptRepository(session)
         alice = await repo.get_or_create_speaker("Alice")

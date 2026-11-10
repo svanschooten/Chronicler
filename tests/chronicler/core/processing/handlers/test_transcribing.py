@@ -16,6 +16,7 @@ from chronicler.core.sqlite import (
     SQLiteTranscriptRepository,
 )
 from tests.chronicler.core.processing.handlers.helpers import read_chronicle
+from tests.projects import register_chronicle
 
 
 @pytest.fixture(autouse=True)
@@ -57,6 +58,7 @@ async def _make_transcribe_task(
     ChronicleService.add_audio_source's job, a separate earlier step from transcribing it
     (see TODO.md).
     """
+    await register_chronicle(db_manager, chronicle_id)
     sources_dir = db_manager.get_chronicle_sources_path(str(chronicle_id))
     audio_file = sources_dir / filename
     audio_file.write_bytes(b"fake audio bytes")
@@ -211,6 +213,7 @@ async def _transcribe(handlers, db_manager, chronicle_id, speaker, filename, *te
 
 
 async def _lines(db_manager, chronicle_id):
+    await register_chronicle(db_manager, chronicle_id)
     session = await db_manager.get_project_session(str(chronicle_id))
     async with session:
         return await SQLiteTranscriptRepository(session).get_lines()
@@ -285,6 +288,7 @@ async def _forget_line_sources(db_manager, chronicle_id) -> None:
 
 async def _import_line(db_manager, chronicle_id, speaker, text) -> None:
     """A line the way an import writes it: a speaker, but no track."""
+    await register_chronicle(db_manager, chronicle_id)
     session = await db_manager.get_project_session(str(chronicle_id))
     async with session:
         repo = SQLiteTranscriptRepository(session)
@@ -340,6 +344,7 @@ class TestLinesWithNoRecordedTrack:
         handlers = WorkerHandlers(db_manager)
         chronicle_id = uuid4()
         try:
+            await register_chronicle(db_manager, chronicle_id)
             session = await db_manager.get_project_session(str(chronicle_id))
             async with session:
                 repo = SQLiteTranscriptRepository(session)

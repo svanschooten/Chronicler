@@ -107,8 +107,8 @@ async def test_delete_chronicle_does_not_touch_directory_for_linked_chronicle(tm
 @pytest.mark.asyncio
 async def test_delete_chronicle_closes_the_project_database_before_removing_it(tmp_path):
     """
-    Windows will not delete a file anything still has open, and the connection pool keeps
-    one open long after the last session closed - see docs/storage.md.
+    Windows will not delete a file anything still has open - see docs/storage.md. The row
+    goes before the close, so a concurrent lookup cannot cache it again afterwards.
     """
     chronicle_id = uuid4()
     chronicle_dir = tmp_path / "chronicles" / str(chronicle_id)
@@ -118,7 +118,7 @@ async def test_delete_chronicle_closes_the_project_database_before_removing_it(t
     order = []
     repo = MagicMock(spec=ChronicleRepository)
     repo.get_by_id = AsyncMock(return_value=Chronicle(id=chronicle_id, title="Local"))
-    repo.delete = AsyncMock()
+    repo.delete = AsyncMock(side_effect=lambda _id: order.append("deleted"))
     db_manager = _db_manager(tmp_path)
     db_manager.close_project = AsyncMock(side_effect=lambda _id: order.append("closed"))
 
@@ -129,7 +129,7 @@ async def test_delete_chronicle_closes_the_project_database_before_removing_it(t
         await ChronicleService(repo, db_manager).delete_chronicle(chronicle_id)
 
     db_manager.close_project.assert_awaited_once_with(str(chronicle_id))
-    assert order == ["closed", "removed"]
+    assert order == ["deleted", "closed", "removed"]
 
 
 @pytest.mark.asyncio
@@ -151,6 +151,36 @@ async def test_delete_chronicle_closes_a_linked_project_database_too(tmp_path):
     await ChronicleService(repo, db_manager).delete_chronicle(chronicle_id)
 
     db_manager.close_project.assert_awaited_once_with(str(chronicle_id))
+
+
+def _repo_holding(chronicle: Chronicle):
+    repo = MagicMock(spec=ChronicleRepository)
+    repo.get_by_id = AsyncMock(return_value=chronicle)
+    repo.update = AsyncMock(side_effect=lambda updated: updated)
+    return repo
+
+
+@pytest.mark.asyncio
+async def test_changing_a_project_path_forgets_the_old_location(tmp_path):
+    chronicle = Chronicle(title="Moved", project_path=str(tmp_path / "old" / "project.db"))
+    db_manager = _db_manager(tmp_path)
+    service = ChronicleService(_repo_holding(chronicle), db_manager)
+
+    moved = chronicle.model_copy(update={"project_path": str(tmp_path / "new" / "project.db")})
+    await service.update_chronicle(moved)
+
+    db_manager.close_project.assert_awaited_once_with(str(chronicle.id))
+
+
+@pytest.mark.asyncio
+async def test_an_update_that_keeps_the_project_path_keeps_the_database_open(tmp_path):
+    chronicle = Chronicle(title="Same", project_path=str(tmp_path / "project.db"))
+    db_manager = _db_manager(tmp_path)
+    service = ChronicleService(_repo_holding(chronicle), db_manager)
+
+    await service.update_chronicle(chronicle.model_copy(update={"title": "Renamed"}))
+
+    db_manager.close_project.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -189,6 +219,7 @@ async def test_add_audio_source_moves_file_into_durable_sources_dir(tmp_path):
     staged_file.write_bytes(b"fake audio")
 
     db_manager = MagicMock(workspace_path=tmp_path)
+    db_manager.project_path_for = AsyncMock(return_value=None)
     db_manager.get_imports_path.return_value = tmp_path / "imports"
     db_manager.ensure_sources_path_for.return_value = (
         tmp_path / "chronicles" / str(chronicle_id) / "sources"
@@ -216,6 +247,7 @@ async def test_add_audio_source_avoids_overwriting_same_name(tmp_path):
     staged_file.write_bytes(b"new track")
 
     db_manager = MagicMock(workspace_path=tmp_path)
+    db_manager.project_path_for = AsyncMock(return_value=None)
     db_manager.get_imports_path.return_value = tmp_path / "imports"
     db_manager.ensure_sources_path_for.return_value = sources_dir
 
@@ -238,6 +270,7 @@ def _service_with_workspace(tmp_path, chronicle_id):
     sources_dir.mkdir(parents=True, exist_ok=True)
 
     db_manager = MagicMock(workspace_path=tmp_path)
+    db_manager.project_path_for = AsyncMock(return_value=None)
     db_manager.get_imports_path.return_value = imports_dir
     db_manager.ensure_sources_path_for.return_value = sources_dir
     return ChronicleService(_plain_repo(), db_manager), imports_dir, sources_dir
