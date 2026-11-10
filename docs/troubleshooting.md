@@ -155,6 +155,17 @@ on this machine is using it: close that one, or point this one at a different
 workspace (`--config` keeps a second configuration apart, see [HOWTO.md](../HOWTO.md)).
 
 A crashed or killed Chronicler does not cause this, because the OS releases the lock
-when the process ends, so the message always means a running process. Do not delete
+when the process ends, so the message means a running process. Do not delete
 `.chronicler.lock` to get past it: on Linux and macOS that lets the second process in
 while the first is still running. See [storage.md](storage.md#one-process-per-workspace).
+
+## "Chronicler could not lock the workspace"
+
+The message ends with the operating system's reason, such as "No locks available" or
+"Operation not supported". No other Chronicler is involved: the filesystem holding the
+workspace refused the lock itself. Some NFS, SMB and FUSE mounts (sshfs, cloud-drive
+mounts) do not support file locks.
+
+Move the workspace to a local disk, or mount the share with locking enabled. Before
+this message existed, these filesystems reported "already open in another Chronicler
+process" on every start.
