@@ -24,6 +24,9 @@
 | `docs/deployment-and-rpc.md:24`, `:58` | Every public coroutine is exposed | Explicit `expose=` lists since Sprint 11 |
 | `HOWTO.md:108` | Two features need extras | Five extras exist |
 | `README.md:411` | "The same four checks CI runs" | CI also runs the runtime locks check |
+| `README.md:229-243` | Implemented tasks: IMPORT, TRANSCRIBE, CLEAN. Normalization and summaries planned | NORMALIZE and SUMMARIZE exist, and exports are service calls rather than tasks |
+| `README.md:456-473` | Near future: audio recording. Future: AI summaries | Both shipped |
+| `README.md:325-328` | PyInstaller builds | Releases also ship the embedded-runtime build |
 
 ### related tickets
 

@@ -47,3 +47,4 @@ Done when vulture no longer reports these, and the suite passes.
 - (BLOCKS) [066-F4_tag_management](066-F4_tag_management.md): removes `TagRepository`, which this should not revive
 - (RELATED) [055-L11_workspace_validation](055-L11_workspace_validation.md): keep `is_workspace_valid`, which that ticket wires in
 - (RELATED) [066-F4_tag_management](066-F4_tag_management.md): keep `tags.color` for that ticket to decide on
+- (RELATED) [075-L13_edit_drops_computed_duration](075-L13_edit_drops_computed_duration.md): changes how the same model is updated

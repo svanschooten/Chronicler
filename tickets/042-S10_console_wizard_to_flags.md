@@ -6,8 +6,8 @@
 
 | | |
 | --- | --- |
-| importance | low |
-| danger level | Low: maintenance cost only. Change risk: low. |
+| importance | medium |
+| danger level | Medium: a server started without a terminal (Docker, systemd) cannot be configured and crashes. Change risk: low. |
 | reach | Server setup. About 120 lines |
 | effort | S |
 | evidence | read in code |
@@ -17,6 +17,12 @@
 
 `core/wizard.py` is 197 lines and a class hierarchy to ask 3 or 4 questions, next to the
 428-line Flet wizard. Once the web client is gone, only server mode uses it.
+
+It also cannot run unattended. `chronicler server` calls `run_wizard` whenever the
+config is incomplete (`__main__.py:104-107`), and the wizard reads answers with
+`input()`. With no terminal attached, as under Docker or systemd, the first `input()`
+raises `EOFError` and the server exits with a traceback. Found in the review after
+wave 4.
 
 ### proposed fix
 

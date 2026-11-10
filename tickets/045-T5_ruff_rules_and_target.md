@@ -11,7 +11,7 @@
 | reach | All contributors |
 | effort | S |
 | evidence | scanned |
-| touches | `pyproject.toml`, `chronicler/core/database_manager.py`, `chronicler/core/file_staging.py`, `chronicler/core/processing/handlers/importing.py`, `normalizing.py`, `chronicler/desktop/views/transcript/export.py` |
+| touches | `pyproject.toml`, `chronicler/desktop/views/transcript/recording.py`, `chronicler/core/database_manager.py`, `chronicler/core/file_staging.py`, `chronicler/core/processing/handlers/importing.py`, `normalizing.py`, `chronicler/desktop/views/transcript/export.py` |
 
 ### description
 
@@ -26,8 +26,13 @@ Ruff's `ASYNC` rules flag 9 blocking calls in async functions, and `DTZ` flags 9
    why.
 3. Consider `DTZ`. Times are stored as naive local values, so moving to UTC means changing
    how they display. Either do that or suppress it with a comment.
+4. Turn on mypy's `check_untyped_defs`. Without it mypy skips the body of every
+   function with no annotations, which includes most Flet event handlers. Enabling it
+   finds one error today (`recording.py:78`, `int()` of an `str | None`), so it is cheap.
+   Found in the review after wave 4.
 
-Done when `ruff check` passes with the new rules.
+Done when `ruff check` passes with the new rules, and mypy passes with
+`check_untyped_defs`.
 
 ### related tickets
 

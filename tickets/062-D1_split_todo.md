@@ -29,6 +29,11 @@ design can go with the web client.
 
 Done when `TODO.md` is gone and no doc links to it.
 
+The review after wave 4 re-baselined `TODO.md` against the code: marks corrected, open
+items pointed at their tickets, and the web client section reduced to the design notes
+worth keeping. That makes the split mechanical, but it is still one file doing three
+jobs.
+
 ### related tickets
 
 - (BLOCKER) [012-S14_remove_web_client](012-S14_remove_web_client.md): decides what happens to the web client sections

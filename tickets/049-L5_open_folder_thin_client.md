@@ -27,4 +27,5 @@ Done when the button is absent on a thin client, and the API surface count is up
 
 ### related tickets
 
-- (BLOCKER) [025-S9_single_mode_enum](025-S9_single_mode_enum.md): uses `desktop_mode`
+- (BLOCKER) [025-S9_single_mode_enum](025-S9_single_mode_enum.md): uses `desktop_mode`. Merged, so this can start
+- (RELATED) [072-M13_failed_link_leaves_chronicle](072-M13_failed_link_leaves_chronicle.md): *Link* has the same thin-client cause. Take them together
