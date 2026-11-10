@@ -25,7 +25,10 @@ async def _run(installer, extra="recording"):
     """Drives `ensure` to its dialog and hands back the task, page and dialog."""
     page = MagicMock(spec=ft.Page)
     task = asyncio.ensure_future(installer.ensure(page, extra))
-    await asyncio.sleep(0)
+    # The availability check runs on a worker thread, so the dialog appears once it is back.
+    async with asyncio.timeout(1):
+        while page.show_dialog.call_args is None:
+            await asyncio.sleep(0.001)
     (dialog,), _ = page.show_dialog.call_args
     return task, page, dialog
 
