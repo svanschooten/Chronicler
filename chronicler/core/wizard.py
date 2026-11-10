@@ -56,10 +56,17 @@ class WorkspaceStep(WizardStep):
         default_path = default_workspace_path()
         print("\n--- Local Workspace Setup ---")
         print("Chronicler stores your chronicles, recordings and databases in a workspace.")
-        path_str = input(f"Enter workspace path [{default_path}]: ").strip()
-        settings.workspace_path = (
-            Path(path_str).expanduser().resolve() if path_str else default_path
-        )
+        while True:
+            path_str = input(f"Enter workspace path [{default_path}]: ").strip()
+            candidate = Path(path_str).expanduser().resolve() if path_str else default_path
+            # A folder that does not exist yet is created at startup; one that exists has to
+            # take a file now, or startup would refuse it.
+            probe = settings.model_copy(update={"workspace_path": candidate})
+            if candidate.exists() and not probe.is_workspace_valid():
+                print(f"Chronicler cannot write to {candidate}. Choose a different folder.")
+                continue
+            settings.workspace_path = candidate
+            return
 
     def is_satisfied(self, settings: Settings) -> bool:
         return settings.workspace_path is not None

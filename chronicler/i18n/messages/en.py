@@ -363,6 +363,7 @@ MESSAGES = {
             "browse": "Browse",
             "picker_title": "Choose a workspace folder",
             "required": "Choose a folder to continue.",
+            "not_writable": "Chronicler cannot write to this folder. Choose a different one.",
         },
         "api_key": {
             "title": "API key",

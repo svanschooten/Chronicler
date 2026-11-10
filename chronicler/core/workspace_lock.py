@@ -85,6 +85,8 @@ class WorkspaceLock:
             return
 
         try:
+            if self.workspace_path.exists() and not self.workspace_path.is_dir():
+                raise NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR))
             self.workspace_path.mkdir(parents=True, exist_ok=True)
             probe_writable(self.workspace_path)
             fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)

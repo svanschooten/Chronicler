@@ -548,8 +548,9 @@ every `ASGITransport`-based test in the sprint had missed:
     * [ ] Server setup cannot run unattended: the console wizard needs a terminal, and
       exits with `EOFError` under Docker or systemd (ticket 042)
 * [x] Select workspace location
-* [~] Validate workspace permissions — `Settings.is_workspace_valid` exists, but nothing
-  calls it (ticket 055)
+* [x] Validate workspace permissions — opening a workspace writes a probe file and reports
+  an unwritable folder on the startup screen, and both setup wizards refuse an existing
+  folder that cannot be written to (ticket 055)
 * [x] Automatic configuration validation for different run modes
     * `Settings.mode` added 2026-08-13, set by `ConfigWizard` at every point it already
       knows which of the four concrete setups was chosen — "the active mode is
