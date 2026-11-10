@@ -75,7 +75,8 @@ class HandlerBase:
         A project database transaction - see `DatabaseManager.transaction`. Raises
         LookupError for a chronicle with no row (deleted while the task waited) and
         FileNotFoundError for a linked one whose file has moved, instead of creating a
-        new empty database. Without `archive_sessions` there is no row to check.
+        new empty database. Without `archive_sessions` (tests only) that check is skipped,
+        but the location is still read from the archive, so the chronicle needs a row.
         """
         return self.db_manager.transaction(
             chronicle_id, must_exist=self.archive_sessions is not None

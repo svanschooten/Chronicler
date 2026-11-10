@@ -284,10 +284,9 @@ class DatabaseManager:
         """
         Writes a consistent copy of one chronicle's database to `destination`.
 
-        `VACUUM INTO` rather than a file copy: the engine is cached and may have a
-        connection open, so copying the file could catch a write half-made. SQLite builds
-        the copy from committed pages instead, without disturbing the live connection.
-        See docs/storage.md.
+        `VACUUM INTO` rather than a file copy: another session may be writing to the file,
+        so copying it could catch a write half-made. SQLite builds the copy from committed
+        pages instead, without disturbing that session. See docs/storage.md.
         """
         if destination.exists():
             raise FileExistsError(f"Refusing to overwrite {destination}")
@@ -302,13 +301,12 @@ class DatabaseManager:
 
     async def close_project(self, chronicle_id: str) -> None:
         """
-        Releases one chronicle's project database, so its file can be moved or removed, and
-        forgets where it was linked, so a chronicle recreated under the same id is looked up
-        afresh.
+        Forgets one chronicle's project database: where it is linked, and that it was
+        migrated. The next open looks the chronicle up afresh and migrates whatever file is
+        at that path. Call it whenever the row's `project_path` changes or the row goes.
 
-        Forgets that the database was migrated, so a file recreated at the same path is
-        migrated again. Connections are not pooled, so none outlive their session; a session
-        still open when this runs keeps its file open until it closes. See docs/storage.md.
+        Connections are not pooled, so none outlive their session; a session still open
+        when this runs keeps its file open until it closes. See docs/storage.md.
         """
         self._linked_paths.pop(chronicle_id, None)
         engine = self._project_engines.pop(chronicle_id, None)
