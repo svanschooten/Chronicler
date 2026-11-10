@@ -297,16 +297,18 @@ class TestExportsLeaveTheEventLoopFree:
 
     @staticmethod
     def _recording_the_thread(monkeypatch, name: str) -> list[threading.Thread]:
-        from chronicler.core.services import transcript_service
+        from chronicler.core.services import pdf, transcript_service
 
-        original = getattr(transcript_service, name)
+        # format_pdf is imported inside export_pdf, so it is patched where it lives.
+        module = pdf if name == "format_pdf" else transcript_service
+        original = getattr(module, name)
         seen: list[threading.Thread] = []
 
         def recording(*args, **kwargs):
             seen.append(threading.current_thread())
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(transcript_service, name, recording)
+        monkeypatch.setattr(module, name, recording)
         return seen
 
     @pytest.mark.asyncio
