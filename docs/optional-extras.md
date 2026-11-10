@@ -8,7 +8,7 @@ Five features need dependencies that not every install wants. Each is a
 | Extra | Modules | Feature | Download |
 | ----- | ------- | ------- | -------- |
 | `transcription` | `faster_whisper` | Whisper transcription | ~120 MB |
-| `normalization` | `av` | Loudness normalisation | ~35 MB |
+| `normalization` | `av`, `numpy` | Loudness normalisation | ~50 MB |
 | `llm` | `llama_cpp` | Local `.gguf` summarisation | ~30 MB |
 | `recording` | `sounddevice` | Recording from a microphone | ~1 MB |
 | `server` | `fastapi`, `uvicorn`, `python_multipart` | `chronicler server` | ~10 MB |
@@ -17,6 +17,11 @@ An extra lists every module its feature imports directly and every requirement i
 `pyproject.toml` group has. `server` is why: FastAPI, Uvicorn and python-multipart are
 three packages, and the server cannot start without any one of them. A test checks the
 requirements against `pyproject.toml`, so the two cannot drift.
+
+`normalization` lists numpy for the same reason. Measuring loudness imports it, and PyAV
+does not depend on it, so an install with only this extra used to report it missing while
+`av` was present. In the embedded runtime numpy is in both the transcription and the
+normalization component locks, so either works alone.
 
 `python_multipart` rather than `multipart`: the old name is a deprecated alias. The real
 module arrived in python-multipart 0.0.13, which is therefore the floor.
