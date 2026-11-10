@@ -57,7 +57,7 @@ def main():
         "mode",
         nargs="?",
         default="desktop",
-        choices=["desktop", "server", "client:desktop"],
+        choices=["desktop", "server"],
         help="Run mode (default: %(default)s)",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
@@ -87,29 +87,25 @@ def main():
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
 
-    from chronicler.core.config import get_settings, is_config_initialized, set_config_file_override
+    from chronicler.core.config import (
+        Mode,
+        get_settings,
+        is_config_initialized,
+        set_config_file_override,
+    )
 
     if args.config:
         set_config_file_override(args.config)
 
-    mode_map = {
-        "desktop": "client:desktop",
-        "server": "server",
-        "client:desktop": "client:desktop",
-    }
-    mode = mode_map.get(args.mode, args.mode)
-
-    if mode == "server":
+    if args.mode == "server":
         # Before the wizard, so nobody answers its questions only to hit a traceback.
         require_server_extra()
 
-    if mode != "client:desktop":
         from chronicler.core.wizard import run_wizard
 
-        if not is_config_initialized() or not get_settings().validate_for_mode(mode):
-            run_wizard(mode=mode)
+        if not is_config_initialized() or not get_settings().validate_for_mode(Mode.SERVER):
+            run_wizard(mode=Mode.SERVER)
 
-    if mode == "server":
         server_main(host=args.host, port=args.port)
         return
 

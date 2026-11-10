@@ -16,7 +16,6 @@ from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
 
-DESKTOP_MODE = "client:desktop"
 BUNDLED_CLIENT_DIR = Path("flet_desktop") / "app" / "flet"
 EMBEDDED_CLIENT_DIR = Path("share") / "flet-client"
 
@@ -74,7 +73,7 @@ async def start(page: ft.Page) -> None:
     page.title = "Chronicler"
     settings = get_settings()
 
-    if not settings.validate_for_mode(DESKTOP_MODE):
+    if not settings.validate_for_mode(settings.desktop_mode):
         logger.info("No usable configuration found; starting the setup wizard")
         await FletSetupWizard(page, settings).run()
 

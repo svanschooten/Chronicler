@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -142,26 +143,44 @@ def _keep_file_values(
             values.pop(key, None)
 
 
+class Mode(StrEnum):
+    """How this installation runs. The one vocabulary for the CLI, the config and the UI."""
+
+    FULL_STACK = "full_stack"
+    THIN_CLIENT = "thin_client"
+    SERVER = "server"
+
+
+# Spellings earlier versions saved. `client:web` went with the web client and reads as
+# unset, so the mode is inferred from the server URL and workspace.
+LEGACY_MODES: dict[str, Mode | None] = {
+    "desktop:full_stack": Mode.FULL_STACK,
+    "desktop:thin_client": Mode.THIN_CLIENT,
+    "client:web": None,
+}
+
+
 class Settings(BaseSettings):
     app_name: str = "Chronicler"
     workspace_path: Path | None = None
     server_url: str | None = None
     api_key: str | None = None
-    mode: str | None = None
+    mode: Mode | None = None
     dark_mode: bool = True
 
-    @field_validator("mode")
+    @field_validator("mode", mode="before")
     @classmethod
-    def _forget_removed_modes(cls, mode: str | None) -> str | None:
-        """
-        `client:web` was removed with the web client. A config still naming it reads as
-        unset, so the desktop infers its mode from the server URL and workspace instead of
-        failing to start. Ticket 025 replaces this with one mode enum.
-        """
-        if mode == "client:web":
-            logger.warning("The web client was removed; ignoring mode 'client:web' in the config")
+    def _read_stored_mode(cls, mode: Any) -> Any:
+        """Accepts the old spellings, and reads a mode it does not know as unset."""
+        if mode is None or isinstance(mode, Mode):
+            return mode
+        if mode in LEGACY_MODES:
+            return LEGACY_MODES[mode]
+        try:
+            return Mode(mode)
+        except ValueError:
+            logger.warning("Ignoring unknown mode %r in the config", mode)
             return None
-        return mode
 
     transcription: TranscriptionSettings = Field(default_factory=TranscriptionSettings)
     cleaning: CleaningSettings = Field(default_factory=CleaningSettings)
@@ -183,17 +202,31 @@ class Settings(BaseSettings):
 
         return os.access(self.workspace_path, os.R_OK | os.W_OK)
 
-    def validate_for_mode(self, mode: str) -> bool:
-        """Validate if settings are complete for a given mode."""
-        if mode == "server":
+    @property
+    def effective_mode(self) -> Mode:
+        """The stored mode, or the one a config saved without it describes."""
+        if self.mode is not None:
+            return self.mode
+        if self.server_url and not self.workspace_path:
+            return Mode.THIN_CLIENT
+        return Mode.FULL_STACK
+
+    @property
+    def desktop_mode(self) -> Mode:
+        """
+        The mode the desktop app runs in. A server's configuration opens its workspace as a
+        full stack.
+        """
+        mode = self.effective_mode
+        return Mode.FULL_STACK if mode is Mode.SERVER else mode
+
+    def validate_for_mode(self, mode: Mode) -> bool:
+        """Whether the settings are complete enough to run in a given mode."""
+        if mode is Mode.SERVER:
             return self.workspace_path is not None and bool(self.api_key)
-        if mode == "client:desktop":
-            if self.workspace_path:
-                return True
-            if self.server_url:
-                return bool(self.api_key)
-            return False
-        return True
+        if mode is Mode.THIN_CLIENT:
+            return bool(self.server_url) and bool(self.api_key)
+        return self.workspace_path is not None
 
     def save(self) -> Path:
         """

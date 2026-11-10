@@ -2,7 +2,7 @@ import secrets
 import sys
 from pathlib import Path
 
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
 
 LANGUAGE_NAMES = {"en": "English", "nl": "Nederlands", "de": "Deutsch"}
 
@@ -119,7 +119,7 @@ class ConfigWizard:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or Settings()
 
-    def run(self, mode: str | None = None):
+    def run(self, mode: Mode | None = None):
         if mode:
             if self.settings.validate_for_mode(mode):
                 return
@@ -128,12 +128,12 @@ class ConfigWizard:
             print("========================================")
             print(f"Configuration is missing or incomplete for mode: {mode}")
 
-            if mode == "server":
+            if mode is Mode.SERVER:
                 self._run_step(LanguageStep())
                 self._run_step(WorkspaceStep())
                 self._run_step(ApiKeyStep())
-                self.settings.mode = "server"
-            elif mode == "client:desktop":
+                self.settings.mode = Mode.SERVER
+            else:
                 self._show_main_choice()
         else:
             print("========================================")
@@ -162,22 +162,22 @@ class ConfigWizard:
             if choice == "1":
                 self._run_step(WorkspaceStep())
                 self._run_step(ApiKeyStep())
-                self.settings.mode = "desktop:full_stack"
+                self.settings.mode = Mode.FULL_STACK
                 break
             elif choice == "2":
                 self._run_step(RemoteServerStep())
-                self.settings.mode = "desktop:thin_client"
+                self.settings.mode = Mode.THIN_CLIENT
                 break
             elif choice == "3":
                 self._run_step(WorkspaceStep())
                 self._run_step(ApiKeyStep())
-                self.settings.mode = "server"
+                self.settings.mode = Mode.SERVER
                 break
             else:
                 print("Invalid choice. Please select 1, 2 or 3.")
 
 
-def run_wizard(mode: str | None = None):
+def run_wizard(mode: Mode | None = None):
     try:
         from chronicler.core.config import get_settings
 
