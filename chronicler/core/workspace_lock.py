@@ -5,6 +5,7 @@ The lock is an OS-level lock on a file in the workspace, so the OS releases it w
 process dies, however it dies. Nothing is left behind for the next start to clean up.
 """
 
+import errno
 import os
 import sys
 from pathlib import Path
@@ -23,6 +24,22 @@ class WorkspaceLockedError(RuntimeError):
         )
 
 
+class WorkspaceLockUnavailableError(RuntimeError):
+    """
+    The lock could not be taken for a reason other than someone else holding it. Usually
+    the workspace is on a network or FUSE mount that does not support file locks.
+    """
+
+    def __init__(self, workspace_path: Path, cause: OSError):
+        self.workspace_path = workspace_path
+        self.reason = cause.strerror or str(cause)
+        super().__init__(
+            f"Chronicler could not lock the workspace at {workspace_path}: {self.reason}. "
+            "The filesystem it is on may not support file locks, as some network and "
+            "FUSE mounts do not. Choose a workspace on a local disk."
+        )
+
+
 class WorkspaceLock:
     def __init__(self, workspace_path: Path):
         self.workspace_path = workspace_path
@@ -34,7 +51,12 @@ class WorkspaceLock:
         return self._fd is not None
 
     def acquire(self) -> None:
-        """Takes the lock, or raises WorkspaceLockedError. A second call is a no-op."""
+        """
+        Takes the lock. A second call is a no-op.
+
+        Raises WorkspaceLockedError when another process holds it, and
+        WorkspaceLockUnavailableError when the lock call fails for any other reason.
+        """
         if self._fd is not None:
             return
 
@@ -44,7 +66,9 @@ class WorkspaceLock:
             _lock(fd)
         except OSError as error:
             os.close(fd)
-            raise WorkspaceLockedError(self.workspace_path) from error
+            if error.errno in HELD_ELSEWHERE:
+                raise WorkspaceLockedError(self.workspace_path) from error
+            raise WorkspaceLockUnavailableError(self.workspace_path, error) from error
         self._fd = fd
 
     def release(self) -> None:
@@ -60,6 +84,9 @@ class WorkspaceLock:
 if sys.platform == "win32":
     import msvcrt
 
+    # What `msvcrt.locking` fails with when another process holds the region.
+    HELD_ELSEWHERE = frozenset({errno.EACCES, errno.EDEADLOCK})
+
     def _lock(fd: int) -> None:
         os.lseek(fd, 0, os.SEEK_SET)
         msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
@@ -70,6 +97,10 @@ if sys.platform == "win32":
 
 else:
     import fcntl
+
+    # What `flock` fails with when another process holds the lock. Anything else, such as
+    # ENOLCK or EOPNOTSUPP, means the filesystem could not take a lock at all.
+    HELD_ELSEWHERE = frozenset({errno.EWOULDBLOCK, errno.EAGAIN, errno.EACCES})
 
     def _lock(fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
