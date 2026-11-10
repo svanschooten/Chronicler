@@ -1,6 +1,6 @@
 import pytest
 
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
 from chronicler.core.container import Container
 from chronicler.core.file_staging import LocalFileStager, RemoteFileStager
 from chronicler.core.remote import RemoteContainer
@@ -8,7 +8,7 @@ from chronicler.desktop.runtime import build_runtime
 
 
 def test_full_stack_settings_build_a_local_container(tmp_path):
-    settings = Settings(workspace_path=tmp_path, mode="desktop:full_stack")
+    settings = Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK)
     runtime = build_runtime(settings)
 
     assert isinstance(runtime.resolver, Container)
@@ -17,9 +17,7 @@ def test_full_stack_settings_build_a_local_container(tmp_path):
 
 
 def test_thin_client_settings_build_a_remote_container():
-    settings = Settings(
-        server_url="http://example.invalid", api_key="key", mode="desktop:thin_client"
-    )
+    settings = Settings(server_url="http://example.invalid", api_key="key", mode=Mode.THIN_CLIENT)
     runtime = build_runtime(settings)
 
     assert isinstance(runtime.resolver, RemoteContainer)
@@ -48,13 +46,13 @@ def test_missing_mode_infers_full_stack_from_workspace_path(tmp_path):
 
 
 def test_thin_client_without_server_url_raises():
-    settings = Settings(mode="desktop:thin_client", server_url=None)
+    settings = Settings(mode=Mode.THIN_CLIENT, server_url=None)
     with pytest.raises(ValueError, match="server_url"):
         build_runtime(settings)
 
 
 def test_full_stack_without_workspace_path_raises():
-    settings = Settings(mode="desktop:full_stack", workspace_path=None)
+    settings = Settings(mode=Mode.FULL_STACK, workspace_path=None)
     with pytest.raises(ValueError, match="workspace_path"):
         build_runtime(settings)
 
@@ -64,7 +62,7 @@ def test_build_runtime_activates_the_configured_locale(tmp_path):
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
-    settings = Settings(workspace_path=workspace, mode="desktop:full_stack")
+    settings = Settings(workspace_path=workspace, mode=Mode.FULL_STACK)
     settings.ui.locale = "nl"
     try:
         build_runtime(settings)
@@ -84,9 +82,7 @@ def test_a_web_client_config_starts_as_a_thin_client():
 
 @pytest.mark.asyncio
 async def test_thin_client_shares_one_long_timeout_client():
-    settings = Settings(
-        server_url="http://example.invalid", api_key="key", mode="desktop:thin_client"
-    )
+    settings = Settings(server_url="http://example.invalid", api_key="key", mode=Mode.THIN_CLIENT)
     runtime = build_runtime(settings)
     client = runtime.http_client
 
@@ -104,3 +100,24 @@ def test_fallback_clients_use_the_long_timeouts():
 
     proxy = RemoteServiceProxy("http://x", Settings)
     assert proxy._client.timeout == RPC_TIMEOUT
+
+
+@pytest.mark.parametrize("mode", [None, *Mode])
+@pytest.mark.parametrize("server_url", [None, "http://example.invalid"])
+@pytest.mark.parametrize("has_workspace", [False, True])
+@pytest.mark.parametrize("api_key", [None, "key"])
+def test_validation_and_build_runtime_agree(tmp_path, mode, server_url, has_workspace, api_key):
+    """Settings that validate for the desktop always build, as the mode validation named."""
+    settings = Settings(
+        mode=mode,
+        server_url=server_url,
+        workspace_path=tmp_path if has_workspace else None,
+        api_key=api_key,
+    )
+    if not settings.validate_for_mode(settings.desktop_mode):
+        return
+
+    runtime = build_runtime(settings)
+
+    thin = settings.desktop_mode is Mode.THIN_CLIENT
+    assert isinstance(runtime.resolver, RemoteContainer if thin else Container)

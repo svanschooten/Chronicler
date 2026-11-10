@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from chronicler.core.config import Settings
+from chronicler.core.config import Mode, Settings
 from chronicler.core.wizard import ConfigWizard
 
 
@@ -35,7 +35,7 @@ def test_wizard_full_stack(tmp_path):
         assert saved_settings.server_url is None
         assert saved_settings.api_key is not None
         assert len(saved_settings.api_key) > 0
-        assert saved_settings.mode == "desktop:full_stack"
+        assert saved_settings.mode is Mode.FULL_STACK
 
 
 def test_wizard_full_stack_manual_api_key(tmp_path):
@@ -79,7 +79,7 @@ def test_wizard_thin_client(tmp_path):
         assert saved_settings.server_url == "http://remote:8000"
         assert saved_settings.api_key == "secret-key"
         assert saved_settings.workspace_path is None
-        assert saved_settings.mode == "desktop:thin_client"
+        assert saved_settings.mode is Mode.THIN_CLIENT
 
 
 def test_wizard_reports_correct_path(tmp_path):
@@ -118,7 +118,7 @@ def test_wizard_server(tmp_path):
         saved_settings = Settings()
         assert saved_settings.workspace_path == tmp_path / "srv-workspace"
         assert saved_settings.api_key is not None
-        assert saved_settings.mode == "server"
+        assert saved_settings.mode is Mode.SERVER
 
 
 def test_api_key_step_generates_on_empty_input():
@@ -171,11 +171,11 @@ def test_wizard_run_server_mode(mock_api, mock_ws, tmp_path):
     ):
         settings = Settings(workspace_path=None)
         wizard = ConfigWizard(settings=settings)
-        wizard.run(mode="server")
+        wizard.run(mode=Mode.SERVER)
 
     mock_ws.assert_called_once()
     mock_api.assert_called_once()
-    assert settings.mode == "server"
+    assert settings.mode is Mode.SERVER
 
 
 @patch("chronicler.core.wizard.ConfigWizard._show_main_choice")
@@ -183,7 +183,7 @@ def test_wizard_run_desktop_mode_missing(mock_choice, tmp_path):
     with patch("chronicler.core.config.user_config_dir", return_value=str(tmp_path)):
         settings = Settings(workspace_path=None, server_url=None)
         wizard = ConfigWizard(settings=settings)
-        wizard.run(mode="client:desktop")
+        wizard.run(mode=Mode.FULL_STACK)
 
     mock_choice.assert_called_once()
 
@@ -198,7 +198,7 @@ def test_wizard_skips_satisfied_steps(tmp_path):
             patch("chronicler.core.wizard.ApiKeyStep.run") as mock_api,
             patch("chronicler.core.wizard.LanguageStep.run"),
         ):
-            wizard.run(mode="server")
+            wizard.run(mode=Mode.SERVER)
 
             mock_ws.assert_called_once()
             mock_api.assert_not_called()
@@ -214,7 +214,7 @@ def test_wizard_desktop_choice_skips_satisfied_steps(tmp_path):
             patch("chronicler.core.wizard.WorkspaceStep.run") as mock_ws,
             patch("chronicler.core.wizard.ApiKeyStep.run") as mock_api,
         ):
-            wizard.run(mode="client:desktop")
+            wizard.run(mode=Mode.FULL_STACK)
 
             mock_ws.assert_called_once()
             mock_api.assert_not_called()
