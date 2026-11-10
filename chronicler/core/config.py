@@ -1,7 +1,7 @@
 import json
+import locale
 import logging
 import os
-import shutil
 import tempfile
 from enum import StrEnum
 from functools import lru_cache
@@ -71,9 +71,27 @@ def _default_config_candidates() -> list[Path]:
     ]
 
 
+def _read_config_text(path: Path) -> str:
+    """
+    The file's text as UTF-8, whatever the locale. A file that is not valid UTF-8 is read
+    in the locale's encoding instead: on Windows, a file saved as "ANSI" by an older editor
+    is in the code page, and it loaded before Chronicler read UTF-8. The next save rewrites
+    it as UTF-8.
+    """
+    raw = path.read_bytes()
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        fallback = locale.getpreferredencoding(False)
+        if fallback.lower().replace("-", "") in ("utf8", "utf8sig"):
+            raise
+        logger.info("Config file %s is not UTF-8; reading it as %s", path, fallback)
+        return raw.decode(fallback)
+
+
 def _load_config(path: Path) -> dict[str, Any]:
-    """Parses a config file as UTF-8, whatever the locale. Raises when it cannot."""
-    text = path.read_text(encoding="utf-8")
+    """Parses a config file. Raises when it cannot."""
+    text = _read_config_text(path)
     loaded = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
     if loaded is None:
         return {}
@@ -114,6 +132,17 @@ def _drop_invalid_sections(raw: dict[str, Any]) -> dict[str, Any]:
             logger.warning("Ignoring invalid '%s' configuration section; using defaults", name)
             cleaned.pop(name)
     return cleaned
+
+
+def _write_owner_only(path: Path, data: bytes) -> None:
+    """
+    Writes `data` to a file only its owner can read: a backup of a config can hold API
+    keys, whatever mode the original had. Windows has no such mode bits.
+    """
+    path.unlink(missing_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as f:
+        f.write(data)
 
 
 class FileConfigSettingsSource(PydanticBaseSettingsSource):
@@ -254,34 +283,40 @@ class Settings(BaseSettings):
         had for those settings. See docs/configuration.md.
         """
         config_file = self.save_path()
-        config_file.parent.mkdir(parents=True, exist_ok=True)
+        # A symlinked config (say, from a dotfiles folder) is written where it points, so
+        # swapping the new file in below does not replace the link with a plain file.
+        target = config_file.resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
 
         values = json.loads(self.model_dump_json())
         existing: dict[str, Any] = {}
-        if config_file.exists():
+        if target.exists():
             try:
-                existing = _load_config(config_file)
+                existing = _load_config(target)
             except Exception:
-                backup = config_file.with_name(config_file.name + ".bak")
+                backup = target.with_name(target.name + ".bak")
                 logger.warning(
                     "Could not parse %s; keeping a copy at %s before replacing it",
-                    config_file,
+                    target,
                     backup,
                     exc_info=True,
                 )
-                shutil.copy2(config_file, backup)
+                _write_owner_only(backup, target.read_bytes())
         _keep_file_values(values, self._environment_values(), existing)
 
         # Written to a temp file beside the target, then swapped in, so a crash cannot leave a
         # truncated config. mkstemp creates it owner-only (600): the file can hold API keys.
-        # Windows has no such mode bits.
+        # Windows has no such mode bits. Synced before the swap, so a power cut cannot leave
+        # the new name pointing at data that never reached the disk.
         descriptor, temp_name = tempfile.mkstemp(
-            dir=config_file.parent, prefix=config_file.name + ".", suffix=".tmp"
+            dir=target.parent, prefix=target.name + ".", suffix=".tmp"
         )
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as f:
                 yaml.dump(values, f, default_flow_style=False, allow_unicode=True)
-            os.replace(temp_name, config_file)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_name, target)
         except BaseException:
             Path(temp_name).unlink(missing_ok=True)
             raise

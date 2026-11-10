@@ -583,3 +583,50 @@ class TestConfigFileEncodingAndAtomicSave:
         Settings().save()
 
         assert not (isolated_config / "settings.yaml.bak").exists()
+
+    def test_an_ansi_config_from_an_older_editor_still_loads(self, isolated_config, monkeypatch):
+        """Notepad's old "ANSI" is the Windows code page. That loaded before UTF-8 reads."""
+        config_file = isolated_config / "settings.yaml"
+        config_file.write_bytes("app_name: Café\napi_key: kept\n".encode("cp1252"))
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+        monkeypatch.setattr(
+            "chronicler.core.config.locale.getpreferredencoding", lambda _: "cp1252"
+        )
+
+        settings = get_settings()
+
+        assert settings.app_name == "Café"
+        assert settings.api_key == "kept"
+
+    def test_a_utf8_file_with_a_byte_order_mark_loads(self, isolated_config, monkeypatch):
+        config_file = isolated_config / "settings.yaml"
+        config_file.write_bytes("app_name: Café\n".encode("utf-8-sig"))
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+
+        assert get_settings().app_name == "Café"
+
+    @pytest.mark.skipif(os.name != "posix", reason="file modes are POSIX-only")
+    def test_the_backup_is_readable_by_its_owner_only(self, isolated_config, monkeypatch):
+        config_file = isolated_config / "settings.yaml"
+        config_file.write_text("api_key: [unclosed\n", encoding="utf-8")
+        config_file.chmod(0o644)
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+
+        Settings().save()
+
+        backup = isolated_config / "settings.yaml.bak"
+        assert stat.S_IMODE(backup.stat().st_mode) == 0o600
+
+    @pytest.mark.skipif(os.name != "posix", reason="symlinks need privileges on Windows")
+    def test_a_symlinked_config_is_written_where_it_points(self, isolated_config, monkeypatch):
+        real = isolated_config / "dotfiles" / "chronicler.yaml"
+        real.parent.mkdir()
+        real.write_text("app_name: Linked\n", encoding="utf-8")
+        link = isolated_config / "settings.yaml"
+        link.symlink_to(real)
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(link))
+
+        Settings(app_name="Updated").save()
+
+        assert link.is_symlink()
+        assert yaml.safe_load(real.read_text(encoding="utf-8"))["app_name"] == "Updated"
