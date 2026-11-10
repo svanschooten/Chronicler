@@ -1,5 +1,6 @@
 """Tests for the record-a-source dialog."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import flet as ft
@@ -100,8 +101,6 @@ class TestDismissal:
     async def test_dismissing_the_dialog_stops_the_recorder_and_removes_the_temp_folder(
         self, make_dialog
     ):
-        import asyncio
-
         dialog = make_dialog()
         page = MagicMock(spec=ft.Page)
         device = InputDevice(index=0, name="Mic", channels=1)
@@ -130,3 +129,47 @@ class TestDismissal:
 
         recorder.stop.assert_called_once()
         assert not temp_folder.exists()
+
+
+class TestFailedSave:
+    @pytest.mark.asyncio
+    async def test_a_failed_save_keeps_the_dialog_open_and_the_recording(self, make_dialog):
+        dialog = make_dialog()
+        dialog.file_stager.stage.side_effect = OSError("server unreachable")
+        page = MagicMock(spec=ft.Page)
+        device = InputDevice(index=0, name="Mic", channels=1)
+
+        with (
+            patch(
+                "chronicler.desktop.views.transcript.recording.list_input_devices",
+                return_value=[device],
+            ),
+            patch("chronicler.desktop.views.transcript.recording.Recorder") as recorder_class,
+        ):
+            recorder = recorder_class.return_value
+            recorder.is_recording = False
+            recorder.start.side_effect = lambda: setattr(recorder, "is_recording", True)
+            recorder.stop.side_effect = lambda: setattr(recorder, "is_recording", False)
+
+            task = asyncio.ensure_future(dialog.run(page))
+            await asyncio.sleep(0)
+            (shown,), _ = page.show_dialog.call_args
+            await shown.content.controls[2].on_click(MagicMock())
+            recording = dialog.temp_path
+            recording.write_bytes(b"RIFF")
+
+            await shown.actions[1].on_click(MagicMock())
+
+            assert not task.done()
+            page.pop_dialog.assert_not_called()
+            assert recording.exists()
+            assert "server unreachable" in dialog.show_snackbar.call_args[0][0]
+
+            dialog.file_stager.stage.side_effect = None
+            dialog.file_stager.stage.return_value = "staged.wav"
+            await shown.actions[1].on_click(MagicMock())
+            await asyncio.wait_for(task, timeout=1)
+
+        dialog.chronicle_service.add_audio_source.assert_awaited_once()
+        page.pop_dialog.assert_called_once()
+        assert not recording.parent.exists()

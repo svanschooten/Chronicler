@@ -45,6 +45,10 @@ written before the file is closed.
 However the dialog closes - Close, Save, Esc or a click outside - the recorder is stopped and
 the recording's temp folder is removed. A saved recording was already copied by the stager.
 
+A save that fails (the upload to a server, say) keeps the dialog open with the recording
+intact, so *Save* can be tried again; only closing the dialog discards it. Starting a new
+take also discards an unsaved previous one, since the dialog holds one recording at a time.
+
 ## Optional extra
 
 `sounddevice` is the optional `recording` extra, imported lazily. Because recording runs
