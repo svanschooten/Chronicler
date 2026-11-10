@@ -55,6 +55,7 @@ transcription = [
 ]
 normalization = [
     "av>=12,<19",
+    "numpy>=1.26,<3",
 ]
 llm = [
     "llama-cpp-python>=0.3,<1",

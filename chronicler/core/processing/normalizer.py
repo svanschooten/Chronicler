@@ -105,7 +105,7 @@ def measure_dbfs(source: Path) -> float | None:
     """
     try:
         import numpy as np
-    except ImportError as error:  # ships with the normalization extra, via PyAV's wheel
+    except ImportError as error:  # the extra lists numpy itself; PyAV does not depend on it
         raise NormalizationError(extras.missing_message("normalization", error)) from error
 
     try:
