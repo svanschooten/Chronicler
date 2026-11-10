@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import shutil
+import tempfile
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -69,11 +71,20 @@ def _default_config_candidates() -> list[Path]:
     ]
 
 
+def _load_config(path: Path) -> dict[str, Any]:
+    """Parses a config file as UTF-8, whatever the locale. Raises when it cannot."""
+    text = path.read_text(encoding="utf-8")
+    loaded = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+    if loaded is None:
+        return {}
+    if not isinstance(loaded, dict):
+        raise ValueError("expected a mapping at the top level")
+    return loaded
+
+
 def _read_config(path: Path) -> dict[str, Any]:
     try:
-        if path.suffix == ".json":
-            return json.loads(path.read_text()) or {}
-        return yaml.safe_load(path.read_text()) or {}
+        return _load_config(path)
     except Exception:
         logger.warning("Failed to parse config file %s", path, exc_info=True)
         return {}
@@ -246,16 +257,34 @@ class Settings(BaseSettings):
         config_file.parent.mkdir(parents=True, exist_ok=True)
 
         values = json.loads(self.model_dump_json())
-        existing = _read_config(config_file) if config_file.exists() else {}
+        existing: dict[str, Any] = {}
+        if config_file.exists():
+            try:
+                existing = _load_config(config_file)
+            except Exception:
+                backup = config_file.with_name(config_file.name + ".bak")
+                logger.warning(
+                    "Could not parse %s; keeping a copy at %s before replacing it",
+                    config_file,
+                    backup,
+                    exc_info=True,
+                )
+                shutil.copy2(config_file, backup)
         _keep_file_values(values, self._environment_values(), existing)
 
-        # Owner-only, before anything is written: the file can hold API keys. A new file is
-        # created 600; an existing one is restricted first. Windows has no such mode bits.
-        if os.name == "posix" and config_file.exists():
-            config_file.chmod(0o600)
-        descriptor = os.open(config_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w") as f:
-            yaml.dump(values, f, default_flow_style=False)
+        # Written to a temp file beside the target, then swapped in, so a crash cannot leave a
+        # truncated config. mkstemp creates it owner-only (600): the file can hold API keys.
+        # Windows has no such mode bits.
+        descriptor, temp_name = tempfile.mkstemp(
+            dir=config_file.parent, prefix=config_file.name + ".", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as f:
+                yaml.dump(values, f, default_flow_style=False, allow_unicode=True)
+            os.replace(temp_name, config_file)
+        except BaseException:
+            Path(temp_name).unlink(missing_ok=True)
+            raise
 
         return config_file
 

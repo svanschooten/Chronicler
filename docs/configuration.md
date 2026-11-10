@@ -17,6 +17,10 @@ priority order:
 
 The `.json` entry is legacy and read-only. `Settings.save()` always writes YAML.
 
+Config files are read and written as UTF-8 on every platform. `save()` writes a temp file
+beside the config and swaps it in, so a crash cannot truncate it. If the existing file
+cannot be parsed, it is copied to `<name>.bak` before being replaced.
+
 `_read_config` warns and falls back to defaults on a parse failure rather than raising.
 A corrupt config should not make the app unstartable — the wizard can then fix it. It
 names the offending file in the warning; this was once a bare `except: pass`, which
