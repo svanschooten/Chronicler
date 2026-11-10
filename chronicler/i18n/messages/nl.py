@@ -179,6 +179,10 @@ MESSAGES = {
         "loading": "Transcript laden...",
         "empty": "Transcript is leeg of wordt nog verwerkt.",
         "error": "Fout bij laden van transcript: {error}",
+        "newer_version": (
+            "Deze Chronicle is gemaakt door een nieuwere versie van Chronicler. Werk "
+            "Chronicler bij om haar te openen. Het bestand is niet gewijzigd."
+        ),
         "show_timestamps": "Tijdcodes tonen",
         "chronicle": "Chronicle",
         "speakers": "Sprekers",

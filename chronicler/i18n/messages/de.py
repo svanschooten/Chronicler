@@ -184,6 +184,10 @@ MESSAGES = {
         "loading": "Transkript wird geladen...",
         "empty": "Transkript ist leer oder wird noch verarbeitet.",
         "error": "Fehler beim Laden des Transkripts: {error}",
+        "newer_version": (
+            "Diese Chronik wurde mit einer neueren Chronicler-Version erstellt. Aktualisiere "
+            "Chronicler, um sie zu öffnen. Die Datei wurde nicht geändert."
+        ),
         "show_timestamps": "Zeitstempel anzeigen",
         "chronicle": "Chronicle",
         "speakers": "Sprecher",

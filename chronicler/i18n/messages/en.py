@@ -178,6 +178,10 @@ MESSAGES = {
         "loading": "Loading transcript...",
         "empty": "Transcript is empty or still processing.",
         "error": "Error loading transcript: {error}",
+        "newer_version": (
+            "This chronicle was made by a newer version of Chronicler. Update Chronicler to "
+            "open it. The file was not changed."
+        ),
         "show_timestamps": "Show timestamps",
         "chronicle": "Chronicle",
         "speakers": "Speakers",

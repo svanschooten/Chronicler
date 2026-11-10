@@ -80,6 +80,10 @@ message with "workspace" means the workspace database itself was upgraded. See
 
 Older builds reported this as `Can't locate revision identified by '…'`.
 
+On a thin client, the server refuses the chronicle the same way, but the client shows a
+generic server error until service errors are mapped (ticket 046). The server's log has
+the message.
+
 ## Recording says the extra is missing after installing it
 
 `sounddevice` is a binding to PortAudio, not a bundle of it. The wheel is 32 kB of pure

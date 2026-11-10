@@ -23,10 +23,15 @@ _MIGRATIONS_ROOT = Path(__file__).resolve().parent.parent / "migrations"
 
 
 class NewerSchemaError(RuntimeError):
-    """A database that a newer Chronicler has already upgraded, so this one cannot open it."""
+    """
+    A database that a newer Chronicler has already upgraded, so this one cannot open it.
+    `kind` is "chronicle" or "workspace", so a client can say so in the user's language; the
+    message itself is English, for logs and the server's console.
+    """
 
     def __init__(self, chain: str):
-        what = "chronicle" if chain == "project" else "workspace"
+        self.kind = "chronicle" if chain == "project" else "workspace"
+        what = self.kind
         super().__init__(
             f"This {what} was made by a newer version of Chronicler. "
             "Update Chronicler to open it; the file is unchanged."

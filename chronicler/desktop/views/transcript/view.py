@@ -21,7 +21,10 @@ from chronicler.desktop.views.transcript.actions import (
     ChronicleActionCallbacks,
     ChronicleActions,
 )
-from chronicler.desktop.views.transcript.editor import TranscriptEditor
+from chronicler.desktop.views.transcript.editor import (
+    TranscriptEditor,
+    describe_transcript_error,
+)
 from chronicler.desktop.views.transcript.export import TranscriptExporter
 from chronicler.desktop.views.transcript.recording import RecordingDialog
 from chronicler.desktop.views.transcript.sources import SourcesPanel
@@ -465,7 +468,7 @@ class TranscriptView(ft.Column):
                 self.chronicle.id, include_timestamps=self.show_timestamps
             )
         except Exception as error:
-            self.show_snackbar(t("transcript.error", error=error))
+            self.show_snackbar(describe_transcript_error(error))
             return
 
         reader = ft.Container(
@@ -556,7 +559,7 @@ class TranscriptView(ft.Column):
         try:
             self.transcript_lines = await self.transcript_service.get_transcript(self.chronicle.id)
         except Exception as e:
-            self.transcript_text.value = t("transcript.error", error=e)
+            self.transcript_text.value = describe_transcript_error(e)
             _repaint(self.transcript_text, self.transcript_area)
             return
         self._render_transcript()
