@@ -117,6 +117,41 @@ Progress updates are best effort: a locked write is logged and skipped. A task's
 status write retries for up to `STATUS_WRITE_TIMEOUT` (30 seconds), so a brief lock does
 not lose a finished result.
 
+## Journal mode and foreign keys
+
+Both databases run in SQLite's default rollback journal, not WAL, and foreign keys are not
+enforced (`PRAGMA foreign_keys` is never turned on).
+
+**Rollback journal.** A writer briefly locks readers out, which is where most `database is
+locked` errors come from. The busy timeout (5 seconds), the worker's short sessions and its
+retried status writes absorb that (see [Sessions](#sessions)). WAL would let readers and
+the writer run together, but it keeps two extra files, `-wal` and `-shm`, beside each
+database, and the database is only consistent with all three together. Sync tools such as
+Dropbox and OneDrive copy files independently and can ship a `project.db` without its
+`-wal`, which loses or corrupts recent writes on the other machine. The README promotes
+exactly that kind of storage, so the default journal stays until there is a reason to
+trade that safety away. A chronicle that is copied or shared should be copied while
+Chronicler is closed either way.
+
+**Foreign keys.** The schemas declare them, but SQLite ignores them unless the pragma is
+on for each connection. The code does what cascades would do instead:
+`SQLiteChronicleRepository.delete` removes a chronicle's tasks and tag links in the same
+transaction, and a transcript line keeps its speaker row because speakers outlive their
+lines on purpose. Turning the pragma on now would first need a check that no existing
+workspace holds a dangling reference.
+
+## Opening a chronicle upgrades it
+
+The first open of a project database in a process runs its migration chain to head (see
+[Migrations are serialised process-wide](#migrations-are-serialised-process-wide)), so the
+file moves to the newest schema in place. An older Chronicler cannot open it afterwards:
+Alembic stops with `Can't locate revision identified by '…'`.
+
+This matters for anything shared: a chronicle in a synced folder, one sent as a zip, or a
+linked `project.db`. Whoever opens it with the newest version decides the version
+everyone else needs. Until ticket 074 settles a compatibility rule, keep everyone sharing
+chronicles on the same release.
+
 ## Deleting a chronicle closes its database first
 
 `ChronicleService.delete_chronicle` calls `DatabaseManager.close_project(id)` before it

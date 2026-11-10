@@ -26,6 +26,11 @@ Server setup runs in the terminal you start it from.
 2. Enter the workspace path.
 3. Generate or enter an API key. This key will be required by any Thin Clients connecting to this server.
 
+The server listens on all interfaces over plain HTTP, so the key travels unencrypted. That
+is fine on a network you trust. Anywhere else, bind it to loopback with
+`--host 127.0.0.1` and put a TLS reverse proxy or a tunnel in front of it. See
+[docs/security.md](docs/security.md#transport).
+
 ### Running as a Thin Client
 
 1. Ensure you have a Chronicler Server running and you have its URL and API key.
