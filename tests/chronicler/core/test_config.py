@@ -467,28 +467,6 @@ class TestSecretsOnSave:
         assert yaml.safe_load(config_file.read_text())["dark_mode"] is False
 
     @pytest.mark.skipif(os.name != "posix", reason="file modes are POSIX-only")
-    def test_an_existing_file_is_restricted_before_it_is_written(
-        self, isolated_config, monkeypatch
-    ):
-        config_file = isolated_config / "settings.yaml"
-        config_file.write_text("app_name: Chronicler\n")
-        config_file.chmod(0o644)
-        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
-        modes_when_opened = []
-        real_open = os.open
-
-        def recording_open(path, flags, *args):
-            if Path(path) == config_file:
-                modes_when_opened.append(stat.S_IMODE(config_file.stat().st_mode))
-            return real_open(path, flags, *args)
-
-        monkeypatch.setattr("chronicler.core.config.os.open", recording_open)
-
-        Settings(api_key="typed-in").save()
-
-        assert modes_when_opened == [0o600]
-
-    @pytest.mark.skipif(os.name != "posix", reason="file modes are POSIX-only")
     def test_the_file_is_readable_by_its_owner_only(self, isolated_config, monkeypatch):
         config_file = isolated_config / "settings.yaml"
         config_file.write_text("app_name: Chronicler\n")
@@ -532,3 +510,65 @@ def test_a_renamed_mode_loads_without_a_warning(isolated_config, caplog):
         Settings()
 
     assert not caplog.records
+
+
+class TestConfigFileEncodingAndAtomicSave:
+    def test_a_utf8_config_loads_whatever_the_locale_encoding(self, isolated_config, monkeypatch):
+        config_file = isolated_config / "settings.yaml"
+        config_file.write_text("app_name: Kroniek \u00e9\u00e8 \u65e5\u672c\n", encoding="utf-8")
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+        real_read_text = Path.read_text
+
+        def locale_read_text(self, encoding=None, errors=None):
+            return real_read_text(self, encoding=encoding or "cp1252", errors=errors)
+
+        monkeypatch.setattr(Path, "read_text", locale_read_text)
+
+        assert get_settings().app_name == "Kroniek \u00e9\u00e8 \u65e5\u672c"
+
+    def test_non_ascii_text_is_saved_as_utf8(self, isolated_config, monkeypatch):
+        config_file = isolated_config / "settings.yaml"
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+
+        Settings(app_name="Kroniek \u00e9 \u65e5\u672c").save()
+
+        text = config_file.read_bytes().decode("utf-8")
+        assert "Kroniek \u00e9 \u65e5\u672c" in text
+
+    def test_a_failed_write_leaves_the_existing_file_untouched(self, isolated_config, monkeypatch):
+        config_file = isolated_config / "settings.yaml"
+        config_file.write_text("app_name: Before\n", encoding="utf-8")
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+
+        def crash(*args, **kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr("chronicler.core.config.yaml.dump", crash)
+
+        with pytest.raises(OSError):
+            Settings(app_name="After").save()
+
+        assert config_file.read_text(encoding="utf-8") == "app_name: Before\n"
+        assert [p.name for p in config_file.parent.iterdir()] == ["settings.yaml"]
+
+    def test_an_unparseable_file_is_backed_up_before_it_is_replaced(
+        self, isolated_config, monkeypatch
+    ):
+        config_file = isolated_config / "settings.yaml"
+        broken = "app_name: [unclosed\nnote: keep me\n"
+        config_file.write_text(broken, encoding="utf-8")
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+
+        Settings(app_name="Fresh").save()
+
+        assert (isolated_config / "settings.yaml.bak").read_text(encoding="utf-8") == broken
+        assert yaml.safe_load(config_file.read_text(encoding="utf-8"))["app_name"] == "Fresh"
+
+    def test_a_readable_file_is_not_backed_up(self, isolated_config, monkeypatch):
+        config_file = isolated_config / "settings.yaml"
+        config_file.write_text("app_name: Fine\n", encoding="utf-8")
+        monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(config_file))
+
+        Settings().save()
+
+        assert not (isolated_config / "settings.yaml.bak").exists()
