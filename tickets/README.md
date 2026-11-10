@@ -173,7 +173,7 @@ Small and independent. Users hit the first four, and the rest are under an hour 
 
 - [ ] [061-D3 Version and project status disagree](061-D3_version_and_status.md) · low · XS
 
-- [ ] [070-T7 Dependabot misses the shared setup action and opens floor-only PRs](070-T7_dependabot_config.md) · low · XS
+- [x] [070-T7 Dependabot misses the shared setup action and opens floor-only PRs](070-T7_dependabot_config.md) · low · XS
 
 ### Wave 6: safety, then search
 
