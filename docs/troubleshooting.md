@@ -69,6 +69,14 @@ A project database was migrated by a build that ran Alembic concurrently. See
 [storage.md](storage.md#migrations-are-serialised-process-wide) for why, and for how to
 recover the affected `project.db`.
 
+## A chronicle fails to open with "Can't locate revision"
+
+The chronicle's `project.db` was opened by a newer version of Chronicler, which upgraded
+it, and this version does not know that schema. It happens with shared chronicles: a
+synced folder, a zip from someone else, or a linked database. Update Chronicler to the
+version that last opened it. Nothing is lost; the file is intact. See
+[storage.md](storage.md#opening-a-chronicle-upgrades-it).
+
 ## Recording says the extra is missing after installing it
 
 `sounddevice` is a binding to PortAudio, not a bundle of it. The wheel is 32 kB of pure
