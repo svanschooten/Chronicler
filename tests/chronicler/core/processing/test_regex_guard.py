@@ -9,7 +9,6 @@ from chronicler.core.processing.regex_guard import (
     MAX_PATTERN_LENGTH,
     PatternTimeoutError,
     UnsafePatternError,
-    assert_safe_pattern,
     compile_pattern,
     run_timed,
 )
@@ -32,17 +31,17 @@ CATASTROPHIC_PATTERNS = [r"(a+)+$", r"(x+x+)+y", r"^(a|a?)+$", r"(.*a){20}"]
 
 @pytest.mark.parametrize("pattern", ORDINARY_PATTERNS + CATASTROPHIC_PATTERNS)
 def test_accepts_every_pattern_that_is_valid_and_short(pattern):
-    assert_safe_pattern(pattern)
+    compile_pattern(pattern)
 
 
 def test_rejects_overlong_pattern():
     with pytest.raises(UnsafePatternError):
-        assert_safe_pattern("a" * (MAX_PATTERN_LENGTH + 1))
+        compile_pattern("a" * (MAX_PATTERN_LENGTH + 1))
 
 
 def test_rejects_invalid_regex_syntax():
     with pytest.raises(UnsafePatternError):
-        assert_safe_pattern("(unclosed")
+        compile_pattern("(unclosed")
 
 
 @pytest.mark.parametrize("pattern", CATASTROPHIC_PATTERNS)

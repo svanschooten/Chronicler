@@ -41,10 +41,6 @@ def compile_pattern(pattern: str, flags: int = 0) -> "regex.Pattern[str]":
         raise UnsafePatternError(f"Invalid regular expression: {error}") from error
 
 
-def assert_safe_pattern(pattern: str) -> None:
-    compile_pattern(pattern)
-
-
 @contextmanager
 def time_limit(seconds: float | None = None) -> Iterator[None]:
     """
