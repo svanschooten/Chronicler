@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sqlite3
+from functools import cache
 from pathlib import Path
 from uuid import UUID
 
@@ -38,13 +39,17 @@ class NewerSchemaError(RuntimeError):
         )
 
 
-def _known_revisions(chain: str) -> set[str]:
+@cache
+def _known_revisions(chain: str) -> frozenset[str]:
+    """The revisions this version ships, read once: they cannot change while it runs."""
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
     cfg = Config()
     cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / chain))
-    return {script.revision for script in ScriptDirectory.from_config(cfg).walk_revisions()}
+    return frozenset(
+        script.revision for script in ScriptDirectory.from_config(cfg).walk_revisions()
+    )
 
 
 def _refuse_newer_schema(connection: Connection, chain: str) -> None:
