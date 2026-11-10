@@ -79,6 +79,26 @@ Migration files under `migrations/*/versions/` are excluded from ruff. Alembic's
 `script.py.mako` boilerplate style (`Union`/`Sequence`, unsorted imports) is what every
 future autogenerate produces, so excluding beats hand-fixing each one.
 
+## One owner for opening a chronicle's database
+
+`DatabaseManager` alone knows where a chronicle's `project.db` is. Callers pass a
+chronicle id, never a path:
+
+- `project_path_for(id)` is the linked path, or `None` for the workspace default. It reads
+  the chronicle's row through a short archive session of its own and remembers the answer
+  until `close_project`. A caller's open session is never touched, which is what used to
+  fail when `TranscriptView.did_mount` started three panel loads on one shared session: a
+  session that is still opening its connection refuses a second concurrent operation.
+- `transaction(id)` is the way to write. It commits when the block ends and rolls back if
+  it raises, so a handler holds no `try / commit / except: rollback` and never calls
+  `commit` itself.
+- `get_project_session(id)` is for reads. The caller closes it with `async with`.
+- Both take `must_exist`, which turns an unknown chronicle into `LookupError` and a linked
+  file that has moved into `FileNotFoundError`, instead of silently creating a new empty
+  database. Handlers without an archive connection to check against skip it.
+
+The cache assumes a chronicle's `project_path` does not change after it is created.
+
 ## Migrations are serialised process-wide
 
 `DatabaseManager` holds one `asyncio.Lock` guarding **every** migration it runs — the
