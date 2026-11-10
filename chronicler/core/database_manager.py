@@ -4,9 +4,6 @@ import sqlite3
 from pathlib import Path
 from uuid import UUID
 
-from alembic import command
-from alembic.config import Config
-from alembic.script import ScriptDirectory
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -29,6 +26,10 @@ def _run_alembic_upgrade(connection: Connection, chain: str) -> None:
     connection - see chronicler/migrations/<chain>/env.py, which picks this connection up
     via config.attributes["connection"] instead of opening its own engine.
     """
+    # Imported here: thin clients never migrate, and alembic costs about half a second.
+    from alembic import command
+    from alembic.config import Config
+
     logger.info(f"Running {chain} migrations")
     cfg = Config()
     cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / chain))
@@ -58,6 +59,9 @@ class LinkRefusedError(ValueError):
 
 
 def _known_project_revisions() -> set[str]:
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
     cfg = Config()
     cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
     return {script.revision for script in ScriptDirectory.from_config(cfg).walk_revisions()}

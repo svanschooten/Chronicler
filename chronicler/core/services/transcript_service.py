@@ -20,7 +20,6 @@ from chronicler.core.services.bundle import (
     safe_folder_name,
 )
 from chronicler.core.services.html import format_html
-from chronicler.core.services.pdf import format_pdf
 from chronicler.core.services.srt import format_srt
 from chronicler.core.sqlite import (
     SQLiteAudioSourceRepository,
@@ -205,6 +204,9 @@ class TranscriptService:
         Laid out on a worker thread: a long transcript takes seconds, and the event loop
         this runs on is also the desktop UI's, or the server's for every other client.
         """
+        # Imported here: fpdf costs about half a second and few sessions export a PDF.
+        from chronicler.core.services.pdf import format_pdf
+
         lines = await self.get_transcript(chronicle_id)
         return await asyncio.to_thread(format_pdf, lines, chronicle_title)
 
