@@ -4,7 +4,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, TypeVar
 
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,8 @@ INTERRUPTED = "Interrupted before finishing"
 """The error recorded on a task found WORKING when the worker starts."""
 
 Cleanup = Callable[[Task], Awaitable[None]]
+
+T = TypeVar("T")
 
 
 class WorkerManager:
@@ -183,25 +185,30 @@ class WorkerManager:
         Writes a task's final status, retrying while the database is locked, so a lock at
         the wrong moment does not throw away a finished result.
         """
-        deadline = time.monotonic() + self.status_write_timeout
-        delay = 0.1
         try:
-            while True:
-                try:
-                    async with self._tasks() as tasks:
-                        await write(tasks)
-                    return
-                except OperationalError:
-                    if time.monotonic() + delay > deadline:
-                        raise
-                    logger.warning(f"Database busy, retrying a task status write in {delay:.1f}s")
-                    await asyncio.sleep(delay)
-                    delay = min(delay * 2, 2.0)
+            await self._retry_while_busy(write, "a task status write")
         except asyncio.CancelledError:
             # Stopped while waiting out a lock. The work itself is finished, so one last
             # try is worth making: without it, recovery runs the task again next start.
             await self._last_try(write)
             raise
+
+    async def _retry_while_busy(
+        self, operation: Callable[[SQLiteTaskRepository], Awaitable[T]], what: str
+    ) -> T:
+        """Runs `operation` on a fresh session, retrying while locked, for a bounded time."""
+        deadline = time.monotonic() + self.status_write_timeout
+        delay = 0.1
+        while True:
+            try:
+                async with self._tasks() as tasks:
+                    return await operation(tasks)
+            except OperationalError:
+                if time.monotonic() + delay > deadline:
+                    raise
+                logger.warning(f"Database busy, retrying {what} in {delay:.1f}s")
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 2.0)
 
     async def _last_try(self, write: Callable[[SQLiteTaskRepository], Awaitable[None]]) -> None:
         try:
@@ -217,8 +224,13 @@ class WorkerManager:
     async def _publish_completion(self, task_id: uuid.UUID) -> None:
         if not self.event_bus:
             return
-        async with self._tasks() as tasks:
-            task = await tasks.get_by_id(task_id)
+        try:
+            task = await self._retry_while_busy(
+                lambda tasks: tasks.get_by_id(task_id), "reading a finished task"
+            )
+        except OperationalError:
+            logger.warning(f"Task {task_id}: could not read it back to announce it", exc_info=True)
+            return
         if task is None or task.status == TaskStatus.PENDING:
             return
         await self.event_bus.publish(
