@@ -61,31 +61,25 @@ class SummarizeHandler(HandlerBase):
 
         await update_progress(80)
 
-        session = await self.project_session(chronicle_id)
-        async with session:
+        async with self.transaction(chronicle_id) as session:
             repo = SQLiteSummaryRepository(session)
-            try:
-                number = await repo.next_number()
-                summary = await repo.add(
-                    Summary(
-                        number=number,
-                        title=data.get("title") or f"Summary {number}",
-                        content=draft.content,
-                        model=draft.model,
-                        provider=self.settings.llm.provider,
-                        prompt_template=settings.recap_prompt,
-                        language=settings.language,
-                        created_at=datetime.now(),
-                        chunk_count=draft.chunk_count,
-                        prompt_tokens=draft.prompt_tokens,
-                        completion_tokens=draft.completion_tokens,
-                    )
+            number = await repo.next_number()
+            summary = await repo.add(
+                Summary(
+                    number=number,
+                    title=data.get("title") or f"Summary {number}",
+                    content=draft.content,
+                    model=draft.model,
+                    provider=self.settings.llm.provider,
+                    prompt_template=settings.recap_prompt,
+                    language=settings.language,
+                    created_at=datetime.now(),
+                    chunk_count=draft.chunk_count,
+                    prompt_tokens=draft.prompt_tokens,
+                    completion_tokens=draft.completion_tokens,
                 )
-                await session.commit()
-                total = await repo.count()
-            except Exception:
-                await session.rollback()
-                raise
+            )
+            total = await repo.count()
 
         await self._mark_summarized(chronicle_id, total)
         await update_progress(100)

@@ -92,48 +92,42 @@ class TranscribeHandler(NormalizeHandler):
 
         await update_progress(70)
 
-        session = await self.project_session(chronicle_id)
-        async with session:
+        async with self.transaction(chronicle_id) as session:
             repo = SQLiteTranscriptRepository(session)
             sources = SQLiteAudioSourceRepository(session)
-            try:
-                speaker = await repo.get_or_create_speaker(speaker_name)
-                source = await sources.register(
-                    resolved_path.name,
-                    content_hash=fingerprint_file(resolved_path),
-                    size_bytes=resolved_path.stat().st_size,
-                )
-                offset = source.start_offset
-                if "start_offset" in data:
-                    offset = float(data["start_offset"])
-                    await sources.set_start_offset(resolved_path.name, offset)
+            speaker = await repo.get_or_create_speaker(speaker_name)
+            source = await sources.register(
+                resolved_path.name,
+                content_hash=fingerprint_file(resolved_path),
+                size_bytes=resolved_path.stat().st_size,
+            )
+            offset = source.start_offset
+            if "start_offset" in data:
+                offset = float(data["start_offset"])
+                await sources.set_start_offset(resolved_path.name, offset)
 
-                # Only this track's lines. A line with no source_id came from an import, or
-                # from before tracks were recorded and could not be attributed, and is kept.
-                await repo.delete_track_lines(source.id)
+            # Only this track's lines. A line with no source_id came from an import, or
+            # from before tracks were recorded and could not be attributed, and is kept.
+            await repo.delete_track_lines(source.id)
 
-                await self.attach_speakers(repo, lines)
-                for line in lines:
-                    line.source_id = source.id
-                    line.start_time += offset
-                    line.end_time += offset
-                await repo.add_lines(lines)
+            await self.attach_speakers(repo, lines)
+            for line in lines:
+                line.source_id = source.id
+                line.start_time += offset
+                line.end_time += offset
+            await repo.add_lines(lines)
 
-                await sources.set_speaker(resolved_path.name, speaker.id)
-                await sources.mark_transcribed(
-                    resolved_path.name,
-                    content_hash=fingerprint_file(resolved_path),
-                    language=parameters.language,
-                    model=parameters.model_size,
-                )
-                await session.commit()
+            await sources.set_speaker(resolved_path.name, speaker.id)
+            await sources.mark_transcribed(
+                resolved_path.name,
+                content_hash=fingerprint_file(resolved_path),
+                language=parameters.language,
+                model=parameters.model_size,
+            )
 
-                all_lines = await repo.get_lines()
-                final_speaker_count = len({line.speaker_name for line in all_lines})
-                total_duration_seconds = max((line.end_time for line in all_lines), default=0.0)
-            except Exception:
-                await session.rollback()
-                raise
+            all_lines = await repo.get_lines()
+            final_speaker_count = len({line.speaker_name for line in all_lines})
+            total_duration_seconds = max((line.end_time for line in all_lines), default=0.0)
 
         await self.tag_as_transcript(chronicle_id)
         await self._backfill_metadata(chronicle_id, final_speaker_count, total_duration_seconds)
@@ -150,8 +144,7 @@ class TranscribeHandler(NormalizeHandler):
 
     async def _register_source(self, chronicle_id: UUID, filename: str, speaker_name: str) -> None:
         path = (await self.sources_root_for(chronicle_id)) / filename
-        session = await self.project_session(chronicle_id)
-        async with session:
+        async with self.transaction(chronicle_id) as session:
             sources = SQLiteAudioSourceRepository(session)
             await sources.register(
                 filename,
@@ -159,18 +152,15 @@ class TranscribeHandler(NormalizeHandler):
                 size_bytes=path.stat().st_size if path.exists() else None,
             )
             await sources.mark_transcribing(filename)
-            await session.commit()
 
     async def _record_failure(self, chronicle_id: UUID, filename: str, error: str) -> None:
-        session = await self.project_session(chronicle_id)
-        async with session:
-            try:
+        try:
+            async with self.transaction(chronicle_id) as session:
                 await SQLiteAudioSourceRepository(session).mark_transcription_failed(
                     filename, error
                 )
-                await session.commit()
-            except KeyError:
-                await session.rollback()
+        except KeyError:
+            pass  # the source row is gone, so there is nothing to mark
 
     @staticmethod
     async def _transcribe(path: str, speaker_name: str, parameters: TranscriptionParameters):

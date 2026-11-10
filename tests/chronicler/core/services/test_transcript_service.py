@@ -10,6 +10,7 @@ from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
     SQLiteTranscriptRepository,
 )
+from tests.projects import register_chronicle
 
 
 async def _noop_progress(_progress: int) -> None:
@@ -64,9 +65,7 @@ async def test_get_transcript_uses_custom_project_path_for_linked_chronicles(tmp
                 Chronicle(title="Linked", project_path=str(external_db))
             )
 
-        external_session = await db_manager.get_project_session(
-            str(chronicle.id), custom_path=external_db
-        )
+        external_session = await db_manager.get_project_session(str(chronicle.id))
         async with external_session:
             repo = SQLiteTranscriptRepository(external_session)
             speaker = await repo.get_or_create_speaker("Bob")
@@ -130,6 +129,7 @@ async def test_delete_track_lines_removes_only_that_tracks_lines(tmp_path):
     """
     db_manager = DatabaseManager(tmp_path)
     try:
+        await register_chronicle(db_manager, "chronicle-1")
         session = await db_manager.get_project_session("chronicle-1")
         async with session:
             repo = SQLiteTranscriptRepository(session)
@@ -264,4 +264,33 @@ async def test_a_linked_chronicle_whose_file_moved_raises_instead_of_starting_a_
         assert not gone.parent.exists()
     finally:
         await session.close()
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_three_panel_loads_at_once_all_succeed_on_an_empty_connection_pool(tmp_path):
+    """
+    `TranscriptView.did_mount` fires these together. Each used to look the chronicle up on
+    the caller's one archive session, and a session that is still opening its connection
+    refuses a second concurrent operation.
+    """
+    import asyncio
+
+    db_manager, session, _ = await _service(tmp_path)
+    chronicle = await SQLiteChronicleRepository(session).create(Chronicle(title="Panels"))
+    await session.close()
+    try:
+        for _ in range(20):
+            # An empty pool and a session that has not connected yet, as in the view: the
+            # first load is still opening the connection when the other two arrive.
+            await db_manager.archive_engine.dispose()
+            async with db_manager.get_archive_session() as shared:
+                service = TranscriptService(db_manager, SQLiteChronicleRepository(shared))
+                results = await asyncio.gather(
+                    service.get_transcript(chronicle.id),
+                    service.list_audio_sources(chronicle.id),
+                    service.list_summaries(chronicle.id),
+                )
+            assert results == [[], [], []]
+    finally:
         await db_manager.close_all()

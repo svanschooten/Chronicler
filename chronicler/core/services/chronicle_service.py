@@ -102,20 +102,28 @@ class ChronicleService:
         return await self.repository.update(chronicle)
 
     async def update_chronicle(self, chronicle: Chronicle) -> Chronicle:
-        return await self.repository.update(chronicle)
+        """
+        Saves a chronicle's fields. When `project_path` changes, `DatabaseManager` forgets
+        the old location, so the next open reads the new file instead of the cached one.
+        """
+        before = await self.repository.get_by_id(chronicle.id)
+        updated = await self.repository.update(chronicle)
+        if before is not None and before.project_path != updated.project_path:
+            await self.db_manager.close_project(str(chronicle.id))
+        return updated
 
     async def delete_chronicle(self, chronicle_id: UUID) -> None:
         """
         Removes a chronicle, and the files behind it unless they are only linked.
 
-        The project database is closed first. Its connection outlives the session that
-        used it - the pool keeps one open - and Windows will not delete a file anything
-        still holds open, which is why this failed there and not on Linux. See
-        docs/storage.md.
+        The row goes first, then the project database is closed, then the files. In that
+        order a task looking the chronicle up concurrently cannot cache the row again after
+        `close_project` forgot it. No session may be open on the file when it is removed.
+        See docs/storage.md.
         """
         chronicle = await self.repository.get_by_id(chronicle_id)
-        await self.db_manager.close_project(str(chronicle_id))
         await self.repository.delete(chronicle_id)
+        await self.db_manager.close_project(str(chronicle_id))
 
         if chronicle and chronicle.project_path:
             logger.info(
@@ -140,10 +148,8 @@ class ChronicleService:
         *original* name, so a later "which track is this?" listing (see
         TranscriptService.list_audio_sources) is actually readable.
         """
-        chronicle = await self.repository.get_by_id(chronicle_id)
         sources_dir = self.db_manager.ensure_sources_path_for(
-            str(chronicle_id),
-            Path(chronicle.project_path) if chronicle and chronicle.project_path else None,
+            str(chronicle_id), await self.db_manager.project_path_for(chronicle_id)
         )
         resolved_source = confine_to_directory(
             file_path, self.db_manager.get_imports_path(), "the imports directory"

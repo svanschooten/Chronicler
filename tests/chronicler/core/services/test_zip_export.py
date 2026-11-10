@@ -16,6 +16,7 @@ from chronicler.core.project_database import DBSpeaker
 from chronicler.core.services.bundle import BundleManifest, format_bundle
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
+from tests.projects import register_chronicle
 
 
 def _manifest(**overrides) -> BundleManifest:
@@ -168,7 +169,8 @@ class TestExportZip:
         assert unpacked.exists()
 
         reopened = DatabaseManager(tmp_path / "reader")
-        async with await reopened.get_project_session("read", custom_path=unpacked) as session:
+        await register_chronicle(reopened, "read", unpacked)
+        async with await reopened.get_project_session("read") as session:
             names = (await session.execute(select(DBSpeaker.name))).scalars().all()
         assert list(names) == ["Maldal"]
 

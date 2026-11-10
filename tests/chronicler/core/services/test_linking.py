@@ -14,6 +14,7 @@ from chronicler.core.sqlite import (
     SQLiteKnownSpeakerRepository,
     SQLiteTranscriptRepository,
 )
+from tests.projects import forget_chronicle, register_chronicle
 
 
 async def _workspace(tmp_path):
@@ -33,7 +34,8 @@ async def _external_project(db_manager, tmp_path, lines):
     directory.mkdir(parents=True)
     project_db = directory / "project.db"
 
-    session = await db_manager.get_project_session("staging", custom_path=project_db)
+    await register_chronicle(db_manager, "staging", project_db)
+    session = await db_manager.get_project_session("staging")
     async with session:
         repo = SQLiteTranscriptRepository(session)
         for line in lines:
@@ -41,6 +43,7 @@ async def _external_project(db_manager, tmp_path, lines):
             line.speaker_id = speaker.id
         await repo.add_lines(lines)
         await session.commit()
+    await forget_chronicle(db_manager, "staging")
     return project_db
 
 
@@ -154,7 +157,8 @@ class TestHydration:
             directory = tmp_path / "elsewhere" / "chronicles"
             directory.mkdir(parents=True)
             project_db = directory / "session-14.db"
-            inner = await db_manager.get_project_session("staging2", custom_path=project_db)
+            await register_chronicle(db_manager, "staging2", project_db)
+            inner = await db_manager.get_project_session("staging2")
             await inner.close()
 
             chronicle = await service.link_external_chronicle(str(project_db))
