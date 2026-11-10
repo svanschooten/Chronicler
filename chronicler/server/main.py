@@ -12,7 +12,7 @@ from chronicler.core.local_container import register_local_repositories
 from chronicler.core.rpc import RpcServer
 from chronicler.core.worker_wiring import build_worker_manager
 from chronicler.core.workers import WorkerManager
-from chronicler.core.workspace_lock import WorkspaceLockedError
+from chronicler.core.workspace_lock import WorkspaceLockedError, WorkspaceLockUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
 
     try:
         asyncio.run(db_manager.init_archive())
-    except WorkspaceLockedError as error:
+    except (WorkspaceLockedError, WorkspaceLockUnavailableError) as error:
         # A plain message and exit status 1, not a traceback. See docs/storage.md.
         raise SystemExit(str(error)) from error
 

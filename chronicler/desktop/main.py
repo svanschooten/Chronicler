@@ -7,7 +7,7 @@ import flet as ft
 
 from chronicler.core.config import get_settings
 from chronicler.core.handshake import HandshakeError, perform_handshake
-from chronicler.core.workspace_lock import WorkspaceLockedError
+from chronicler.core.workspace_lock import WorkspaceLockedError, WorkspaceLockUnavailableError
 from chronicler.desktop.app import DesktopApp
 from chronicler.desktop.runtime import DesktopRuntime, build_runtime
 from chronicler.desktop.theme import theme_colors
@@ -93,6 +93,15 @@ async def start(page: ft.Page) -> None:
             settings.dark_mode,
             t("startup.workspace_locked", path=error.workspace_path),
             hint=t("startup.workspace_locked_hint"),
+        )
+        return
+    except WorkspaceLockUnavailableError as error:
+        logger.error(str(error))
+        show_startup_failure(
+            page,
+            settings.dark_mode,
+            t("startup.workspace_lock_unavailable", path=error.workspace_path, reason=error.reason),
+            hint=t("startup.workspace_lock_unavailable_hint"),
         )
         return
 

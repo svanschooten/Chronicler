@@ -1,12 +1,13 @@
 """Desktop startup: setup wizard, then services, then the app - all in one Flet session."""
 
+import errno
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from chronicler.core.config import Settings
 from chronicler.core.handshake import HandshakeError
-from chronicler.core.workspace_lock import WorkspaceLockedError
+from chronicler.core.workspace_lock import WorkspaceLockedError, WorkspaceLockUnavailableError
 from chronicler.desktop import main as desktop_main
 from tests.chronicler.desktop.controls import text_values
 
@@ -166,6 +167,29 @@ async def test_a_workspace_open_elsewhere_is_reported_on_screen(
     shown = text_values(page.add.call_args[0][0])
     assert any(str(tmp_path) in text and "already open" in text for text in shown)
     assert any("Close the other one" in text for text in shown)
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_that_cannot_be_locked_is_reported_on_screen(
+    page, isolated_config, monkeypatch, tmp_path
+):
+    """Ticket 068: a filesystem without lock support is not "already open" anywhere."""
+    settings = Settings(workspace_path=tmp_path, mode="desktop:full_stack")
+    app = stub_app(monkeypatch)
+    db_manager = AsyncMock()
+    db_manager.init_archive.side_effect = WorkspaceLockUnavailableError(
+        tmp_path, OSError(errno.ENOLCK, "No locks available")
+    )
+    monkeypatch.setattr(desktop_main, "get_settings", lambda: settings)
+    monkeypatch.setattr(desktop_main, "build_runtime", lambda s: runtime_for(s, db_manager))
+
+    await desktop_main.start(page)
+
+    app.return_value.main.assert_not_awaited()
+    shown = text_values(page.add.call_args[0][0])
+    assert any(str(tmp_path) in text and "No locks available" in text for text in shown)
+    assert any("local disk" in text for text in shown)
+    assert not any("already open" in text for text in shown)
 
 
 def test_show_startup_failure_names_the_reason(page):

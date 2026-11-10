@@ -415,5 +415,13 @@ MESSAGES = {
             "oder Server geöffnet."
         ),
         "workspace_locked_hint": "Schließe diesen zuerst und starte Chronicler dann erneut.",
+        "workspace_lock_unavailable": (
+            "Chronicler konnte den Arbeitsbereich unter {path} nicht sperren: {reason}."
+        ),
+        "workspace_lock_unavailable_hint": (
+            "Das Dateisystem unterstützt möglicherweise keine Dateisperren, wie manche "
+            "Netzwerk- und FUSE-Einbindungen. Wähle einen Arbeitsbereich auf einem lokalen "
+            "Laufwerk und starte Chronicler dann erneut."
+        ),
     },
 }

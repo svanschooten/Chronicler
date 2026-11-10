@@ -397,5 +397,12 @@ MESSAGES = {
             "The workspace at {path} is already open in another Chronicler window or server."
         ),
         "workspace_locked_hint": "Close the other one, then start Chronicler again.",
+        "workspace_lock_unavailable": (
+            "Chronicler could not lock the workspace at {path}: {reason}."
+        ),
+        "workspace_lock_unavailable_hint": (
+            "The filesystem it is on may not support file locks, as some network and FUSE "
+            "mounts do not. Choose a workspace on a local disk, then start Chronicler again."
+        ),
     },
 }
