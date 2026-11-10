@@ -102,7 +102,15 @@ class ChronicleService:
         return await self.repository.update(chronicle)
 
     async def update_chronicle(self, chronicle: Chronicle) -> Chronicle:
-        return await self.repository.update(chronicle)
+        """
+        Saves a chronicle's fields. When `project_path` changes, `DatabaseManager` forgets
+        the old location, so the next open reads the new file instead of the cached one.
+        """
+        before = await self.repository.get_by_id(chronicle.id)
+        updated = await self.repository.update(chronicle)
+        if before is not None and before.project_path != updated.project_path:
+            await self.db_manager.close_project(str(chronicle.id))
+        return updated
 
     async def delete_chronicle(self, chronicle_id: UUID) -> None:
         """
