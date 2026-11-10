@@ -213,72 +213,124 @@ async def test_maybe_start_worker_manager_wires_event_bus(desktop_app, monkeypat
     assert desktop_app.worker_manager.event_bus is desktop_app.event_bus
 
 
-@pytest.mark.asyncio
-async def test_on_task_completed_refreshes_transcript_view_for_matching_chronicle(desktop_app):
+def _completed(chronicle_id=None, task_type=None):
+    from uuid import uuid4
+
     from chronicler.core.models import TaskStatus, TaskType
     from chronicler.core.task_events import TaskCompletedEvent
 
+    return TaskCompletedEvent(
+        task_id=uuid4(),
+        task_type=task_type or TaskType.TRANSCRIBE,
+        status=TaskStatus.DONE,
+        chronicle_id=chronicle_id,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("view_type", [ViewType.ARCHIVE, ViewType.TASKS])
+async def test_on_task_completed_refreshes_the_list_view_in_place(desktop_app, view_type):
+    """Ticket 027: a new view would reset the search text and detach an open form."""
+    desktop_app.state.navigate_to(view_type)
+    await desktop_app.update_view()
+    view = desktop_app.content_area.content
+    view.refresh = AsyncMock()
+
+    await desktop_app._on_task_completed(_completed())
+
+    assert desktop_app.content_area.content is view
+    view.refresh.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_on_task_completed_keeps_the_view_session(desktop_app):
+    desktop_app.state.navigate_to(ViewType.ARCHIVE)
+    await desktop_app.update_view()
+    scope = desktop_app._view_scope
+    desktop_app.content_area.content.refresh = AsyncMock()
+
+    await desktop_app._on_task_completed(_completed())
+
+    assert desktop_app._view_scope is scope
+
+
+@pytest.mark.asyncio
+async def test_on_task_completed_refreshes_transcript_view_for_matching_chronicle(desktop_app):
     chronicle = await _create_chronicle(desktop_app, "Recording")
 
     desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
     await desktop_app.update_view()
-    view_before = desktop_app.content_area.content
+    view = desktop_app.content_area.content
+    view.refresh = AsyncMock()
 
-    await desktop_app._on_task_completed(
-        TaskCompletedEvent(
-            task_id=chronicle.id,
-            task_type=TaskType.TRANSCRIBE,
-            status=TaskStatus.DONE,
-            chronicle_id=chronicle.id,
-        )
-    )
+    await desktop_app._on_task_completed(_completed(chronicle.id))
 
-    assert desktop_app.content_area.content is not view_before
+    assert desktop_app.content_area.content is view
+    view.refresh.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_finished_task_shows_in_the_open_transcript_view(desktop_app):
+    """The view on screen picks up what the task changed, without being replaced."""
+    from chronicler.core.services.chronicle_service import ChronicleService
+
+    chronicle = await _create_chronicle(desktop_app, "Recording")
+    desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
+    await desktop_app.update_view()
+    view = desktop_app.content_area.content
+    view.editing = True
+    view.sources.load = AsyncMock()
+    view.summaries.load = AsyncMock()
+
+    scope = desktop_app.resolver.create_scope()
+    stored = await scope.resolve(ChronicleService).get_chronicle(chronicle.id)
+    stored.duration = "1h 0m"
+    await scope.resolve(ChronicleService).update_chronicle(stored)
+    await scope.resolve(AsyncSession).close()
+
+    await desktop_app._on_task_completed(_completed(chronicle.id))
+
+    assert desktop_app.content_area.content is view
+    assert view.editing is True
+    assert "1h 0m" in view.subtitle_text.value
+    assert desktop_app.state.selected_chronicle.duration == "1h 0m"
 
 
 @pytest.mark.asyncio
 async def test_on_task_completed_skips_refresh_for_a_different_chronicle(desktop_app):
     from uuid import uuid4
 
-    from chronicler.core.models import TaskStatus, TaskType
-    from chronicler.core.task_events import TaskCompletedEvent
-
     chronicle = await _create_chronicle(desktop_app, "Recording")
 
     desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
     await desktop_app.update_view()
-    view_before = desktop_app.content_area.content
+    view = desktop_app.content_area.content
+    view.refresh = AsyncMock()
 
-    await desktop_app._on_task_completed(
-        TaskCompletedEvent(
-            task_id=uuid4(),
-            task_type=TaskType.TRANSCRIBE,
-            status=TaskStatus.DONE,
-            chronicle_id=uuid4(),
-        )
-    )
+    await desktop_app._on_task_completed(_completed(uuid4()))
 
-    assert desktop_app.content_area.content is view_before
+    assert desktop_app.content_area.content is view
+    view.refresh.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_on_task_completed_skips_settings_view(desktop_app):
-    from uuid import uuid4
-
-    from chronicler.core.models import TaskStatus, TaskType
-    from chronicler.core.task_events import TaskCompletedEvent
+    from chronicler.core.models import TaskType
 
     desktop_app.state.navigate_to(ViewType.SETTINGS)
     await desktop_app.update_view()
     view_before = desktop_app.content_area.content
 
-    await desktop_app._on_task_completed(
-        TaskCompletedEvent(
-            task_id=uuid4(), task_type=TaskType.IMPORT, status=TaskStatus.DONE, chronicle_id=None
-        )
-    )
+    await desktop_app._on_task_completed(_completed(task_type=TaskType.IMPORT))
 
     assert desktop_app.content_area.content is view_before
+
+
+@pytest.mark.asyncio
+async def test_on_task_completed_before_any_view_is_shown_does_nothing(desktop_app):
+    await desktop_app._on_task_completed(_completed())
+
+    assert desktop_app.current_view is None
 
 
 @pytest.mark.asyncio

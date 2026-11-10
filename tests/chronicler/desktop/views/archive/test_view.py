@@ -246,3 +246,22 @@ class TestActionsDelegateToTheSharedOperations:
 
         assert set(view.operations.forms) <= set(view._forms)
         assert view.create_form in view._forms
+
+
+@pytest.mark.asyncio
+async def test_refresh_keeps_the_search_and_the_open_form():
+    """Ticket 027: a task finishing must not reset the query or touch an open form."""
+    chronicle_service = AsyncMock()
+    chronicle_service.search_chronicles.return_value = [Chronicle(title="Budget review")]
+    view = ArchiveView(chronicle_service, AsyncMock(), AsyncMock(), AsyncMock(), AsyncMock())
+    view.update = MagicMock()
+    view.query = "budget"
+    form = view.create_form
+
+    await view.refresh()
+
+    chronicle_service.search_chronicles.assert_awaited_once_with("budget")
+    chronicle_service.list_chronicles.assert_not_awaited()
+    assert view.query == "budget"
+    assert view.create_form is form
+    assert len(view.chronicle_list.controls) == 1
