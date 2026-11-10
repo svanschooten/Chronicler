@@ -187,7 +187,7 @@ Stop a pattern from freezing the app, make opening chronicles cheap, settle what
 
 - [ ] [033-L1 Three panel loads share one database session](033-L1_shared_session_panel_loads.md) · low · closed by 032
 
-- [ ] [074-A2 A chronicle opened by a newer Chronicler cannot be opened by an older one](074-A2_schema_versions_for_shared_chronicles.md) · medium · S
+- [x] [074-A2 A chronicle opened by a newer Chronicler cannot be opened by an older one](074-A2_schema_versions_for_shared_chronicles.md) · medium · S
 
 - [ ] [063-F1 Full-text transcript search](063-F1_full_text_search.md) · medium · L · after 031, 032, 020, 074
 
