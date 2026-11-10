@@ -108,10 +108,8 @@ class ChronicleService:
         """
         Removes a chronicle, and the files behind it unless they are only linked.
 
-        The project database is closed first. Its connection outlives the session that
-        used it - the pool keeps one open - and Windows will not delete a file anything
-        still holds open, which is why this failed there and not on Linux. See
-        docs/storage.md.
+        The project database is closed first, so a file recreated at the same path is
+        migrated again; no session may be open on it. See docs/storage.md.
         """
         chronicle = await self.repository.get_by_id(chronicle_id)
         await self.db_manager.close_project(str(chronicle_id))
@@ -140,10 +138,8 @@ class ChronicleService:
         *original* name, so a later "which track is this?" listing (see
         TranscriptService.list_audio_sources) is actually readable.
         """
-        chronicle = await self.repository.get_by_id(chronicle_id)
         sources_dir = self.db_manager.ensure_sources_path_for(
-            str(chronicle_id),
-            Path(chronicle.project_path) if chronicle and chronicle.project_path else None,
+            str(chronicle_id), await self.db_manager.project_path_for(chronicle_id)
         )
         resolved_source = confine_to_directory(
             file_path, self.db_manager.get_imports_path(), "the imports directory"

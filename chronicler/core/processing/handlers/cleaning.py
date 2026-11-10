@@ -48,26 +48,20 @@ class CleanHandler(HandlerBase):
         snapshot = await self.snapshot_before_clean(chronicle_id)
         logger.info(f"Saved the transcript before cleaning to {snapshot}")
 
-        session = await self.project_session(chronicle_id)
-        async with session:
+        async with self.transaction(chronicle_id) as session:
             repo = SQLiteTranscriptRepository(session)
-            try:
-                lines = await repo.get_lines()
-                logger.info(f"Cleaning {len(lines)} lines for chronicle {chronicle_id}")
+            lines = await repo.get_lines()
+            logger.info(f"Cleaning {len(lines)} lines for chronicle {chronicle_id}")
 
-                await update_progress(30)
+            await update_progress(30)
 
-                cleaned_lines = TranscriptCleaner(cleaning).clean(lines)
-                logger.info(f"Cleaned down to {len(cleaned_lines)} lines")
+            cleaned_lines = TranscriptCleaner(cleaning).clean(lines)
+            logger.info(f"Cleaned down to {len(cleaned_lines)} lines")
 
-                await update_progress(70)
+            await update_progress(70)
 
-                await repo.delete_all_lines()
-                await repo.add_lines(cleaned_lines)
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
+            await repo.delete_all_lines()
+            await repo.add_lines(cleaned_lines)
 
         speakers_count = len({line.speaker_name for line in cleaned_lines})
         await self.backfill_speakers_count(chronicle_id, speakers_count)
@@ -87,13 +81,11 @@ class CleanHandler(HandlerBase):
         The name carries the chronicle id because linked chronicles whose databases share
         a folder share its `snapshots/`, and pruning one must not touch another's copies.
         """
-        project_path = await self.project_path_for(chronicle_id)
+        project_path = await self.db_manager.project_path_for(chronicle_id)
         directory = self.db_manager.snapshots_path_for(str(chronicle_id), project_path)
         prefix = f"before-clean-{chronicle_id}-"
         destination = directory / f"{prefix}{datetime.now():%Y%m%d-%H%M%S-%f}.db"
-        await self.db_manager.snapshot_project(
-            str(chronicle_id), destination, custom_path=project_path
-        )
+        await self.db_manager.snapshot_project(chronicle_id, destination)
 
         snapshots = sorted(directory.glob(f"{prefix}*.db"))
         oldest, rest = snapshots[:1], snapshots[1:]

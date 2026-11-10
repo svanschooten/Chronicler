@@ -1,9 +1,12 @@
 import asyncio
 import logging
 import sqlite3
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -13,7 +16,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
-from chronicler.core.models import Chronicle
+from chronicler.core.database import DBChronicle
 from chronicler.core.workspace_lock import WorkspaceLock
 
 logger = logging.getLogger(__name__)
@@ -97,20 +100,6 @@ def check_linkable_project(path: Path) -> None:
         raise LinkRefusedError(path, "newer_version")
 
 
-def ensure_project_available(chronicle: Chronicle | None, chronicle_id: UUID) -> None:
-    """
-    Reading a chronicle must never create its database. Raises LookupError when there is
-    no such chronicle, and FileNotFoundError when a linked one's project.db has moved -
-    opening it anyway would silently start a new empty database at the old path.
-    """
-    if chronicle is None:
-        raise LookupError(f"No chronicle {chronicle_id}")
-    if chronicle.project_path and not Path(chronicle.project_path).is_file():
-        raise FileNotFoundError(
-            f"The linked project database {chronicle.project_path} was not found"
-        )
-
-
 class DatabaseManager:
     def __init__(self, workspace_path: Path, busy_timeout: float = 5.0):
         """
@@ -127,6 +116,7 @@ class DatabaseManager:
             self.archive_engine, expire_on_commit=False
         )
         self._project_engines: dict[str, AsyncEngine] = {}
+        self._linked_paths: dict[str, Path | None] = {}
         self._migration_lock = asyncio.Lock()
         self._workspace_lock = WorkspaceLock(workspace_path)
 
@@ -191,11 +181,61 @@ class DatabaseManager:
     def get_archive_session(self) -> AsyncSession:
         return self.archive_session_factory()
 
+    async def project_path_for(
+        self, chronicle_id: UUID | str, must_exist: bool = False
+    ) -> Path | None:
+        """
+        A linked chronicle's project.db, wherever the user put it; None is the default
+        location in the workspace. Read through a short archive session of its own, so a
+        caller's open session is never touched, and remembered until `close_project`.
+
+        With `must_exist`, a chronicle with no row raises LookupError (deleted while a task
+        waited, or never there), and a linked one whose file has moved FileNotFoundError:
+        reading must not create a new empty database. Without it an unknown chronicle is
+        simply not linked.
+        """
+        key = str(chronicle_id)
+        if key not in self._linked_paths:
+            async with self.get_archive_session() as session:
+                row = (
+                    await session.execute(
+                        select(DBChronicle.project_path).where(DBChronicle.id == key)
+                    )
+                ).first()
+            if row is None:
+                if must_exist:
+                    raise LookupError(f"No chronicle {key}")
+                return None
+            self._linked_paths[key] = Path(row[0]) if row[0] else None
+        path = self._linked_paths[key]
+        if must_exist and path and not path.is_file():
+            raise FileNotFoundError(f"The linked project database {path} was not found")
+        return path
+
     async def get_project_session(
-        self, chronicle_id: str, custom_path: Path | None = None
+        self, chronicle_id: UUID | str, must_exist: bool = False
     ) -> AsyncSession:
-        engine = await self._project_engine(chronicle_id, custom_path)
+        """
+        A session on one chronicle's project database. The caller closes it, with
+        `async with`. Prefer `transaction` to write; `must_exist` is described on
+        `project_path_for`.
+        """
+        key = str(chronicle_id)
+        path = await self.project_path_for(key, must_exist=must_exist)
+        engine = await self._project_engine(key, path)
         return async_sessionmaker(engine, expire_on_commit=False)()
+
+    @asynccontextmanager
+    async def transaction(
+        self, chronicle_id: UUID | str, must_exist: bool = True
+    ) -> AsyncIterator[AsyncSession]:
+        """
+        One project database transaction: committed when the block ends, rolled back if it
+        raises. Do not call `commit` inside it.
+        """
+        session = await self.get_project_session(chronicle_id, must_exist=must_exist)
+        async with session, session.begin():
+            yield session
 
     async def _project_engine(
         self, chronicle_id: str, custom_path: Path | None = None
@@ -240,9 +280,7 @@ class DatabaseManager:
             self._project_engines[chronicle_id] = engine
             return engine
 
-    async def snapshot_project(
-        self, chronicle_id: str, destination: Path, custom_path: Path | None = None
-    ) -> Path:
+    async def snapshot_project(self, chronicle_id: UUID | str, destination: Path) -> Path:
         """
         Writes a consistent copy of one chronicle's database to `destination`.
 
@@ -255,7 +293,8 @@ class DatabaseManager:
             raise FileExistsError(f"Refusing to overwrite {destination}")
 
         destination.parent.mkdir(parents=True, exist_ok=True)
-        engine = await self._project_engine(chronicle_id, custom_path)
+        key = str(chronicle_id)
+        engine = await self._project_engine(key, await self.project_path_for(key))
         literal = str(destination).replace("'", "''")
         async with engine.begin() as conn:
             await conn.exec_driver_sql(f"VACUUM INTO '{literal}'")
@@ -263,12 +302,15 @@ class DatabaseManager:
 
     async def close_project(self, chronicle_id: str) -> None:
         """
-        Releases one chronicle's project database, so its file can be moved or removed.
+        Releases one chronicle's project database, so its file can be moved or removed, and
+        forgets where it was linked, so a chronicle recreated under the same id is looked up
+        afresh.
 
         Forgets that the database was migrated, so a file recreated at the same path is
         migrated again. Connections are not pooled, so none outlive their session; a session
         still open when this runs keeps its file open until it closes. See docs/storage.md.
         """
+        self._linked_paths.pop(chronicle_id, None)
         engine = self._project_engines.pop(chronicle_id, None)
         if engine is not None:
             await engine.dispose()
@@ -278,4 +320,5 @@ class DatabaseManager:
         for engine in self._project_engines.values():
             await engine.dispose()
         self._project_engines.clear()
+        self._linked_paths.clear()
         self._workspace_lock.release()

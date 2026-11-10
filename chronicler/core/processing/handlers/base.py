@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.config import Settings, get_settings
-from chronicler.core.database_manager import DatabaseManager, ensure_project_available
+from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.file_staging import confine_to_directory
 from chronicler.core.models import Task, TranscriptLine
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
@@ -64,36 +64,27 @@ class HandlerBase:
         """Rejects a `file_path` that resolves outside `root`."""
         return confine_to_directory(file_path, root, description)
 
-    async def project_path_for(self, chronicle_id: UUID) -> Path | None:
-        """
-        A linked chronicle's project.db lives wherever the user put it, outside the
-        workspace - None means the default in-workspace location.
-        """
-        if not self.archive_sessions:
-            return None
-        async with self.chronicles() as chronicles:
-            chronicle = await chronicles.get_by_id(chronicle_id)
-        if chronicle and chronicle.project_path:
-            return Path(chronicle.project_path)
-        return None
-
     async def sources_root_for(self, chronicle_id: UUID) -> Path:
         """Where this chronicle's audio lives, linked or not - see docs/audio-sources.md."""
         return self.db_manager.sources_path_for(
-            str(chronicle_id), await self.project_path_for(chronicle_id)
+            str(chronicle_id), await self.db_manager.project_path_for(chronicle_id)
         )
 
-    async def project_session(self, chronicle_id: UUID):
+    def transaction(self, chronicle_id: UUID):
         """
-        Raises LookupError for a chronicle with no row (deleted while the task waited) and
+        A project database transaction - see `DatabaseManager.transaction`. Raises
+        LookupError for a chronicle with no row (deleted while the task waited) and
         FileNotFoundError for a linked one whose file has moved, instead of creating a
         new empty database. Without `archive_sessions` there is no row to check.
         """
-        if self.archive_sessions:
-            async with self.chronicles() as chronicles:
-                ensure_project_available(await chronicles.get_by_id(chronicle_id), chronicle_id)
+        return self.db_manager.transaction(
+            chronicle_id, must_exist=self.archive_sessions is not None
+        )
+
+    async def project_session(self, chronicle_id: UUID):
+        """A read-only project session, checked like `transaction`. The caller closes it."""
         return await self.db_manager.get_project_session(
-            str(chronicle_id), custom_path=await self.project_path_for(chronicle_id)
+            chronicle_id, must_exist=self.archive_sessions is not None
         )
 
     @staticmethod
