@@ -37,7 +37,6 @@ NORMALIZED_SUFFIX = ".normalized.wav"
 @service(
     expose=[
         "assign_speaker",
-        "chronicle_directory",
         "delete_summary",
         "export_html",
         "export_pdf",
@@ -262,7 +261,10 @@ class TranscriptService:
         return await self.export_plaintext(chronicle_id, include_timestamps=include_timestamps)
 
     async def chronicle_directory(self, chronicle_id: UUID) -> str:
-        """Where this chronicle's files live, so a client can offer to open it."""
+        """
+        Where this chronicle's files live, so a local client can offer to open it. Not
+        exposed over RPC: on a thin client the path would be the server's.
+        """
         chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
         if chronicle and chronicle.project_path:
             return str(Path(chronicle.project_path).parent)

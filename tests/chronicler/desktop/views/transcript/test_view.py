@@ -555,3 +555,13 @@ class TestRefresh:
 
         view.on_back.assert_awaited_once()
         view.sources.load.assert_not_awaited()
+
+
+def test_open_folder_is_hidden_for_a_thin_client(make_view):
+    from chronicler.core.config import Mode, Settings
+
+    full = make_view(settings=Settings(mode=Mode.FULL_STACK))
+    thin = make_view(settings=Settings(server_url="http://server:8000", workspace_path=None))
+
+    assert len(full._folder_buttons()) == 1
+    assert thin._folder_buttons() == []

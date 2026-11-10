@@ -5,7 +5,7 @@ from pathlib import Path
 import flet as ft
 
 from chronicler.core import extras
-from chronicler.core.config import Settings, get_settings
+from chronicler.core.config import Mode, Settings, get_settings
 from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.task_service import TaskService
@@ -232,6 +232,19 @@ class TranscriptView(ft.Column):
         """
         return self.capabilities is None or "summarize" in self.capabilities()
 
+    def _folder_buttons(self) -> list[ft.IconButton]:
+        """The folder is on the server's disk for a thin client, so there is nothing to open."""
+        if self.settings.desktop_mode is Mode.THIN_CLIENT:
+            return []
+        return [
+            ft.IconButton(
+                icon=ft.Icons.FOLDER_OPEN,
+                icon_color=self.colors.muted,
+                tooltip=t("summaries.open_folder"),
+                on_click=self.open_folder_clicked,
+            )
+        ]
+
     def _header(self) -> ft.Row:
         return ft.Row(
             controls=[
@@ -250,12 +263,7 @@ class TranscriptView(ft.Column):
                     tooltip=t("summaries.read_transcript"),
                     on_click=self.read_transcript_clicked,
                 ),
-                ft.IconButton(
-                    icon=ft.Icons.FOLDER_OPEN,
-                    icon_color=self.colors.muted,
-                    tooltip=t("summaries.open_folder"),
-                    on_click=self.open_folder_clicked,
-                ),
+                *self._folder_buttons(),
                 self.exporter.menu(),
             ],
         )
