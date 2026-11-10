@@ -30,7 +30,7 @@ class TestRegistry:
 
     def test_an_extra_knows_the_modules_its_guard_imports(self):
         assert extras.get_extra("recording").modules == ("sounddevice",)
-        assert extras.get_extra("normalization").modules == ("av",)
+        assert extras.get_extra("normalization").modules == ("av", "numpy")
         assert extras.get_extra("transcription").modules == ("faster_whisper",)
         assert extras.get_extra("llm").modules == ("llama_cpp",)
         assert extras.get_extra("server").modules == ("fastapi", "uvicorn", "python_multipart")

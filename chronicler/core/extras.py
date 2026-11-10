@@ -53,10 +53,10 @@ EXTRAS: dict[str, Extra] = {
     ),
     "normalization": Extra(
         name="normalization",
-        modules=("av",),
-        requirements=("av>=12,<19",),
+        modules=("av", "numpy"),
+        requirements=("av>=12,<19", "numpy>=1.26,<3"),
         purpose="Normalizing the loudness of an audio source",
-        download_mb=35,
+        download_mb=50,
     ),
     "llm": Extra(
         name="llm",
