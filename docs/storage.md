@@ -212,6 +212,18 @@ directory leaves one directory behind rather than loose files. That folder name 
 what `link_external_chronicle` reads the title from, so an unpacked archive comes back
 named correctly even if nothing reads the manifest.
 
+### Off the event loop
+
+`export_zip` runs `format_bundle` through `asyncio.to_thread`. Compressing 200 MB of
+audio takes seconds, and the event loop it would otherwise block is the desktop UI's, or
+the server's for every client.
+
+`format_bundle` writes the zip straight into the `bytearray` it returns. Writing to a
+`BytesIO` and copying it out at the end was one step that held the GIL for long enough
+to stall the loop from the worker thread. Because that target cannot seek, each entry's
+sizes follow its data (a data descriptor) instead of sitting in its local header. Every
+common zip reader handles that.
+
 ### Why a manifest
 
 Title, description, kind and tags live in the **workspace** database, not the
