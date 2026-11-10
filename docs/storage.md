@@ -41,7 +41,9 @@ suggesting a local disk. Only "held by someone else" counts as locked: `EWOULDBL
 Before locking, the workspace is probed by creating and removing a file in it (`os.access`
 ignores ACLs on Windows). A folder that cannot be created or written to raises
 `WorkspaceNotWritableError`, reported the same two ways with the OS reason.
-`Settings.is_workspace_valid` uses the same probe.
+`Settings.is_workspace_valid` uses the same probe, and both setup wizards call it to refuse
+an existing folder that cannot be written to. A folder that does not exist yet is
+accepted there and created at startup.
 
 `init_archive` releases the lock again if anything after taking it fails, including
 creating `imports/`. After `close_all` the manager no longer holds the lock, but its

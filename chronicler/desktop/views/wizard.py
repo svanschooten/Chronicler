@@ -290,7 +290,15 @@ class FletSetupWizard:
                 field.error = t("wizard.workspace.required")
                 self.page.update()
                 return
-            self.workspace_path = Path(chosen).expanduser().resolve()
+            candidate = Path(chosen).expanduser().resolve()
+            # A folder that does not exist yet is created at startup. One that exists has to
+            # take a file now, or startup would refuse it with no way back to this screen.
+            probe = self.settings.model_copy(update={"workspace_path": candidate})
+            if candidate.exists() and not probe.is_workspace_valid():
+                field.error = t("wizard.workspace.not_writable")
+                self.page.update()
+                return
+            self.workspace_path = candidate
             self.show_api_key()
 
         self._render(

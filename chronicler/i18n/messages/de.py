@@ -381,6 +381,9 @@ MESSAGES = {
             "browse": "Durchsuchen",
             "picker_title": "Arbeitsordner wählen",
             "required": "Wähle einen Ordner, um fortzufahren.",
+            "not_writable": (
+                "Chronicler kann nicht in diesen Ordner schreiben. Wähle einen anderen."
+            ),
         },
         "api_key": {
             "title": "API-Schlüssel",

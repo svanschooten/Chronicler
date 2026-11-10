@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
+from chronicler.core import workspace_lock
 from chronicler.core.config import Mode, Settings
 from chronicler.core.wizard import ConfigWizard
 
@@ -218,3 +219,28 @@ def test_wizard_desktop_choice_skips_satisfied_steps(tmp_path):
 
             mock_ws.assert_called_once()
             mock_api.assert_not_called()
+
+
+def test_workspace_step_reprompts_on_an_unwritable_folder(tmp_path, monkeypatch):
+    from chronicler.core.wizard import WorkspaceStep
+
+    unwritable = tmp_path / "locked"
+    unwritable.mkdir()
+    writable = tmp_path / "fine"
+
+    def probe(path):
+        if path == unwritable:
+            raise PermissionError("denied")
+        workspace_lock.probe_writable(path)
+
+    monkeypatch.setattr("chronicler.core.config.probe_writable", probe)
+    settings = Settings()
+
+    with (
+        patch("builtins.input", side_effect=[str(unwritable), str(writable)]),
+        patch("sys.stdout", new=StringIO()) as fake_out,
+    ):
+        WorkspaceStep().run(settings)
+
+    assert settings.workspace_path == writable
+    assert f"cannot write to {unwritable}" in fake_out.getvalue()

@@ -371,6 +371,7 @@ MESSAGES = {
             "browse": "Bladeren",
             "picker_title": "Kies een werkmap",
             "required": "Kies een map om door te gaan.",
+            "not_writable": "Chronicler kan niet naar deze map schrijven. Kies een andere.",
         },
         "api_key": {
             "title": "API-sleutel",

@@ -159,3 +159,13 @@ def test_the_probe_leaves_nothing_behind(tmp_path):
     workspace_lock.probe_writable(tmp_path)
 
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_workspace_path_that_is_a_file_says_it_is_not_a_folder(tmp_path):
+    a_file = tmp_path / "file"
+    a_file.write_text("x")
+
+    with pytest.raises(WorkspaceNotWritableError) as raised:
+        WorkspaceLock(a_file).acquire()
+
+    assert raised.value.reason == os.strerror(errno.ENOTDIR)

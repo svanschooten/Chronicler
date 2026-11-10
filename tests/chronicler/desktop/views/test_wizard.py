@@ -398,3 +398,27 @@ def test_a_relative_workspace_path_is_resolved(wizard, monkeypatch, tmp_path):
     click(wizard, t("wizard.next"))
 
     assert wizard.workspace_path == Path(tmp_path / "workspace").resolve()
+
+
+def test_an_existing_workspace_that_cannot_be_written_is_refused(wizard, monkeypatch, tmp_path):
+    def refuse(*args, **kwargs):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr("chronicler.core.workspace_lock.tempfile.TemporaryFile", refuse)
+    pick_language(wizard)
+    choose(wizard, t("wizard.mode.full_stack"))
+    field = fields(wizard)[0]
+    field.value = str(tmp_path)
+    click(wizard, t("wizard.next"))
+
+    assert field.error == t("wizard.workspace.not_writable")
+    assert wizard.workspace_path is None
+
+
+def test_a_workspace_that_does_not_exist_yet_is_accepted(wizard, tmp_path):
+    pick_language(wizard)
+    choose(wizard, t("wizard.mode.full_stack"))
+    fields(wizard)[0].value = str(tmp_path / "new")
+    click(wizard, t("wizard.next"))
+
+    assert wizard.workspace_path == tmp_path / "new"
