@@ -60,6 +60,31 @@ a background task finishes would still show stale values. A chronicle deleted ou
 under the view sends the user back rather than rendering a transcript for something
 that no longer exists.
 
+## A finished task refreshes the view in place
+
+`DesktopApp._on_task_completed` keeps the view that is on screen and calls its
+`refresh()`. It does not go through `update_view()`, which builds a new view: that reset
+the search text and the hide-completed box, detached an open form, and dropped the
+transcript out of edit mode along with whatever was being typed.
+
+| View | `refresh()` re-reads |
+| ---- | -------------------- |
+| `ArchiveView` | The chronicle list, with the current query |
+| `TasksView` | The task list, with the current query and filter |
+| `TranscriptView` | The chronicle (header and detail panel), sources and summaries. The transcript too, unless it is being edited |
+| `SettingsView` | Nothing; it has no `refresh()` |
+
+`TranscriptView` copies the stored chronicle's fields onto the `Chronicle` object it
+already holds, because its panels and `state.selected_chronicle` share that object. A
+chronicle that no longer exists sends the user back to the archive.
+
+The refresh runs on the worker's task and reads through the view's scope, so it can
+overlap a load the user started in the same view. Ticket 032 gives project database
+access one owner; until then the views do not serialise their loads.
+
+Theme and language changes still rebuild the view, as do the transcript view's own
+actions when not editing.
+
 ## Dialogs
 
 Flet has no built-in "show a modal and await what the user picked", so
