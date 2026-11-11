@@ -81,7 +81,9 @@ alone, so search still upgrades and searches them. See
 first, and then, under *Said in*, those found by what was said, each with its matching
 lines. A chronicle already listed by its title is not listed again there. The transcript
 search starts once typing pauses for 0.3 seconds, so typing a word does not open every
-chronicle once per letter. A result that arrives after the query has changed is dropped.
+chronicle once per letter. The title search waits for a 0.25 second pause too
+(`SEARCH_DEBOUNCE`), and any result, from either search, that arrives after a newer load
+started is dropped, so a slow answer for "a" cannot replace the one for "abc".
 
 When a task finishes, the list is read again with the search kept. The transcript search
 then waits two seconds, so tasks finishing one after another start one search between
