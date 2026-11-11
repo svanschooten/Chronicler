@@ -166,6 +166,16 @@ MESSAGES = {
         "subtitle": "Scribes arbeiten weiter, auch wenn du Chronicler schliesst.",
         "search": "Aufgaben suchen",
         "hide_completed": "Erledigte Aufgaben ausblenden",
+        "clear_finished": "Abgeschlossene Aufgaben löschen",
+        "clear_title": "Abgeschlossene Aufgaben löschen?",
+        "clear_message": (
+            "Erledigte Aufgaben werden aus der Liste entfernt. "
+            "Fehlgeschlagene behalten ihren Fehler, außer du löschst sie auch."
+        ),
+        "clear_cancel": "Abbrechen",
+        "clear_done_only": "Nur erledigte",
+        "clear_with_failed": "Erledigte und fehlgeschlagene",
+        "cleared": "{count} Aufgaben gelöscht",
         "retry_tooltip": "Diese Aufgabe erneut ausfuehren",
         "empty": "Noch keine Aufgaben.",
         "queued_normalize": "Normalisierung von '{name}' eingereiht",

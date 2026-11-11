@@ -162,6 +162,16 @@ MESSAGES = {
         "subtitle": "Scribes werken door, ook als je Chronicler sluit.",
         "search": "Taken zoeken",
         "hide_completed": "Voltooide taken verbergen",
+        "clear_finished": "Afgeronde taken wissen",
+        "clear_title": "Afgeronde taken wissen?",
+        "clear_message": (
+            "Voltooide taken verdwijnen uit de lijst. "
+            "Mislukte taken houden hun fout, tenzij je ze ook wist."
+        ),
+        "clear_cancel": "Annuleren",
+        "clear_done_only": "Alleen voltooide",
+        "clear_with_failed": "Voltooide en mislukte",
+        "cleared": "{count} taken gewist",
         "retry_tooltip": "Deze taak opnieuw uitvoeren",
         "empty": "Nog geen taken.",
         "queued_normalize": "Normalisatie van '{name}' in de wachtrij",
