@@ -564,3 +564,88 @@ def test_open_folder_is_hidden_for_a_thin_client(make_view):
 
     assert len(full._folder_buttons()) == 1
     assert thin._folder_buttons() == []
+
+
+def _line(text, start=0.0, speaker="Alice"):
+    return TranscriptLine(speaker_name=speaker, text=text, start_time=start, end_time=start + 1)
+
+
+def _typed(value):
+    return MagicMock(control=MagicMock(value=value))
+
+
+class TestFindInTranscript:
+    """Ticket 063: find shows only the lines that contain what was typed."""
+
+    @pytest.mark.asyncio
+    async def test_typing_shows_only_the_matching_lines(self, make_view):
+        service = AsyncMock()
+        service.get_transcript.return_value = [_line("hello"), _line("the budget", 5)]
+        service.search_transcript.return_value = [_line("the budget", 5)]
+        view = make_view(transcript_service=service)
+        await view.load_transcript()
+
+        await view.find_changed(_typed("budg"))
+
+        service.search_transcript.assert_awaited_once_with(view.chronicle.id, "budg")
+        assert "Alice: the budget" in view.transcript_text.value
+        assert "hello" not in view.transcript_text.value
+        assert "1" in view.transcript_text.value.splitlines()[0]
+
+    @pytest.mark.asyncio
+    async def test_clearing_the_field_shows_everything_again(self, make_view):
+        service = AsyncMock()
+        service.get_transcript.return_value = [_line("hello"), _line("budget", 5)]
+        service.search_transcript.return_value = [_line("budget", 5)]
+        view = make_view(transcript_service=service)
+        await view.load_transcript()
+        await view.find_changed(_typed("budget"))
+
+        await view.find_changed(_typed(""))
+
+        assert view.transcript_text.value == "Alice: hello\nAlice: budget"
+
+    @pytest.mark.asyncio
+    async def test_no_match_says_so(self, make_view):
+        service = AsyncMock()
+        service.get_transcript.return_value = [_line("hello")]
+        service.search_transcript.return_value = []
+        view = make_view(transcript_service=service)
+        await view.load_transcript()
+
+        await view.find_changed(_typed("zebra"))
+
+        assert "zebra" in view.transcript_text.value
+
+    @pytest.mark.asyncio
+    async def test_a_reload_keeps_the_find_applied(self, make_view):
+        service = AsyncMock()
+        service.get_transcript.return_value = [_line("hello"), _line("budget", 5)]
+        service.search_transcript.return_value = [_line("budget", 5)]
+        view = make_view(transcript_service=service)
+        await view.load_transcript()
+        await view.find_changed(_typed("budget"))
+
+        await view.load_transcript()
+
+        assert service.search_transcript.await_count == 2
+        assert "hello" not in view.transcript_text.value
+
+    @pytest.mark.asyncio
+    async def test_an_older_result_arriving_late_is_dropped(self, make_view):
+        service = AsyncMock()
+        service.get_transcript.return_value = [_line("budget"), _line("bud", 5)]
+        view = make_view(transcript_service=service)
+        await view.load_transcript()
+
+        async def search(chronicle_id, query):
+            if query == "bud":
+                await view.find_changed(_typed("budget"))
+                return [_line("bud", 5)]
+            return [_line("budget")]
+
+        service.search_transcript.side_effect = search
+        await view.find_changed(_typed("bud"))
+
+        assert "Alice: budget" in view.transcript_text.value
+        assert "Alice: bud\n" not in view.transcript_text.value + "\n"

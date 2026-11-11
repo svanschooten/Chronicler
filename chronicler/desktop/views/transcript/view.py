@@ -104,6 +104,11 @@ class TranscriptView(ft.Column):
         self.show_timestamps = False
         self.editing = False
         self.transcript_lines: list[TranscriptLine] = []
+        # Find-in-transcript: the typed text, and the lines it matched (None when not
+        # searching). A result arriving for an older query is dropped.
+        self.find_query = ""
+        self.found_lines: list[TranscriptLine] | None = None
+        self._find_generation = 0
 
         self.transcript_text = ft.Text(
             t("transcript.loading"),
@@ -294,6 +299,14 @@ class TranscriptView(ft.Column):
             value=False,
             on_change=self.show_timestamps_changed,
         )
+        self.find_field = ft.TextField(
+            hint_text=t("transcript.find"),
+            prefix_icon=ft.Icons.SEARCH,
+            dense=True,
+            width=220,
+            color=self.colors.text,
+            on_change=self.find_changed,
+        )
         return self._panel(
             ft.Column(
                 expand=True,
@@ -308,7 +321,11 @@ class TranscriptView(ft.Column):
                             ),
                             ft.Row(
                                 tight=True,
-                                controls=[self.timestamps_checkbox, self.edit_toggle],
+                                controls=[
+                                    self.find_field,
+                                    self.timestamps_checkbox,
+                                    self.edit_toggle,
+                                ],
                             ),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -328,9 +345,10 @@ class TranscriptView(ft.Column):
         self.edit_toggle.icon = ft.Icons.DONE if self.editing else ft.Icons.EDIT
         self.edit_toggle.tooltip = t("transcript.done") if self.editing else t("transcript.edit")
         self.timestamps_checkbox.disabled = self.editing
+        self.find_field.disabled = self.editing
         self.transcript_body.content = self.editor if self.editing else self.transcript_area
 
-        _repaint(self.edit_toggle, self.timestamps_checkbox, self.transcript_body)
+        _repaint(self.edit_toggle, self.timestamps_checkbox, self.find_field, self.transcript_body)
 
         if self.editing:
             await self.editor.load()
@@ -562,6 +580,39 @@ class TranscriptView(ft.Column):
             self.transcript_text.value = describe_transcript_error(e)
             _repaint(self.transcript_text, self.transcript_area)
             return
+        if self.find_query.strip():
+            await self._find()
+        else:
+            self._render_transcript()
+
+    async def find_changed(self, e) -> None:
+        self.find_query = e.control.value or ""
+        await self._find()
+
+    async def _find(self) -> None:
+        """
+        Shows only the lines containing every word typed, through the chronicle's search
+        index, or the whole transcript again once the field is cleared. See
+        docs/search.md.
+        """
+        self._find_generation += 1
+        generation = self._find_generation
+        if not self.find_query.strip():
+            self.found_lines = None
+            self._render_transcript()
+            return
+        try:
+            found = await self.transcript_service.search_transcript(
+                self.chronicle.id, self.find_query
+            )
+        except Exception as error:
+            logger.exception("Could not search the transcript")
+            if generation == self._find_generation:
+                self.show_snackbar(describe_transcript_error(error))
+            return
+        if generation != self._find_generation:
+            return
+        self.found_lines = found
         self._render_transcript()
 
     def _render_transcript(self):
@@ -578,13 +629,24 @@ class TranscriptView(ft.Column):
         _repaint(self.transcript_text, self.transcript_area)
 
     def _transcript_body(self) -> str:
+        if self.found_lines is not None:
+            return self._found_body(self.found_lines)
         if not self.transcript_lines:
             return t("transcript.empty")
+        return self._format_lines(self.transcript_lines, self.show_timestamps)
 
+    def _found_body(self, lines: list[TranscriptLine]) -> str:
+        if not lines:
+            return t("transcript.no_matches", query=self.find_query)
+        heading = t("transcript.match_count", count=len(lines))
+        return f"{heading}\n\n{self._format_lines(lines, self.show_timestamps)}"
+
+    @staticmethod
+    def _format_lines(lines: list[TranscriptLine], show_timestamps: bool) -> str:
         formatted_lines = []
-        for line in self.transcript_lines:
+        for line in lines:
             speaker = line.speaker_name or t("common.unknown")
-            if self.show_timestamps:
+            if show_timestamps:
                 formatted_lines.append(
                     f"[{format_timestamp(line.start_time)}] {speaker}: {line.text}"
                 )

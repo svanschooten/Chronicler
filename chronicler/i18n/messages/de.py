@@ -187,6 +187,9 @@ MESSAGES = {
         "loading": "Transkript wird geladen...",
         "empty": "Transkript ist leer oder wird noch verarbeitet.",
         "error": "Fehler beim Laden des Transkripts: {error}",
+        "find": "Im Transkript suchen",
+        "no_matches": "Keine Zeile enthält '{query}'.",
+        "match_count": "{count} passende Zeilen",
         "newer_version": (
             "Diese Chronik wurde mit einer neueren Chronicler-Version erstellt. Aktualisiere "
             "Chronicler, um sie zu öffnen. Die Datei wurde nicht geändert."
