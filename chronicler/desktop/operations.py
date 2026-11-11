@@ -192,7 +192,9 @@ class ChronicleOperations:
             self.show_snackbar(t("actions.gone"))
             return True
 
-        await self.chronicle_service.update_chronicle(self.edit_form.apply_to(chronicle))
+        changes = self.edit_form.changes()
+        if changes:
+            await self.chronicle_service.edit_chronicle(chronicle.id, **changes)
         self.show_snackbar(t("actions.updated"))
         return True
 
