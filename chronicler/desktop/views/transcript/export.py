@@ -80,17 +80,17 @@ class TranscriptExporter:
             )
         except Exception as ex:
             logger.error(f"Error exporting transcript: {ex}")
-            self.show_snackbar(f"Error exporting transcript: {ex}")
+            self.show_snackbar(t("export.failed", error=ex))
             return
 
         picker = self._file_picker()
         if picker is None:
-            self.show_snackbar("File picker not available.")
+            self.show_snackbar(t("export.no_picker"))
             return
 
         suffix = "_timestamps" if include_timestamps else ""
         destination = await picker.save_file(
-            dialog_title="Export transcript as plain text",
+            dialog_title=t("export.plaintext_title"),
             file_name=f"{self.default_file_stem()}{suffix}.txt",
             file_type=ft.FilePickerFileType.CUSTOM,
             allowed_extensions=["txt"],
@@ -103,10 +103,10 @@ class TranscriptExporter:
                 f.write(content)
         except OSError as ex:
             logger.error(f"Error writing export file: {ex}")
-            self.show_snackbar(f"Error writing export file: {ex}")
+            self.show_snackbar(t("export.write_failed", error=ex))
             return
 
-        self.show_snackbar(f"Exported to {destination}")
+        self.show_snackbar(t("export.saved", path=destination))
 
     async def export_srt_clicked(self, e):
         try:

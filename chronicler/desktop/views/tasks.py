@@ -126,7 +126,7 @@ class TasksView(ft.Column):
 
     async def retry_clicked(self, e):
         await self.task_service.retry_task(e.control.data)
-        self.show_snackbar("Task re-queued")
+        self.show_snackbar(t("tasks.requeued"))
         await self.load_tasks()
 
     async def load_tasks(self):
@@ -147,7 +147,7 @@ class TasksView(ft.Column):
             self.update()
         except Exception as e:
             logger.exception(f"Error loading tasks: {e}")
-            self.task_list.controls = [ft.Text(f"Error loading tasks: {e}")]
+            self.task_list.controls = [ft.Text(t("tasks.load_failed", error=e))]
             self.update()
 
     async def _load_chronicle_titles(self) -> None:
@@ -169,22 +169,22 @@ class TasksView(ft.Column):
         scoped.
         """
         title = self.chronicle_titles.get(task.chronicle_id) if task.chronicle_id else None
-        status = f"Status: {task.status.value}"
+        status = t("tasks.status", status=task.status.value)
         return f"{title} · {status}" if title else status
 
     @staticmethod
     def _timestamps(task: Task) -> str:
-        parts = [f"Created {task.created_at.strftime(TIMESTAMP_FORMAT)}"]
+        parts = [t("tasks.created", time=task.created_at.strftime(TIMESTAMP_FORMAT))]
         if (
             task.status == TaskStatus.PENDING
             and task.not_before
             and task.not_before > datetime.now()
         ):
-            parts.append(f"Next attempt {task.not_before.strftime(TIMESTAMP_FORMAT)}")
+            parts.append(t("tasks.next_attempt", time=task.not_before.strftime(TIMESTAMP_FORMAT)))
         if task.claimed_at:
-            parts.append(f"Started {task.claimed_at.strftime(TIMESTAMP_FORMAT)}")
+            parts.append(t("tasks.started", time=task.claimed_at.strftime(TIMESTAMP_FORMAT)))
         if task.status in (TaskStatus.DONE, TaskStatus.FAILED):
-            parts.append(f"Completed {task.updated_at.strftime(TIMESTAMP_FORMAT)}")
+            parts.append(t("tasks.completed", time=task.updated_at.strftime(TIMESTAMP_FORMAT)))
         return " · ".join(parts)
 
     def create_task_row(self, task: Task) -> ft.Container:
