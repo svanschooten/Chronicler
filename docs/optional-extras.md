@@ -81,7 +81,7 @@ feature is not included in this build, which is the whole truth there.
 
 ## Server mode checks before it asks anything
 
-`chronicler server` calls `require_server_extra()` before the console wizard, and the
+`chronicler server` calls `require_server_extra()` before server setup, and the
 `chronicler-server` entry point calls it too. Without the extra it exits with
 `missing_message("server")`: the pip command from a checkout, the component command in the
 embedded runtime. Before, it went through the wizard and then failed on `import uvicorn`

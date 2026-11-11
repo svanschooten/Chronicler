@@ -1,10 +1,23 @@
+"""
+Setup helpers shared by the desktop wizard, and the server's one-step setup.
+
+The desktop collects its configuration on screen (`desktop.views.wizard`). The server has no
+screen, and often no terminal either - under Docker or systemd - so it is configured with
+flags or environment variables, and asks only when a terminal is attached.
+"""
+
 import secrets
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from chronicler.core.config import Mode, Settings
 
 LANGUAGE_NAMES = {"en": "English", "nl": "Nederlands", "de": "Deutsch"}
+
+
+class SetupError(RuntimeError):
+    """The server cannot be set up with what it was given; the message says what to pass."""
 
 
 def supported_languages() -> list[str]:
@@ -20,176 +33,58 @@ def default_workspace_path() -> Path:
     return (base / "Chronicler").expanduser()
 
 
-class WizardStep:
-    def run(self, settings: Settings) -> None:
-        """Run this wizard step."""
-        pass
+def configure_server(
+    settings: Settings,
+    workspace: str | None = None,
+    api_key: str | None = None,
+    interactive: bool | None = None,
+    ask: Callable[[str], str] = input,
+    say: Callable[[str], None] = print,
+) -> bool:
+    """
+    Fills in what `chronicler server` needs - a workspace and an API key - and saves it.
 
-    def is_satisfied(self, settings: Settings) -> bool:
-        """Check if this step is already satisfied."""
-        return False
+    `workspace` and `api_key` (the command-line flags) win over what is already configured.
+    A missing workspace is asked for when `interactive` (default: stdin is a terminal), and
+    otherwise raises SetupError naming the flag. A missing key is generated and printed
+    once. Returns whether anything was saved.
+    """
+    if interactive is None:
+        interactive = sys.stdin is not None and sys.stdin.isatty()
 
+    changed = False
+    if workspace:
+        settings.workspace_path = Path(workspace).expanduser().resolve()
+        changed = True
+    if settings.workspace_path is None:
+        if not interactive:
+            raise SetupError(
+                "No workspace is configured. Pass --workspace PATH, or set "
+                "CHRONICLER_WORKSPACE_PATH."
+            )
+        default = default_workspace_path()
+        typed = ask(f"Workspace folder [{default}]: ").strip()
+        settings.workspace_path = Path(typed).expanduser().resolve() if typed else default
+        changed = True
 
-class LanguageStep(WizardStep):
-    def run(self, settings: Settings) -> None:
-        languages = supported_languages()
-        print("\n--- Language ---")
-        print("Used for Chronicler's own labels and as the default for new transcriptions.")
-        for index, code in enumerate(languages, start=1):
-            print(f"{index}. {LANGUAGE_NAMES[code]} ({code})")
+    path = settings.workspace_path
+    # A folder that does not exist yet is created at startup; one that exists has to take a
+    # file now, or startup would refuse it.
+    if path.exists() and not settings.is_workspace_valid():
+        raise SetupError(f"Chronicler cannot write to {path}. Choose a different --workspace.")
 
-        while True:
-            choice = input(f"\nSelect a language (1-{len(languages)}) [1]: ").strip() or "1"
-            if choice.isdigit() and 1 <= int(choice) <= len(languages):
-                code = languages[int(choice) - 1]
-                settings.ui.locale = code
-                settings.transcription.language = code
-                return
-            print(f"Invalid choice. Please select 1-{len(languages)}.")
-
-    def is_satisfied(self, settings: Settings) -> bool:
-        return settings.transcription.language is not None
-
-
-class WorkspaceStep(WizardStep):
-    def run(self, settings: Settings) -> None:
-        default_path = default_workspace_path()
-        print("\n--- Local Workspace Setup ---")
-        print("Chronicler stores your chronicles, recordings and databases in a workspace.")
-        while True:
-            path_str = input(f"Enter workspace path [{default_path}]: ").strip()
-            candidate = Path(path_str).expanduser().resolve() if path_str else default_path
-            # A folder that does not exist yet is created at startup; one that exists has to
-            # take a file now, or startup would refuse it.
-            probe = settings.model_copy(update={"workspace_path": candidate})
-            if candidate.exists() and not probe.is_workspace_valid():
-                print(f"Chronicler cannot write to {candidate}. Choose a different folder.")
-                continue
-            settings.workspace_path = candidate
-            return
-
-    def is_satisfied(self, settings: Settings) -> bool:
-        return settings.workspace_path is not None
-
-
-class ApiKeyStep(WizardStep):
-    def run(self, settings: Settings) -> None:
-        print("\n--- API Key Setup ---")
-        print("An API key is required for remote access from a Thin Client.")
-        print("1. Generate a new API key (recommended)")
-        print("2. Enter an existing API key")
-        print("3. Skip (no remote access)")
-
-        while True:
-            choice = input("\nSelect an option (1-3) [1]: ").strip() or "1"
-            if choice == "1":
-                settings.api_key = secrets.token_urlsafe(32)
-                print(f"Generated API key: {settings.api_key}")
-                break
-            elif choice == "2":
-                key = input("Enter API key [leave blank to generate]: ").strip()
-                if not key:
-                    settings.api_key = secrets.token_urlsafe(32)
-                    print(f"Generated API key: {settings.api_key}")
-                else:
-                    settings.api_key = key
-                break
-            elif choice == "3":
-                settings.api_key = None
-                break
-            else:
-                print("Invalid choice. Please select 1, 2 or 3.")
-
-    def is_satisfied(self, settings: Settings) -> bool:
-        return bool(settings.api_key)
-
-
-class RemoteServerStep(WizardStep):
-    def run(self, settings: Settings) -> None:
-        print("\n--- Remote Server Setup ---")
-        print("Connect to an existing Chronicler Server.")
-        settings.server_url = input("Enter server URL (e.g. http://localhost:8000): ").strip()
-
-        while True:
-            api_key = input("Enter API key (ask the server operator for it): ").strip()
-            if api_key:
-                break
-            print("An API key is required and must match the target server's - it")
-            print("cannot be generated here.")
+    if api_key:
         settings.api_key = api_key
+        changed = True
+    if not settings.api_key:
+        settings.api_key = secrets.token_urlsafe(32)
+        say(f"Generated API key (shown once, also saved in the configuration): {settings.api_key}")
+        changed = True
 
-    def is_satisfied(self, settings: Settings) -> bool:
-        return bool(settings.server_url) and bool(settings.api_key)
+    if settings.mode is not Mode.SERVER:
+        settings.mode = Mode.SERVER
+        changed = True
 
-
-class ConfigWizard:
-    def __init__(self, settings: Settings | None = None):
-        self.settings = settings or Settings()
-
-    def run(self, mode: Mode | None = None):
-        if mode:
-            if self.settings.validate_for_mode(mode):
-                return
-            print("========================================")
-            print("       Chronicler Configuration         ")
-            print("========================================")
-            print(f"Configuration is missing or incomplete for mode: {mode}")
-
-            if mode is Mode.SERVER:
-                self._run_step(LanguageStep())
-                self._run_step(WorkspaceStep())
-                self._run_step(ApiKeyStep())
-                self.settings.mode = Mode.SERVER
-            else:
-                self._show_main_choice()
-        else:
-            print("========================================")
-            print("       Chronicler Configuration         ")
-            print("========================================")
-            print("No configuration found. Let's set it up.")
-            self._show_main_choice()
-
-        config_file = self.settings.save()
-        print(f"\nConfiguration saved to {config_file}")
-        print("========================================\n")
-
-    def _run_step(self, step: WizardStep, force: bool = False):
-        if force or not step.is_satisfied(self.settings):
-            step.run(self.settings)
-
-    def _show_main_choice(self):
-        self._run_step(LanguageStep())
-        print("\nHow would you like to run Chronicler?")
-        print("1. Full Stack (Local processing and storage)")
-        print("2. Thin Client (Connect to a remote Chronicler Server)")
-        print("3. Server (Run as a server for other clients)")
-
-        while True:
-            choice = input("\nSelect an option (1-3) [1]: ").strip() or "1"
-            if choice == "1":
-                self._run_step(WorkspaceStep())
-                self._run_step(ApiKeyStep())
-                self.settings.mode = Mode.FULL_STACK
-                break
-            elif choice == "2":
-                self._run_step(RemoteServerStep())
-                self.settings.mode = Mode.THIN_CLIENT
-                break
-            elif choice == "3":
-                self._run_step(WorkspaceStep())
-                self._run_step(ApiKeyStep())
-                self.settings.mode = Mode.SERVER
-                break
-            else:
-                print("Invalid choice. Please select 1, 2 or 3.")
-
-
-def run_wizard(mode: Mode | None = None):
-    try:
-        from chronicler.core.config import get_settings
-
-        wizard = ConfigWizard(settings=get_settings())
-        wizard.run(mode=mode)
-    except KeyboardInterrupt:
-        print("\nConfiguration cancelled.")
-        sys.exit(1)
+    if changed:
+        say(f"Configuration saved to {settings.save()}")
+    return changed

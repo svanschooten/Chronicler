@@ -211,7 +211,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [x] [047-L3 17 interface strings bypass translation](047-L3_finish_translation.md) · low · S
 
-- [ ] [042-S10 Replace the console wizard with flags](042-S10_console_wizard_to_flags.md) · medium · S · after 012, 025
+- [x] [042-S10 Replace the console wizard with flags](042-S10_console_wizard_to_flags.md) · medium · S · after 012, 025
 
 - [ ] [065-F3 Restore after destructive actions](065-F3_restore_snapshots.md) · medium · M · after 011, 031
 
