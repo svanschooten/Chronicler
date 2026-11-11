@@ -7,6 +7,7 @@ import flet as ft
 from chronicler.core.models import Task, TaskStatus
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
+from chronicler.desktop.dialogs import Choice, ask_choice
 from chronicler.desktop.theme import theme_colors
 from chronicler.i18n import t
 
@@ -66,6 +67,16 @@ class TasksView(ft.Column):
                         ),
                     ],
                 ),
+                ft.Row(
+                    controls=[
+                        ft.TextButton(
+                            t("tasks.clear_finished"),
+                            icon=ft.Icons.DELETE_SWEEP,
+                            on_click=self.clear_finished_clicked,
+                        )
+                    ],
+                    alignment=ft.MainAxisAlignment.END,
+                ),
                 self.task_list,
             ],
         )
@@ -95,6 +106,24 @@ class TasksView(ft.Column):
         self.hide_completed = e.control.value
         await self.load_tasks()
 
+    async def clear_finished_clicked(self, e):
+        include_failed = await ask_choice(
+            self.page,
+            t("tasks.clear_title"),
+            t("tasks.clear_message"),
+            [
+                Choice(t("tasks.clear_cancel"), None),
+                Choice(t("tasks.clear_done_only"), False),
+                Choice(t("tasks.clear_with_failed"), True, primary=True),
+            ],
+            dismissed=None,
+        )
+        if include_failed is None:
+            return
+        count = await self.task_service.clear_finished_tasks(include_failed=include_failed)
+        self.show_snackbar(t("tasks.cleared", count=count))
+        await self.load_tasks()
+
     async def retry_clicked(self, e):
         await self.task_service.retry_task(e.control.data)
         self.show_snackbar("Task re-queued")
@@ -105,7 +134,7 @@ class TasksView(ft.Column):
             if self.query:
                 tasks = await self.task_service.search_tasks(self.query)
             else:
-                tasks = await self.task_service.list_tasks()
+                tasks = await self.task_service.list_tasks(include_finished=not self.hide_completed)
 
             if self.hide_completed:
                 tasks = [t for t in tasks if t.status != TaskStatus.DONE]
