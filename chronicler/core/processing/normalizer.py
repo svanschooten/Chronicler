@@ -95,47 +95,61 @@ def _build_graph(stream: Any, description: str) -> Any:
     return graph
 
 
-def measure_dbfs(source: Path) -> float | None:
+def _numpy() -> Any:
+    try:
+        import numpy as np
+    except ImportError as error:  # the extra lists numpy itself; PyAV does not depend on it
+        raise NormalizationError(extras.missing_message("normalization", error)) from error
+    return np
+
+
+class _Level:
     """
-    Root-mean-square level of `source` in dBFS.
+    Root-mean-square level of the frames given to `add`, in dBFS.
 
     Not LUFS: PyAV exposes no way to read filter metadata, so the figure ffmpeg's own
     loudnorm computes internally cannot be read back out. This is a real, comparable
     measurement of the same thing in a simpler unit - see docs/audio-normalization.md.
     """
-    try:
-        import numpy as np
-    except ImportError as error:  # the extra lists numpy itself; PyAV does not depend on it
-        raise NormalizationError(extras.missing_message("normalization", error)) from error
 
-    try:
-        container, stream = _open_source(source)
-    except NormalizationError:
-        raise
+    def __init__(self) -> None:
+        self._np = _numpy()
+        self._total = 0.0
+        self._count = 0
 
-    total = 0.0
-    count = 0
+    def add(self, frame: Any) -> None:
+        np = self._np
+        raw = frame.to_ndarray()
+        if raw.size == 0:
+            return
+        samples = raw.astype(np.float64)
+        if np.issubdtype(raw.dtype, np.integer):
+            samples /= 32768.0
+        self._total += float(np.sum(samples**2))
+        self._count += samples.size
+
+    def dbfs(self) -> float | None:
+        if not self._count:
+            return None
+        mean_square = self._total / self._count
+        if mean_square <= 0:
+            return SILENCE_DBFS
+        return round(20 * math.log10(math.sqrt(mean_square)), 2)
+
+
+def measure_dbfs(source: Path) -> float | None:
+    """The level of a whole file, in dBFS. See `_Level`; None if it cannot be read."""
+    level = _Level()
+    container, stream = _open_source(source)
     try:
         for frame in container.decode(stream):
-            samples = frame.to_ndarray().astype(np.float64)
-            if samples.size == 0:
-                continue
-            if np.issubdtype(frame.to_ndarray().dtype, np.integer):
-                samples = samples / 32768.0
-            total += float(np.sum(samples**2))
-            count += samples.size
+            level.add(frame)
     except Exception:
         logger.debug("Could not measure %s", source.name, exc_info=True)
         return None
     finally:
         container.close()
-
-    if not count:
-        return None
-    mean_square = total / count
-    if mean_square <= 0:
-        return SILENCE_DBFS
-    return round(20 * math.log10(math.sqrt(mean_square)), 2)
+    return level.dbfs()
 
 
 def normalize_audio(
@@ -148,7 +162,9 @@ def normalize_audio(
 
     settings = settings or NormalizationSettings()
     destination = output_path or normalized_path_for(source)
-    before = measure_dbfs(source)
+    # Both levels come from frames this one pass already handles: the source as decoded,
+    # and the graph's output, which ends in the s16 mono format that is written.
+    before, after = _Level(), _Level()
 
     container, stream = _open_source(source)
     try:
@@ -168,10 +184,12 @@ def normalize_audio(
                 except (av.error.BlockingIOError, av.error.EOFError):
                     return
                 frame.pts = None
+                after.add(frame)
                 for packet in out_stream.encode(frame):
                     output.mux(packet)
 
         for frame in container.decode(stream):
+            before.add(frame)
             graph.push(frame)
             drain()
 
@@ -186,13 +204,13 @@ def normalize_audio(
         output.close()
         container.close()
 
-    after = measure_dbfs(destination)
+    loudness_before, loudness_after = before.dbfs(), after.dbfs()
     logger.info(
-        f"Normalized {source.name}: {_format_dbfs(before)} -> {_format_dbfs(after)} "
-        f"(target {settings.target_lufs} LUFS)"
+        f"Normalized {source.name}: {_format_dbfs(loudness_before)} -> "
+        f"{_format_dbfs(loudness_after)} (target {settings.target_lufs} LUFS)"
     )
     return NormalizationResult(
-        output_path=destination, loudness_before=before, loudness_after=after
+        output_path=destination, loudness_before=loudness_before, loudness_after=loudness_after
     )
 
 
