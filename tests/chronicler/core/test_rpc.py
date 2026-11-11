@@ -339,7 +339,7 @@ class TestTheRealServices:
         }
 
 
-async def _post_upload(app, chunks, declared_length=None):
+async def _post_upload(app, chunks, declared_length=None, api_key: bytes | None = b"test-key"):
     """
     Drives `/upload` at the ASGI level, so the test sees how much of the body the server
     pulls. Returns the response status and how many body bytes were received.
@@ -351,10 +351,9 @@ async def _post_upload(app, chunks, declared_length=None):
         b"Content-Type: audio/wav\r\n\r\n"
     )
     pieces = [head, *chunks, b"\r\n--" + boundary + b"--\r\n"]
-    headers = [
-        (b"x-api-key", b"test-key"),
-        (b"content-type", b"multipart/form-data; boundary=" + boundary),
-    ]
+    headers = [(b"content-type", b"multipart/form-data; boundary=" + boundary)]
+    if api_key is not None:
+        headers.append((b"x-api-key", api_key))
     if declared_length is not None:
         headers.append((b"content-length", str(declared_length).encode()))
     scope = {
@@ -389,6 +388,29 @@ async def _post_upload(app, chunks, declared_length=None):
 
     await app(scope, receive, send)
     return statuses[0], pulled
+
+
+class TestUploadKeyBeforeBody:
+    """An upload without the right key is refused before any of its body is read."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("api_key", "expected"), [(None, 401), (b"wrong-key", 403)])
+    async def test_nothing_is_received_or_stored(self, tmp_path, api_key, expected):
+        app, upload_dir = await _build_upload_app(tmp_path)
+
+        status, pulled = await _post_upload(app, [b"x" * 1000] * 100, api_key=api_key)
+
+        assert status == expected
+        assert pulled == 0
+        assert list(upload_dir.iterdir()) == []
+
+    @pytest.mark.asyncio
+    async def test_a_key_is_checked_before_the_declared_length(self, tmp_path):
+        app, _ = await _build_upload_app(tmp_path)
+
+        status, _ = await _post_upload(app, [b"x"], declared_length=10**12, api_key=None)
+
+        assert status == 401
 
 
 class TestUploadCapWhileReceiving:

@@ -50,21 +50,25 @@ def get_services() -> list[type]:
     return _services
 
 
-class _UploadSizeLimit:
+class _UploadGuard:
     """
-    ASGI middleware that stops an upload at the cap while it is being received.
+    ASGI middleware that checks an upload's API key before reading its body, then stops
+    it at the cap while it is being received.
 
-    Starlette spools a multipart body to a temporary file before the endpoint runs, so a
+    FastAPI reads and spools a multipart body to a temporary file before it runs the
+    endpoint's dependencies, the API key check included, so without this anyone who can
+    reach the port could make the server write up to the cap to disk per request. And a
     check inside `/upload` limits what is kept, not what is received. This refuses a
-    declared `Content-Length` over the limit before reading anything, and counts the bytes
-    that actually arrive for a client that lies about it or sends none. See
-    docs/security.md.
+    missing or wrong key, and a declared `Content-Length` over the limit, before reading
+    anything, and counts the bytes that actually arrive for a client that lies about the
+    length or sends none. See docs/security.md.
     """
 
-    def __init__(self, app: Any, path: str, limit: Callable[[], int]):
+    def __init__(self, app: Any, path: str, limit: Callable[[], int], api_key: Callable[[], str]):
         self.app = app
         self.path = path
         self.limit = limit
+        self.api_key = api_key
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope["path"] != self.path:
@@ -74,9 +78,22 @@ class _UploadSizeLimit:
         from fastapi import HTTPException, status
         from starlette.responses import JSONResponse
 
+        headers = dict(scope["headers"])
+        # The same answers FastAPI's own check gives, before a byte of the body is read.
+        given = headers.get(b"x-api-key")
+        if given is None:
+            refusal = JSONResponse({"detail": "Not authenticated"}, status_code=401)
+        elif not secrets.compare_digest(given, self.api_key().encode()):
+            refusal = JSONResponse({"detail": "Could not validate credentials"}, status_code=403)
+        else:
+            refusal = None
+        if refusal is not None:
+            await refusal(scope, receive, send)
+            return
+
         limit = self.limit()
         detail = f"Upload exceeds the maximum of {limit} bytes"
-        declared = dict(scope["headers"]).get(b"content-length")
+        declared = headers.get(b"content-length")
         if declared is not None and declared.isdigit() and int(declared) > limit:
             response = JSONResponse({"detail": detail}, status_code=413)
             await response(scope, receive, send)
@@ -208,9 +225,10 @@ class RpcServer:
             dependencies=[Depends(verify_api_key)],
         )
         self._app.add_middleware(
-            _UploadSizeLimit,
+            _UploadGuard,
             path="/upload",
             limit=lambda: self.MAX_UPLOAD_SIZE + self.MULTIPART_OVERHEAD,
+            api_key=lambda: self.api_key,
         )
 
         @self._app.post("/upload")
