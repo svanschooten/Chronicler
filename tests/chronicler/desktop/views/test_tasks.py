@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -357,3 +358,70 @@ async def test_refresh_keeps_the_search_and_the_filter(make_view):
     assert view.query == "IMPORT"
     assert view.hide_completed is False
     assert len(view.task_list.controls) == 1
+
+
+def _buttons_with_tooltip(row, tooltip) -> list[ft.IconButton]:
+    return [
+        c
+        for c in find_controls(row, lambda c: isinstance(c, ft.IconButton))
+        if getattr(c, "tooltip", None) == tooltip
+    ]
+
+
+@pytest.mark.parametrize(
+    ("task_type", "status", "has_cancel"),
+    [
+        (TaskType.TRANSCRIBE, TaskStatus.WORKING, True),
+        (TaskType.IMPORT, TaskStatus.WORKING, False),
+        (TaskType.IMPORT, TaskStatus.PENDING, True),
+        (TaskType.TRANSCRIBE, TaskStatus.DONE, False),
+    ],
+)
+def test_cancel_is_offered_only_where_it_can_work(make_view, task_type, status, has_cancel):
+    row = make_view().create_task_row(Task(type=task_type, status=status))
+
+    assert bool(_buttons_with_tooltip(row, "Cancel this task")) is has_cancel
+
+
+def test_a_cancelled_task_can_be_run_again(make_view):
+    row = make_view().create_task_row(Task(type=TaskType.TRANSCRIBE, status=TaskStatus.CANCELLED))
+
+    assert _retry_buttons(row)
+
+
+@pytest.mark.asyncio
+async def test_cancel_clicked_cancels_and_reloads(make_view):
+    task_service = AsyncMock()
+    task_service.cancel_task.return_value = True
+    task_service.list_tasks.return_value = []
+    view = make_view(task_service=task_service)
+    view.show_snackbar = MagicMock()
+    task_id = uuid4()
+
+    await view.cancel_clicked(MagicMock(control=MagicMock(data=task_id)))
+
+    task_service.cancel_task.assert_awaited_once_with(task_id)
+    task_service.list_tasks.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_the_list_is_polled_only_while_something_is_queued_or_running(make_view, monkeypatch):
+    monkeypatch.setattr("chronicler.desktop.views.tasks.POLL_SECONDS", 0.01)
+    task_service = AsyncMock()
+    task_service.list_tasks.return_value = [
+        Task(type=TaskType.TRANSCRIBE, status=TaskStatus.WORKING)
+    ]
+    view = make_view(task_service=task_service)
+    view._mounted = True
+
+    poller = asyncio.create_task(view.poll_while_active())
+    await view.load_tasks()
+    task_service.list_tasks.return_value = []
+    await asyncio.sleep(0.1)
+    calls_while_idle = task_service.list_tasks.await_count
+    await asyncio.sleep(0.1)
+    view._mounted = False
+    await poller
+
+    assert calls_while_idle >= 2  # it polled while the task was running
+    assert task_service.list_tasks.await_count == calls_while_idle  # and stopped once idle

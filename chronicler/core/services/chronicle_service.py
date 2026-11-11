@@ -12,7 +12,7 @@ from chronicler.core.database_manager import (
 )
 from chronicler.core.file_staging import confine_to_directory, safe_display_name
 from chronicler.core.formatting import format_duration, looks_synthetic
-from chronicler.core.models import Chronicle
+from chronicler.core.models import Chronicle, Snapshot
 from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.rpc import service
 from chronicler.core.services.transcript_service import TranscriptService
@@ -54,6 +54,8 @@ class LinkPolicy:
         "get_chronicle",
         "link_external_chronicle",
         "list_chronicles",
+        "list_snapshots",
+        "restore_snapshot",
         "search_chronicles",
         "update_chronicle",
     ]
@@ -133,6 +135,19 @@ class ChronicleService:
             chronicle.status = "Transcribed"
         logger.info(f"Hydrated chronicle {chronicle_id}: {speakers} speakers, {len(lines)} lines")
         return await self.repository.update(chronicle)
+
+    async def list_snapshots(self, chronicle_id: UUID) -> list[Snapshot]:
+        """The copies kept from before a clean, an import, a re-transcription or a restore."""
+        return await self.db_manager.list_snapshots(chronicle_id)
+
+    async def restore_snapshot(self, chronicle_id: UUID, snapshot_name: str) -> Chronicle:
+        """
+        Puts one of the chronicle's snapshots back as its database, after saving the state it
+        replaces. The speaker count, duration and status in the workspace are read from the
+        restored file again. See docs/storage.md.
+        """
+        await self.db_manager.restore_project(chronicle_id, snapshot_name)
+        return await self.hydrate_from_project(chronicle_id)
 
     async def update_chronicle(self, chronicle: Chronicle) -> Chronicle:
         """

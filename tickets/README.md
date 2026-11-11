@@ -205,7 +205,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [x] [077-L15 The task list keeps every task ever run](077-L15_task_history_grows.md) · low · S
 
-- [ ] [064-F2 Real transcription progress and cancel](064-F2_progress_and_cancel.md) · medium · M · after 009, 022
+- [x] [064-F2 Real transcription progress and cancel](064-F2_progress_and_cancel.md) · medium · M · after 009, 022
 
 - [x] [046-L2 Service errors reach thin clients as a bare 500](046-L2_rpc_error_mapping.md) · low · S
 
@@ -213,7 +213,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [x] [042-S10 Replace the console wizard with flags](042-S10_console_wizard_to_flags.md) · medium · S · after 012, 025
 
-- [ ] [065-F3 Restore after destructive actions](065-F3_restore_snapshots.md) · medium · M · after 011, 031
+- [x] [065-F3 Restore after destructive actions](065-F3_restore_snapshots.md) · medium · M · after 011, 031
 
 - [ ] [075-L13 Saving the edit dialog can erase a duration a task just computed](075-L13_edit_drops_computed_duration.md) · low · S
 

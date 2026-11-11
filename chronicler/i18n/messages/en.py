@@ -173,6 +173,9 @@ MESSAGES = {
         "clear_with_failed": "Completed and failed",
         "cleared": "Cleared {count} tasks",
         "retry_tooltip": "Run this task again",
+        "cancel_tooltip": "Cancel this task",
+        "cancelled": "Task cancelled",
+        "not_cancelled": "The task had already finished or cannot be stopped",
         "requeued": "Task re-queued",
         "load_failed": "Error loading tasks: {error}",
         "status": "Status: {status}",
@@ -220,6 +223,22 @@ MESSAGES = {
         "import_transcript": "Import transcript",
         "clean": "Clean transcript",
         "clean_queued": "Clean task queued",
+        "restore": "Restore previous version",
+        "restore_title": "Restore a previous version?",
+        "restore_message": (
+            "Replaces the current transcript of '{title}' with a copy saved before a clean, "
+            "an import or a re-transcription. The current version is saved first, so this "
+            "can be undone."
+        ),
+        "restore_option": "{kind} - {time}",
+        "snapshot_kind": {
+            "clean": "Before cleaning",
+            "import": "Before an import",
+            "transcribe": "Before re-transcribing",
+            "restore": "Before a restore",
+        },
+        "no_snapshots": "There is no earlier version to restore yet.",
+        "restored": "Previous version restored",
         "audio_added": "Added audio source '{name}'",
         "audio_created": "Created '{title}' and added audio source",
         "import_created": "Created '{title}' and queued transcript import",

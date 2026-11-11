@@ -10,6 +10,7 @@ class TaskStatus(str, Enum):
     WORKING = "WORKING"
     DONE = "DONE"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class SourceState(str, Enum):
@@ -172,6 +173,18 @@ class ServerInfo(BaseModel):
     capabilities: list[str] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class Snapshot(BaseModel):
+    """
+    A copy of a chronicle's database made just before something destructive. `kind` is what
+    was about to happen: clean, import, transcribe, or restore (the state a restore replaced).
+    """
+
+    name: str
+    kind: str
+    created_at: datetime
+    size_bytes: int
 
 
 class Summary(BaseModel):

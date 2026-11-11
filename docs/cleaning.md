@@ -31,8 +31,8 @@ example transcript, 1,686 turns became 1,242. So:
   start again from the edited lines rather than overwrite it. See
   [storage.md](storage.md#one-owner-for-opening-a-chronicles-database).
 
-There is no restore button yet; that is ticket 065. Until then a snapshot can be put
-back by hand: close Chronicler and copy it over `project.db`.
+A clean can be undone with *Restore previous version*; see
+[storage.md](storage.md#restoring-a-previous-version).
 
 ## The pipeline
 

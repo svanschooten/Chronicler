@@ -7,15 +7,19 @@ from chronicler.core.processing.regex_guard import compile_pattern
 from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import service
 
-# A rerun of a transcription is expensive and a manual retry exists, so it is not repeated
-# automatically. Every other type keeps the model's default.
+CANCELLABLE_WHILE_WORKING = {TaskType.TRANSCRIBE}
+"""Task types whose handler checks for cancellation as it runs."""
+
 FINISHED_LIST_LIMIT = 200
 
+# A rerun of a transcription is expensive and a manual retry exists, so it is not repeated
+# automatically. Every other type keeps the model's default.
 MAX_ATTEMPTS: dict[TaskType, int] = {TaskType.TRANSCRIBE: 1}
 
 
 @service(
     expose=[
+        "cancel_task",
         "clear_finished_tasks",
         "list_tasks",
         "queue_clean",
@@ -160,6 +164,20 @@ class TaskService:
 
         return await self._create(
             Task(type=TaskType.SUMMARIZE, chronicle_id=chronicle_id, data=json.dumps(data))
+        )
+
+    async def cancel_task(self, task_id: UUID) -> bool:
+        """
+        Cancels a task that has not finished. A queued one never runs. A running one is
+        stopped only if its type can notice (`CANCELLABLE_WHILE_WORKING`): the rest are
+        short, and cancelling one would only relabel work that carries on. Returns whether
+        the task was cancelled.
+        """
+        task = await self.repository.get_by_id(task_id)
+        if task is None:
+            return False
+        return await self.repository.cancel(
+            task_id, while_working=task.type in CANCELLABLE_WHILE_WORKING
         )
 
     async def retry_task(self, task_id: UUID) -> None:

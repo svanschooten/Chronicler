@@ -14,6 +14,8 @@ from chronicler.core.sqlite.patterns import LIKE_ESCAPE, contains_pattern
 
 _MAX_CLAIM_CANDIDATES = 5
 
+CANCELLED_MESSAGE = "Cancelled"
+
 RETRY_DELAYS = (30.0, 300.0)
 """Seconds before the first retry, then the second; any later retry waits the last one."""
 
@@ -78,6 +80,21 @@ class SQLiteTaskRepository(TaskRepository):
         await self.session.refresh(db_task)
         return Task.model_validate(db_task)
 
+    async def cancel(self, task_id: UUID, while_working: bool = False) -> bool:
+        cancellable = (
+            [TaskStatus.PENDING, TaskStatus.WORKING] if while_working else [TaskStatus.PENDING]
+        )
+        result = cast(
+            CursorResult,
+            await self.session.execute(
+                sa_update(DBTask)
+                .where(DBTask.id == str(task_id), DBTask.status.in_(cancellable))
+                .values(status=TaskStatus.CANCELLED, error=CANCELLED_MESSAGE, not_before=None)
+            ),
+        )
+        await self.session.commit()
+        return result.rowcount == 1
+
     async def claim_next(self, worker_id: str) -> Task | None:
         now = datetime.now()
         result = await self.session.execute(
@@ -109,7 +126,9 @@ class SQLiteTaskRepository(TaskRepository):
     async def mark_failed_or_retry(self, task_id: UUID, error: str) -> None:
         result = await self.session.execute(select(DBTask).where(DBTask.id == str(task_id)))
         db_task = result.scalar_one_or_none()
-        if db_task:
+        # A task cancelled while it ran must not be put back in the queue by the failure
+        # that cancelling it caused.
+        if db_task and db_task.status != TaskStatus.CANCELLED:
             db_task.attempts += 1
             db_task.error = error
             if db_task.attempts < db_task.max_attempts:

@@ -1,5 +1,7 @@
 import asyncio
+import contextlib
 import logging
+import threading
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -9,6 +11,7 @@ from typing import Any, TypeVar
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chronicler.core.cancellation import TaskCancelledError, cancel_event
 from chronicler.core.models import Task, TaskStatus, TaskType
 from chronicler.core.sqlite import SQLiteTaskRepository
 from chronicler.core.task_events import TaskCompletedEvent, TaskEventBus
@@ -22,6 +25,9 @@ STATUS_WRITE_TIMEOUT = 30.0
 
 INTERRUPTED = "Interrupted before finishing"
 """The error recorded on a task found WORKING when the worker starts."""
+
+CANCEL_POLL_SECONDS = 1.0
+"""How often a running task's row is checked for a cancel request."""
 
 Cleanup = Callable[[Task], Awaitable[None]]
 
@@ -152,6 +158,9 @@ class WorkerManager:
             except OperationalError:
                 logger.warning(f"Task {task.id}: could not record progress {progress}%")
 
+        cancelled = threading.Event()
+        token = cancel_event.set(cancelled)
+        watcher = asyncio.create_task(self._watch_for_cancel(task, cancelled))
         try:
             handler = self.handlers[task.type]
             if asyncio.iscoroutinefunction(handler):
@@ -161,6 +170,8 @@ class WorkerManager:
         except asyncio.CancelledError:
             await self._return_to_queue(task)
             raise
+        except TaskCancelledError:
+            logger.info(f"Task {task.id} ({task.type.value}) cancelled")
         except Exception as e:
             logger.exception(f"Task {task.id} ({task.type.value}) failed")
             error = str(e)
@@ -168,7 +179,31 @@ class WorkerManager:
         else:
             await self._record_outcome(lambda tasks: tasks.update_status(task.id, TaskStatus.DONE))
             logger.info(f"Task {task.id} ({task.type.value}) completed")
+        finally:
+            # Waited for, not just cancelled: a watcher stopped mid-query would otherwise
+            # leave its database connection to be closed later, with the workspace's files
+            # still open when the caller moves on (a hang on Windows, which cannot close
+            # them from under a running thread).
+            watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
+            cancel_event.reset(token)
         await self._publish_completion(task.id)
+
+    async def _watch_for_cancel(self, task: Task, cancelled: threading.Event) -> None:
+        """
+        Sets `cancelled` once the task's row says CANCELLED. The row is the one place a
+        cancel request from another process, such as a thin client's, can come through.
+        """
+        while not cancelled.is_set():
+            await asyncio.sleep(CANCEL_POLL_SECONDS)
+            try:
+                async with self._tasks() as tasks:
+                    current = await tasks.get_by_id(task.id)
+            except OperationalError:
+                continue
+            if current is not None and current.status == TaskStatus.CANCELLED:
+                cancelled.set()
 
     async def _return_to_queue(self, task: Task) -> None:
         """
