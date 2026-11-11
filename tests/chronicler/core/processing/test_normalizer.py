@@ -17,19 +17,34 @@ from chronicler.core.processing.normalizer import (  # noqa: E402
 )
 
 
-def write_tone(path, seconds=1.0, amplitude=0.05, rate=16000):
+def write_tone(path, seconds=1.0, amplitude=0.05, rate=16000, sample_width=2):
     """A quiet sine tone, so normalisation has something real to raise."""
+    full_scale = 2 ** (8 * sample_width - 1) - 1
     frames = bytearray()
     for index in range(int(seconds * rate)):
-        value = int(amplitude * 32767 * math.sin(2 * math.pi * 440 * index / rate))
-        frames += int(value).to_bytes(2, "little", signed=True)
+        value = amplitude * full_scale * math.sin(2 * math.pi * 440 * index / rate)
+        if sample_width == 1:  # 8-bit WAV is unsigned, centred on 128
+            frames += (int(value) + 128).to_bytes(1, "little")
+        else:
+            frames += int(value).to_bytes(sample_width, "little", signed=True)
 
     with wave.open(str(path), "wb") as handle:
         handle.setnchannels(1)
-        handle.setsampwidth(2)
+        handle.setsampwidth(sample_width)
         handle.setframerate(rate)
         handle.writeframes(bytes(frames))
     return path
+
+
+class TestMeasureEverySampleFormat:
+    """A sine at half full scale is about -9.03 dBFS, whatever its sample width."""
+
+    @pytest.mark.parametrize("sample_width", [1, 2, 3, 4])
+    def test_the_level_does_not_depend_on_the_sample_width(self, tmp_path, sample_width):
+        source = write_tone(tmp_path / "tone.wav", amplitude=0.5, sample_width=sample_width)
+
+        # 8-bit audio has only 127 steps each way, so its tone comes out a little quieter.
+        assert measure_dbfs(source) == pytest.approx(-9.03, abs=0.25)
 
 
 class TestNormalizedPath:
