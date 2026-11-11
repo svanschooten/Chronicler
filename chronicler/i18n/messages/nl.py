@@ -182,6 +182,9 @@ MESSAGES = {
         "loading": "Transcript laden...",
         "empty": "Transcript is leeg of wordt nog verwerkt.",
         "error": "Fout bij laden van transcript: {error}",
+        "find": "Zoek in transcript",
+        "no_matches": "Geen regel bevat '{query}'.",
+        "match_count": "{count} regels gevonden",
         "newer_version": (
             "Deze Chronicle is gemaakt door een nieuwere versie van Chronicler. Werk "
             "Chronicler bij om haar te openen. Het bestand is niet gewijzigd."
