@@ -611,6 +611,48 @@ class TestLinkedLocation:
         await db_manager.close_all()
 
     @pytest.mark.asyncio
+    async def test_a_lookup_overtaken_by_a_close_is_not_remembered(self, tmp_path):
+        """
+        A lookup that read the row just before the chronicle was deleted and closed must
+        not cache the old location after `close_project` forgot it.
+        """
+        db_manager = DatabaseManager(tmp_path)
+        linked = tmp_path / "elsewhere" / "project.db"
+        await register_chronicle(db_manager, "racing", linked)
+
+        read, resume = asyncio.Event(), asyncio.Event()
+        real_session = db_manager.get_archive_session
+
+        class _PausingSession:
+            def __init__(self):
+                self._session = real_session()
+
+            async def __aenter__(self):
+                await self._session.__aenter__()
+                return self
+
+            async def __aexit__(self, *exc):
+                return await self._session.__aexit__(*exc)
+
+            async def execute(self, *args, **kwargs):
+                result = await self._session.execute(*args, **kwargs)
+                read.set()
+                await resume.wait()
+                return result
+
+        db_manager.get_archive_session = _PausingSession
+        lookup = asyncio.create_task(db_manager.project_path_for("racing"))
+        await read.wait()
+        db_manager.get_archive_session = real_session
+        await forget_chronicle(db_manager, "racing")  # deletes the row, then closes
+        resume.set()
+
+        assert await lookup == linked
+        assert "racing" not in db_manager._linked_paths
+        assert await db_manager.project_path_for("racing") is None
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
     async def test_a_linked_file_that_has_moved_is_refused(self, tmp_path):
         db_manager = DatabaseManager(tmp_path)
         await register_chronicle(db_manager, "moved", tmp_path / "gone" / "project.db")

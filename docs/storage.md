@@ -111,7 +111,9 @@ take up to the regex time limit, so an edit made meanwhile now goes through inst
 failing.
 
 The cache is dropped by `close_project`, which `delete_chronicle` calls after the row is
-gone. Nothing else can make it stale: a chronicle's `project_path` is set when it is
+gone, and a lookup still reading when that happens does not refill it (see
+[Deleting a chronicle](#deleting-a-chronicle-closes-its-database-first)). Nothing else can
+make it stale: a chronicle's `project_path` is set when it is
 created or linked, and `update_chronicle` keeps the stored one (ticket 076).
 
 ## Migrations are serialised process-wide
@@ -219,8 +221,10 @@ opens it (`DatabaseManager.would_upgrade_linked`, see
 `ChronicleService.delete_chronicle` deletes the row, then calls
 `DatabaseManager.close_project(id)`, then touches the filesystem. Closing before the files
 go is the whole point of the method. Deleting the row before closing means a task looking
-the chronicle up at the same moment finds no row, instead of caching the old location
-again after `close_project` forgot it.
+the chronicle up afterwards finds no row. One that read the row just before it went is
+covered too: `close_project` bumps a per-chronicle counter, and a lookup that sees it
+changed while it read returns what it read but does not remember it, so the old location
+is never cached again after `close_project` forgot it.
 
 Project engines use `NullPool`: a connection, and the thread and open file behind it,
 lives only as long as the session that took it. Before that, a cached engine kept one

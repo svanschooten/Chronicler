@@ -191,6 +191,9 @@ class DatabaseManager:
         )
         self._project_engines: dict[str, AsyncEngine] = {}
         self._linked_paths: dict[str, Path | None] = {}
+        # Bumped by `close_project`, so a lookup that read the row before a close cannot
+        # remember what it read after it.
+        self._closes: dict[str, int] = {}
         self._migration_lock = asyncio.Lock()
         self._workspace_lock = WorkspaceLock(workspace_path)
 
@@ -269,7 +272,10 @@ class DatabaseManager:
         simply not linked.
         """
         key = str(chronicle_id)
-        if key not in self._linked_paths:
+        if key in self._linked_paths:
+            path = self._linked_paths[key]
+        else:
+            closes = self._closes.get(key, 0)
             async with self.get_archive_session() as session:
                 row = (
                     await session.execute(
@@ -280,8 +286,11 @@ class DatabaseManager:
                 if must_exist:
                     raise LookupError(f"No chronicle {key}")
                 return None
-            self._linked_paths[key] = Path(row[0]) if row[0] else None
-        path = self._linked_paths[key]
+            path = Path(row[0]) if row[0] else None
+            # Not remembered if `close_project` ran while the row was read: the row may
+            # have gone or changed since, and the next lookup reads it again.
+            if self._closes.get(key, 0) == closes:
+                self._linked_paths[key] = path
         if must_exist and path and not path.is_file():
             raise FileNotFoundError(f"The linked project database {path} was not found")
         return path
@@ -404,6 +413,7 @@ class DatabaseManager:
         Connections are not pooled, so none outlive their session; a session still open
         when this runs keeps its file open until it closes. See docs/storage.md.
         """
+        self._closes[chronicle_id] = self._closes.get(chronicle_id, 0) + 1
         self._linked_paths.pop(chronicle_id, None)
         engine = self._project_engines.pop(chronicle_id, None)
         if engine is not None:
