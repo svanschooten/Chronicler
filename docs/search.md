@@ -69,9 +69,14 @@ alone, so search still upgrades and searches them. See
 
 **The archive search box** shows the chronicles found by title, description or tags
 first, and then, under *Said in*, those found by what was said, each with its matching
-lines. The transcript search starts once typing pauses for 0.3 seconds, so typing a word
-does not open every chronicle once per letter. A result that arrives after the query has
-changed is dropped.
+lines. A chronicle already listed by its title is not listed again there. The transcript
+search starts once typing pauses for 0.3 seconds, so typing a word does not open every
+chronicle once per letter. A result that arrives after the query has changed is dropped.
+
+When a task finishes, the list is read again with the search kept. The transcript search
+then waits two seconds, so tasks finishing one after another start one search between
+them, and the *Said in* section already shown stays on screen until the new one replaces
+it.
 
 **Find in transcript**, in a chronicle's transcript panel, shows only the matching lines
 with a count, through that chronicle's index. Clearing the field shows the whole
