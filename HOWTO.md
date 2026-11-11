@@ -7,7 +7,7 @@ This document provides practical guides for configuring and running Chronicler i
 When you run Chronicler for the first time without a configuration file, a configuration wizard will start automatically. Which one you get depends on how you started it:
 
 - **Desktop** (`python -m chronicler`, or double-clicking the packaged app) shows the setup wizard **in the window**. It covers the two modes a desktop window runs in — Full Stack and Thin Client — and asks for your language first, so the rest of the wizard is in it.
-- **Server** (`python -m chronicler server`) uses the **console wizard**, since it is started from a terminal anyway.
+- **Server** (`python -m chronicler server`) is set up with flags or environment variables, so it can start under Docker or systemd. In a terminal it asks for a missing workspace.
 
 The packaged desktop build is windowless and has no console to read from, which is why desktop setup happens on screen. The packaged app still accepts `Chronicler server` from a terminal — it borrows that terminal's console on Windows.
 
@@ -20,11 +20,16 @@ The packaged desktop build is windowless and has no console to read from, which 
 
 ### Running as a Server
 
-Server setup runs in the terminal you start it from.
+Pass the setup as flags, or as environment variables for a container or service:
 
-1. Run `python -m chronicler server`. The console wizard starts if nothing is configured.
-2. Enter the workspace path.
-3. Generate or enter an API key. This key will be required by any Thin Clients connecting to this server.
+```bash
+python -m chronicler server --workspace /srv/chronicler --api-key "$KEY"
+CHRONICLER_WORKSPACE_PATH=/srv/chronicler CHRONICLER_API_KEY="$KEY" python -m chronicler server
+```
+
+1. The workspace is required. In a terminal, leaving it out asks for it; without one, the server exits and names the flag.
+2. The API key is required by any Thin Client connecting to this server. Leave it out and one is generated and printed once.
+3. Values from flags are saved; values from the environment are used but not written to the file.
 
 The server listens on all interfaces over plain HTTP, so the key travels unencrypted. That
 is fine on a network you trust. Anywhere else, bind it to loopback with
@@ -85,14 +90,13 @@ mode: full_stack
 dark_mode: true
 ```
 
-`mode` is one of `full_stack`, `thin_client` or `server`, and is written by the wizard.
+`mode` is one of `full_stack`, `thin_client` or `server`, and is written by the wizard or by server setup.
 The older spellings `desktop:full_stack` and `desktop:thin_client` still load. A config saved before `mode` existed still works — the
 mode is inferred from whether a workspace path or a server URL is present.
 
-Chronicler validates the configuration against the mode it is starting in, and re-runs
-only the wizard steps needed to fill in what's missing. So if you hand-edit this file
-into an inconsistent state, the wizard will ask about the specific gap rather than
-starting over.
+Chronicler validates the configuration against the mode it is starting in. If you
+hand-edit this file into an inconsistent state, the desktop wizard asks about the specific
+gap, and the server names the flag that fills it.
 
 ---
 

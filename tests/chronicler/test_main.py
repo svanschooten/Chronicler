@@ -85,10 +85,10 @@ def test_main_desktop_mode_alias():
         mock_run_desktop.assert_called_once()
 
 
-@patch("chronicler.core.wizard.run_wizard")
+@patch("chronicler.core.wizard.configure_server")
 @patch("chronicler.core.config.is_config_initialized", return_value=True)
 @patch("chronicler.core.config.get_settings")
-def test_main_checks_validity(mock_get_settings, mock_is_init, mock_run_wizard):
+def test_main_checks_validity(mock_get_settings, mock_is_init, mock_configure):
     import sys
 
     mock_settings = MagicMock(spec=Settings)
@@ -102,13 +102,13 @@ def test_main_checks_validity(mock_get_settings, mock_is_init, mock_run_wizard):
         main()
 
     mock_settings.validate_for_mode.assert_called_with(Mode.SERVER)
-    mock_run_wizard.assert_called_with(mode=Mode.SERVER)
+    mock_configure.assert_called_once_with(mock_settings, workspace=None, api_key=None)
 
 
-@patch("chronicler.core.wizard.run_wizard")
+@patch("chronicler.core.wizard.configure_server")
 @patch("chronicler.core.config.is_config_initialized", return_value=True)
 @patch("chronicler.core.config.get_settings")
-def test_main_skips_wizard_if_valid(mock_get_settings, mock_is_init, mock_run_wizard):
+def test_main_skips_setup_if_valid(mock_get_settings, mock_is_init, mock_configure):
     import sys
 
     mock_settings = MagicMock(spec=Settings)
@@ -122,12 +122,12 @@ def test_main_skips_wizard_if_valid(mock_get_settings, mock_is_init, mock_run_wi
         main()
 
     mock_settings.validate_for_mode.assert_called_with(Mode.SERVER)
-    mock_run_wizard.assert_not_called()
+    mock_configure.assert_not_called()
 
 
-@patch("chronicler.core.wizard.run_wizard")
+@patch("chronicler.core.wizard.configure_server")
 @patch("chronicler.core.config.is_config_initialized", return_value=False)
-def test_desktop_mode_never_reaches_for_the_console_wizard(mock_is_init, mock_run_wizard):
+def test_desktop_mode_never_configures_the_server(mock_is_init, mock_configure):
     """
     The packaged desktop build is windowless and has no stdin, so setup happens on screen
     (chronicler.desktop.views.wizard). Even with nothing configured at all, `main()` must
@@ -139,31 +139,29 @@ def test_desktop_mode_never_reaches_for_the_console_wizard(mock_is_init, mock_ru
     ):
         main()
 
-    mock_run_wizard.assert_not_called()
+    mock_configure.assert_not_called()
     mock_run_desktop.assert_called_once()
 
 
-@patch("chronicler.core.wizard.run_wizard")
+@patch("chronicler.core.wizard.configure_server")
 @patch("chronicler.core.config.is_config_initialized", return_value=False)
-def test_server_mode_still_uses_the_console_wizard(mock_is_init, mock_run_wizard):
-    """Server is started from a terminal, which is exactly where the console wizard works."""
+def test_server_mode_configures_itself_when_nothing_is_configured(mock_is_init, mock_configure):
+    """Nothing configured: the server sets itself up from flags, the environment or a prompt."""
     with (
         patch.object(sys, "argv", ["chronicler", "server"]),
         patch("chronicler.__main__.server_main"),
     ):
         main()
 
-    mock_run_wizard.assert_called_once_with(mode=Mode.SERVER)
+    mock_configure.assert_called_once()
 
 
 class TestWithoutTheServerExtra:
     """A missing FastAPI or Uvicorn gets a sentence, not the traceback of `import uvicorn`."""
 
-    @patch("chronicler.core.wizard.run_wizard")
+    @patch("chronicler.core.wizard.configure_server")
     @patch("chronicler.core.config.is_config_initialized", return_value=False)
-    def test_server_mode_says_what_is_missing_before_the_wizard(
-        self, mock_is_init, mock_run_wizard
-    ):
+    def test_server_mode_says_what_is_missing_before_the_wizard(self, mock_is_init, mock_configure):
         with (
             patch.object(sys, "argv", ["chronicler", "server"]),
             patch("chronicler.core.extras.is_available", return_value=False),
@@ -173,7 +171,7 @@ class TestWithoutTheServerExtra:
             main()
 
         assert "Running Chronicler as a server" in str(exited.value.code)
-        mock_run_wizard.assert_not_called()
+        mock_configure.assert_not_called()
         run_server.assert_not_called()
 
     def test_the_server_entry_point_checks_too(self):
@@ -190,8 +188,8 @@ class TestWithoutTheServerExtra:
         assert "server" in str(exited.value.code)
         run_server.assert_not_called()
 
-    @patch("chronicler.core.wizard.run_wizard")
-    def test_desktop_mode_does_not_need_it(self, mock_run_wizard):
+    @patch("chronicler.core.wizard.configure_server")
+    def test_desktop_mode_does_not_need_it(self, mock_configure):
         with (
             patch.object(sys, "argv", ["chronicler"]),
             patch("chronicler.core.extras.is_available", return_value=False) as available,
@@ -276,3 +274,41 @@ class TestWindowsConsole:
 
         assert attach_windows_console() is False
         assert sys.stdout is stdout, "it must not touch the streams it could not replace"
+
+
+@patch("chronicler.core.wizard.configure_server")
+@patch("chronicler.core.config.is_config_initialized", return_value=True)
+@patch("chronicler.core.config.get_settings")
+def test_flags_are_applied_even_when_the_configuration_is_complete(
+    mock_get_settings, mock_is_init, mock_configure
+):
+    mock_settings = MagicMock(spec=Settings)
+    mock_settings.validate_for_mode.return_value = True
+    mock_get_settings.return_value = mock_settings
+
+    with (
+        patch.object(
+            sys, "argv", ["chronicler", "server", "--workspace", "/srv/w", "--api-key", "k"]
+        ),
+        patch("chronicler.__main__.server_main"),
+    ):
+        main()
+
+    mock_configure.assert_called_once_with(mock_settings, workspace="/srv/w", api_key="k")
+
+
+@patch("chronicler.core.wizard.configure_server")
+@patch("chronicler.core.config.is_config_initialized", return_value=False)
+def test_a_server_that_cannot_be_set_up_exits_with_the_reason(mock_is_init, mock_configure):
+    from chronicler.core.wizard import SetupError
+
+    mock_configure.side_effect = SetupError("Pass --workspace PATH")
+
+    with (
+        patch.object(sys, "argv", ["chronicler", "server"]),
+        patch("chronicler.__main__.server_main") as server_main,
+        pytest.raises(SystemExit, match="--workspace"),
+    ):
+        main()
+
+    server_main.assert_not_called()

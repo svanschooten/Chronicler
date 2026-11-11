@@ -207,11 +207,11 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [x] [064-F2 Real transcription progress and cancel](064-F2_progress_and_cancel.md) · medium · M · after 009, 022
 
-- [ ] [046-L2 Service errors reach thin clients as a bare 500](046-L2_rpc_error_mapping.md) · low · S
+- [x] [046-L2 Service errors reach thin clients as a bare 500](046-L2_rpc_error_mapping.md) · low · S
 
-- [ ] [047-L3 17 interface strings bypass translation](047-L3_finish_translation.md) · low · S
+- [x] [047-L3 17 interface strings bypass translation](047-L3_finish_translation.md) · low · S
 
-- [ ] [042-S10 Replace the console wizard with flags](042-S10_console_wizard_to_flags.md) · medium · S · after 012, 025
+- [x] [042-S10 Replace the console wizard with flags](042-S10_console_wizard_to_flags.md) · medium · S · after 012, 025
 
 - [ ] [065-F3 Restore after destructive actions](065-F3_restore_snapshots.md) · medium · M · after 011, 031
 

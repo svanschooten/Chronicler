@@ -540,3 +540,54 @@ async def test_a_thin_client_finds_a_spoken_phrase(tmp_path):
         assert [line.text for line in lines] == ["Good morning everyone"]
     finally:
         await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_reaches_a_thin_client_as_the_same_exception_and_message(tmp_path):
+    from uuid import uuid4
+
+    from chronicler.core.processing.regex_guard import UnsafePatternError
+    from chronicler.core.remote import RemoteContainer
+    from chronicler.core.services.transcript_service import TranscriptService
+
+    db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
+    try:
+        await db_manager.init_archive()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
+            chronicle = await remote.resolve(ChronicleService).create_chronicle("Refusals")
+
+            with pytest.raises(UnsafePatternError, match="Invalid regular expression"):
+                await remote.resolve(TaskService).queue_import(
+                    chronicle.id, "/imports/x.txt", regex="(unclosed"
+                )
+
+            unknown = uuid4()
+            with pytest.raises(LookupError, match=str(unknown)):
+                await remote.resolve(TranscriptService).get_transcript(unknown)
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (LookupError("no such chronicle"), ("LookupError", 404)),
+        (KeyError("secret-key"), None),
+        (IndexError("3"), None),
+        (RuntimeError("/srv/workspace/x.db is locked"), None),
+        (FileNotFoundError("/srv/workspace/x.db"), None),
+    ],
+)
+def test_only_errors_meant_for_the_user_are_explained(error, expected):
+    from chronicler.core.rpc import refusal_for
+
+    assert refusal_for(error) == expected
+
+
+def test_a_subtitle_refusal_is_explained_as_unprocessable():
+    from chronicler.core.formatting import NoRealTimestampsError
+    from chronicler.core.rpc import refusal_for
+
+    assert refusal_for(NoRealTimestampsError("no timings")) == ("NoRealTimestampsError", 422)

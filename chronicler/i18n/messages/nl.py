@@ -15,6 +15,7 @@ MESSAGES = {
         "delete": "Verwijderen",
         "close": "Sluiten",
         "unknown": "Onbekend",
+        "ok": "OK",
     },
     "settings": {
         "title": "Instellingen",
@@ -176,6 +177,13 @@ MESSAGES = {
         "cancel_tooltip": "Deze taak annuleren",
         "cancelled": "Taak geannuleerd",
         "not_cancelled": "De taak was al klaar of kan niet worden gestopt",
+        "requeued": "Taak opnieuw in de wachtrij gezet",
+        "load_failed": "Taken laden mislukt: {error}",
+        "status": "Status: {status}",
+        "created": "Aangemaakt {time}",
+        "next_attempt": "Volgende poging {time}",
+        "started": "Gestart {time}",
+        "completed": "Voltooid {time}",
         "empty": "Nog geen taken.",
         "queued_normalize": "Normalisatie van '{name}' in de wachtrij",
         "queued_transcribe": "Transcriptie van '{name}' als {speaker} in de wachtrij",
@@ -214,6 +222,12 @@ MESSAGES = {
         "import_transcript": "Transcript importeren",
         "clean": "Transcript opschonen",
         "clean_queued": "Opschoontaak in de wachtrij",
+        "audio_added": "Audiobron '{name}' toegevoegd",
+        "audio_created": "'{title}' aangemaakt en audiobron toegevoegd",
+        "import_created": "'{title}' aangemaakt en transcriptimport in de wachtrij gezet",
+        "append_queued": "Transcript toevoegen staat in de wachtrij",
+        "import_queued": "Transcriptimport staat in de wachtrij",
+        "linked": "'{title}' gekoppeld - {count} spreker(s)",
         "clean_title": "Transcript opschonen?",
         "clean_message": (
             "Opschonen van '{title}' verwijdert opvulling en herhaalde regels en voegt "
@@ -351,6 +365,7 @@ MESSAGES = {
         "failed": "Fout bij exporteren: {error}",
         "write_failed": "Fout bij schrijven van bestand: {error}",
         "no_picker": "Bestandskiezer niet beschikbaar.",
+        "plaintext_title": "Transcript exporteren als platte tekst",
     },
     "extras": {
         "title": "Extra onderdeel nodig",
@@ -364,6 +379,18 @@ MESSAGES = {
         "installing": "{name} wordt geïnstalleerd ({size})...",
         "installed": "{name} is klaar voor gebruik",
         "failed": "Kan {name} niet installeren: {error}",
+        "purposes": {
+            "transcription": "Audio transcriberen met Whisper",
+            "normalization": "Het volume van een audiobron normaliseren",
+            "llm": "Een lokaal GGUF-taalmodel draaien voor samenvattingen",
+            "recording": "Audio opnemen met een microfoon",
+            "server": "Chronicler als server draaien",
+        },
+        "notes": {
+            "transcription": "Het Whisper-model wordt apart gedownload bij het eerste gebruik.",
+            "llm": "Alleen nodig voor lokale modellen; een externe gateway niet.",
+            "recording": "sounddevice is een koppeling, geen pakket: PortAudio is nodig.",
+        },
     },
     "wizard": {
         "title": "Welkom bij Chronicler",

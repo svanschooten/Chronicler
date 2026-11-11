@@ -7,6 +7,8 @@ from typing import Any, Generic, TypeVar
 
 import flet as ft
 
+from chronicler.i18n import t
+
 T = TypeVar("T")
 
 
@@ -82,13 +84,18 @@ async def ask_choice(
     return await await_dialog(page, build, dismissed=dismissed)  # type: ignore[return-value]
 
 
-async def confirm(page: ft.Page, title: str, message: str, confirm_label: str = "Delete") -> bool:
-    """The yes/no case of `ask_choice`."""
+async def confirm(
+    page: ft.Page, title: str, message: str, confirm_label: str | None = None
+) -> bool:
+    """The yes/no case of `ask_choice`. The confirm button says Delete unless told otherwise."""
     return await ask_choice(
         page,
         title,
         message,
-        [Choice("Cancel", False), Choice(confirm_label, True, primary=True)],
+        [
+            Choice(t("common.cancel"), False),
+            Choice(confirm_label or t("common.delete"), True, primary=True),
+        ],
         dismissed=False,
     )
 
@@ -98,7 +105,7 @@ async def ask_text(
     title: str,
     message: str,
     field: ft.TextField,
-    confirm_label: str = "OK",
+    confirm_label: str | None = None,
 ) -> str | None:
     """
     A modal that collects free text, resolving to the field's contents - or None if the user
@@ -110,8 +117,10 @@ async def ask_text(
             title=ft.Text(title),
             content=ft.Column([ft.Text(message), field], tight=True),
             actions=[
-                ft.TextButton("Cancel", on_click=on_choice(lambda: None)),
-                ft.FilledButton(confirm_label, on_click=on_choice(lambda: field.value)),
+                ft.TextButton(t("common.cancel"), on_click=on_choice(lambda: None)),
+                ft.FilledButton(
+                    confirm_label or t("common.ok"), on_click=on_choice(lambda: field.value)
+                ),
             ],
         )
 
