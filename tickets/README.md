@@ -215,7 +215,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [x] [065-F3 Restore after destructive actions](065-F3_restore_snapshots.md) · medium · M · after 011, 031
 
-- [ ] [075-L13 Saving the edit dialog can erase a duration a task just computed](075-L13_edit_drops_computed_duration.md) · low · S
+- [x] [075-L13 Saving the edit dialog can erase a duration a task just computed](075-L13_edit_drops_computed_duration.md) · low · S
 
 - [x] [078-L16 Archive search can show results for an earlier query](078-L16_archive_search_out_of_order.md) · low · XS
 

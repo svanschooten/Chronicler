@@ -57,7 +57,7 @@ class LinkPolicy:
         "list_snapshots",
         "restore_snapshot",
         "search_chronicles",
-        "update_chronicle",
+        "edit_chronicle",
     ]
 )
 class ChronicleService:
@@ -136,6 +136,34 @@ class ChronicleService:
         logger.info(f"Hydrated chronicle {chronicle_id}: {speakers} speakers, {len(lines)} lines")
         return await self.repository.update(chronicle)
 
+    async def edit_chronicle(
+        self,
+        chronicle_id: UUID,
+        title: str | None = None,
+        description: str | None = None,
+        kind: str | None = None,
+        duration: str | None = None,
+    ) -> Chronicle:
+        """
+        Changes only the fields a user may edit, and only those given: `None` leaves a
+        field as it is, so a caller holding an old copy cannot write back a duration or a
+        status that a task has since changed. An empty string clears `description`,
+        `kind` (back to "Unknown") and `duration`; an empty `title` is ignored, since a
+        chronicle with no title is no use. Raises LookupError for an unknown chronicle.
+        """
+        chronicle = await self.repository.get_by_id(chronicle_id)
+        if chronicle is None:
+            raise LookupError(f"No chronicle {chronicle_id}")
+        if title:
+            chronicle.title = title
+        if description is not None:
+            chronicle.description = description or None
+        if kind is not None:
+            chronicle.kind = kind or "Unknown"
+        if duration is not None:
+            chronicle.duration = duration or None
+        return await self.repository.update(chronicle)
+
     async def list_snapshots(self, chronicle_id: UUID) -> list[Snapshot]:
         """The copies kept from before a clean, an import, a re-transcription or a restore."""
         return await self.db_manager.list_snapshots(chronicle_id)
@@ -151,10 +179,11 @@ class ChronicleService:
 
     async def update_chronicle(self, chronicle: Chronicle) -> Chronicle:
         """
-        Saves a chronicle's fields, except `project_path`: where its database lives is set
-        when it is created or linked, and kept. Changing it here would let a remote caller
-        move a chronicle past `LinkPolicy`, and leave `DatabaseManager`'s cached location
-        stale.
+        Saves a whole chronicle, for code in this process: it is not exposed over RPC, since
+        it writes `status` and `speakers_count` too and so overwrites whatever a task set
+        since the caller read its copy. `project_path` is kept: where its database lives is
+        set when it is created or linked, and changing it here would move a chronicle past
+        `LinkPolicy` and leave `DatabaseManager`'s cached location stale.
         """
         stored = await self.repository.get_by_id(chronicle.id)
         if stored is not None:

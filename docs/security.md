@@ -43,8 +43,10 @@ that `sources/`.
 So a server confines it. `LinkPolicy` refuses a path outside `server.linked_chronicle_dirs`
 with `LinkRefusedError("not_allowed")`, before anything is read or created, and the list is
 empty by default. The full-stack app registers no policy and links anywhere, since its
-caller is the machine's own user. `update_chronicle` never changes `project_path`, so a
-chronicle cannot be moved past the check afterwards.
+caller is the machine's own user. The only edit a remote caller has, `edit_chronicle`, takes
+title, description, kind and duration and nothing else, so a chronicle cannot be moved past
+the check afterwards, nor have its status or speaker count set. The whole-object
+`update_chronicle` is not exposed over RPC.
 
 ## Filename sanitisation
 

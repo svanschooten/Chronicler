@@ -114,7 +114,8 @@ The cache is dropped by `close_project`, which `delete_chronicle` calls after th
 gone, and a lookup still reading when that happens does not refill it (see
 [Deleting a chronicle](#deleting-a-chronicle-closes-its-database-first)). Nothing else can
 make it stale: a chronicle's `project_path` is set when it is
-created or linked, and `update_chronicle` keeps the stored one (ticket 076).
+created or linked, and neither `edit_chronicle` (which takes four fields) nor `update_chronicle` (which keeps the
+stored one, and is not exposed over RPC) changes it (tickets 075 and 076).
 
 ## Migrations are serialised process-wide
 

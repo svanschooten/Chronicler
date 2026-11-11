@@ -618,7 +618,11 @@ async def test_re_transcribing_a_track_keeps_a_copy_to_restore_from(tmp_path):
         assert snapshot.kind == "transcribe"
         await db_manager.restore_project(chronicle_id, snapshot.name)
         assert await _texts(db_manager, chronicle_id) == {("Alice", "First pass")}
+    finally:
+        await db_manager.close_all()
 
+
+@pytest.mark.asyncio
 async def test_progress_moves_through_the_transcription(tmp_path):
     """The transcriber reports from its own thread; each step reaches update_progress."""
     db_manager = DatabaseManager(tmp_path)

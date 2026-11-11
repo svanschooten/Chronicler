@@ -57,6 +57,7 @@ class CreateChronicleForm(OverlayForm):
 
 class EditChronicleForm(OverlayForm):
     def __init__(self, on_cancel, on_save):
+        self._filled = ("", "", "", "")
         self.title_field = ft.TextField(label=t("forms.title"))
         self.description_field = ft.TextField(label=t("forms.description"), multiline=True)
         self.kind_field = ft.TextField(label=t("forms.kind"), hint_text=t("forms.kind_hint"))
@@ -83,22 +84,35 @@ class EditChronicleForm(OverlayForm):
         )
 
     def fill_from(self, chronicle: Chronicle) -> None:
+        self._filled = (
+            chronicle.title,
+            chronicle.description or "",
+            "" if chronicle.kind == "Unknown" else chronicle.kind,
+            chronicle.duration or "",
+        )
         self.title_field.value = chronicle.title
         self.description_field.value = chronicle.description or ""
         self.kind_field.value = "" if chronicle.kind == "Unknown" else chronicle.kind
         self.duration_field.value = chronicle.duration or ""
 
-    def apply_to(self, chronicle: Chronicle) -> Chronicle:
+    def changes(self) -> dict[str, str]:
         """
-        Writes the field values back onto `chronicle`, keeping its existing title if the
-        field was blanked (a chronicle with no title at all isn't useful) and restoring
-        the "Unknown"/None defaults for the optional fields.
+        The fields the user changed since the form was filled, by `edit_chronicle`'s
+        argument names. A field left alone is not sent, so a duration a task computed while
+        the dialog was open is not written over; a field cleared by hand is sent as "".
         """
-        chronicle.title = self.title_field.value or chronicle.title
-        chronicle.description = self.description_field.value or None
-        chronicle.kind = self.kind_field.value or "Unknown"
-        chronicle.duration = self.duration_field.value or None
-        return chronicle
+        shown = (
+            self.title_field.value or "",
+            self.description_field.value or "",
+            self.kind_field.value or "",
+            self.duration_field.value or "",
+        )
+        names = ("title", "description", "kind", "duration")
+        return {
+            name: value
+            for name, value, before in zip(names, shown, self._filled, strict=True)
+            if value != before
+        }
 
 
 class TranscriptImportForm(OverlayForm):

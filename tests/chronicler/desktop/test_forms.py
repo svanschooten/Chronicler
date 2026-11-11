@@ -90,34 +90,34 @@ def test_edit_form_blanks_the_kind_field_when_it_is_the_unknown_default():
     assert form.kind_field.value == ""
 
 
-def test_edit_form_applies_edits_back_onto_the_chronicle():
+def test_edit_form_reports_only_what_the_user_changed():
     form = EditChronicleForm(MagicMock(), MagicMock())
+    form.fill_from(Chronicle(title="Old Title", kind="Unknown", duration="1h"))
     form.title_field.value = "New Title"
     form.description_field.value = "New description"
     form.kind_field.value = "Meeting"
-    form.duration_field.value = "45m"
 
-    updated = form.apply_to(Chronicle(title="Old Title", kind="Unknown"))
-
-    assert updated.title == "New Title"
-    assert updated.description == "New description"
-    assert updated.kind == "Meeting"
-    assert updated.duration == "45m"
+    assert form.changes() == {
+        "title": "New Title",
+        "description": "New description",
+        "kind": "Meeting",
+    }
 
 
-def test_edit_form_keeps_the_existing_title_and_restores_defaults_when_blanked():
+def test_edit_form_with_nothing_changed_reports_nothing():
     form = EditChronicleForm(MagicMock(), MagicMock())
-    form.title_field.value = ""
-    form.description_field.value = ""
+    form.fill_from(Chronicle(title="Same", description="d", kind="Podcast", duration="1h"))
+
+    assert form.changes() == {}
+
+
+def test_edit_form_sends_an_empty_string_for_a_field_cleared_by_hand():
+    form = EditChronicleForm(MagicMock(), MagicMock())
+    form.fill_from(Chronicle(title="Keep Me", kind="Podcast", duration="1h"))
     form.kind_field.value = ""
     form.duration_field.value = ""
 
-    updated = form.apply_to(Chronicle(title="Keep Me", kind="Podcast", duration="1h"))
-
-    assert updated.title == "Keep Me"
-    assert updated.description is None
-    assert updated.kind == "Unknown"
-    assert updated.duration is None
+    assert form.changes() == {"kind": "", "duration": ""}
 
 
 def test_transcript_form_defaults_to_group_1_and_2_with_no_timestamps():

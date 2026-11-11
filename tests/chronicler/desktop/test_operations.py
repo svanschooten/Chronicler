@@ -226,8 +226,34 @@ class TestEditing:
         operations.edit_form.title_field.value = "Session One, cleaned"
 
         assert await operations.finish_edit() is True
-        saved = parts["chronicle_service"].update_chronicle.await_args[0][0]
-        assert saved.title == "Session One, cleaned"
+        parts["chronicle_service"].edit_chronicle.assert_awaited_once_with(
+            chronicle.id, title="Session One, cleaned"
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_duration_the_form_never_saw_is_not_written_over(self, make_operations):
+        """Ticket 075: a task sets the duration while the dialog is open."""
+        operations, parts, _ = make_operations()
+        opened_with = _chronicle(duration=None)
+        parts["chronicle_service"].get_chronicle.return_value = _chronicle(duration="1h 24m")
+
+        await operations.begin_edit(opened_with)
+        operations.edit_form.title_field.value = "Renamed"
+        await operations.finish_edit()
+
+        sent = parts["chronicle_service"].edit_chronicle.await_args.kwargs
+        assert "duration" not in sent
+
+    @pytest.mark.asyncio
+    async def test_saving_with_nothing_changed_sends_nothing(self, make_operations):
+        operations, parts, _ = make_operations()
+        chronicle = _chronicle()
+        parts["chronicle_service"].get_chronicle.return_value = chronicle
+
+        await operations.begin_edit(chronicle)
+        await operations.finish_edit()
+
+        parts["chronicle_service"].edit_chronicle.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_a_chronicle_that_vanished_is_reported_not_crashed(self, make_operations):
@@ -237,7 +263,7 @@ class TestEditing:
         await operations.begin_edit(_chronicle())
 
         assert await operations.finish_edit() is True
-        parts["chronicle_service"].update_chronicle.assert_not_awaited()
+        parts["chronicle_service"].edit_chronicle.assert_not_awaited()
         parts["show_snackbar"].assert_called_once()
 
 
