@@ -1,12 +1,15 @@
 from uuid import UUID
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select
+from sqlalchemy import literal_column, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.models import Speaker, TranscriptLine
 from chronicler.core.project_database import DBSpeaker, DBTranscriptLine
 from chronicler.core.repositories import TranscriptRepository
+from chronicler.core.sqlite.patterns import fts_query
+
+SEARCH_LIMIT = 200
 
 
 class SQLiteTranscriptRepository(TranscriptRepository):
@@ -32,7 +35,10 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         result = await self.session.execute(
             select(DBTranscriptLine).order_by(DBTranscriptLine.start_time)
         )
-        db_lines = result.scalars().all()
+        return self._to_lines(result.scalars().all())
+
+    @staticmethod
+    def _to_lines(db_lines) -> list[TranscriptLine]:
         lines = []
         for db in db_lines:
             line = TranscriptLine.model_validate(db)
@@ -115,5 +121,22 @@ class SQLiteTranscriptRepository(TranscriptRepository):
             sa_delete(DBTranscriptLine).where(DBTranscriptLine.source_id == str(source_id))
         )
 
-    async def search(self, query: str) -> list[TranscriptLine]:
-        raise NotImplementedError("Transcript full-text search is not implemented yet")
+    async def search(self, query: str, limit: int = SEARCH_LIMIT) -> list[TranscriptLine]:
+        """
+        Lines containing every word of `query`, in transcript order, through the
+        `transcript_search` FTS5 index. Matching ignores case and accents. See
+        docs/search.md.
+        """
+        match = fts_query(query)
+        if match is None:
+            return []
+        matching = text(
+            "SELECT rowid FROM transcript_search WHERE transcript_search MATCH :match"
+        ).bindparams(match=match)
+        result = await self.session.execute(
+            select(DBTranscriptLine)
+            .where(literal_column("transcript_lines.rowid").in_(matching))
+            .order_by(DBTranscriptLine.start_time)
+            .limit(limit)
+        )
+        return self._to_lines(result.scalars().all())
