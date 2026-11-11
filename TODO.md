@@ -1243,7 +1243,7 @@ Future:
       `allow_credentials` set to `False` (was `True` alongside a wildcard origin — an
       invalid, unsafe combination, and unnecessary since auth is a header, not a cookie).
 * [ ] Add server storage management
-* [ ] Confine the linked-chronicle paths a remote caller can name (ticket 076)
+* [x] Confine the linked-chronicle paths a remote caller can name (ticket 076)
 * [ ] Enforce the upload cap before the body is received (ticket 053)
 * [ ] Pass service errors to thin clients with their explanation (ticket 046)
 * [ ] Set up a server unattended, with flags instead of the console wizard (ticket 042)

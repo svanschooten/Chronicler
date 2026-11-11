@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
 from uuid import UUID
 
@@ -17,6 +18,32 @@ from chronicler.core.rpc import service
 from chronicler.core.services.transcript_service import TranscriptService
 
 logger = logging.getLogger(__name__)
+
+
+class LinkPolicy:
+    """
+    Where a chronicle's project.db may live, when the caller names it.
+
+    `None`, the default, allows anywhere: in the full-stack app the caller is the machine's
+    own user. A server registers one built from `server.linked_chronicle_dirs`, so a remote
+    caller cannot make it create folders, move uploads or run migrations wherever the
+    server process can write. An empty list allows nowhere. See docs/security.md.
+    """
+
+    def __init__(self, allowed_dirs: Sequence[Path] | None = None):
+        self.allowed_dirs = None if allowed_dirs is None else [Path(d) for d in allowed_dirs]
+
+    def confine(self, project_path: str | Path) -> Path:
+        """`project_path`, resolved, or LinkRefusedError("not_allowed")."""
+        path = Path(project_path)
+        if self.allowed_dirs is None:
+            return path
+        for root in self.allowed_dirs:
+            try:
+                return confine_to_directory(path, root, str(root))
+            except ValueError:
+                continue
+        raise LinkRefusedError(path, "not_allowed")
 
 
 @service(
@@ -37,10 +64,12 @@ class ChronicleService:
         repository: ChronicleRepository,
         db_manager: DatabaseManager,
         transcripts: TranscriptService | None = None,
+        link_policy: LinkPolicy | None = None,
     ):
         self.repository = repository
         self.db_manager = db_manager
         self.transcripts = transcripts
+        self.link_policy = link_policy or LinkPolicy()
 
     async def list_chronicles(self) -> list[Chronicle]:
         return await self.repository.get_all()
@@ -51,6 +80,9 @@ class ChronicleService:
     async def create_chronicle(
         self, title: str, project_path: str | None = None, source_file: str | None = None
     ) -> Chronicle:
+        """`project_path` links the chronicle to a database outside the workspace."""
+        if project_path is not None:
+            project_path = str(self.link_policy.confine(project_path))
         chronicle = Chronicle(title=title, project_path=project_path, source_file=source_file)
         return await self.repository.create(chronicle)
 
@@ -63,7 +95,7 @@ class ChronicleService:
         would otherwise make four round trips, and a half-registered chronicle showing
         "Imported" with no speakers is the state this replaces. See docs/storage.md.
         """
-        path = Path(project_path)
+        path = self.link_policy.confine(project_path)
         await asyncio.to_thread(check_linkable_project, path)
         chronicle = await self.create_chronicle(_title_for(path), project_path=str(path))
         try:

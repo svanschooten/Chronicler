@@ -5,7 +5,7 @@ from pathlib import Path
 
 import uvicorn
 
-from chronicler.core.config import get_settings
+from chronicler.core.config import Settings, get_settings
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.local_container import register_local_repositories
@@ -48,17 +48,34 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
         # A plain message and exit status 1, not a traceback. See docs/storage.md.
         raise SystemExit(str(error)) from error
 
-    container = Container()
-    register_local_repositories(container, db_manager)
+    rpc_server = build_rpc_server(db_manager, settings)
+    app = rpc_server.build()
+    # Never the key itself: logs get shared. The last characters are enough to tell which
+    # key a server expects. See docs/security.md.
+    logger.info(f"RPC server API key configured (ends in ...{rpc_server.api_key[-4:]})")
 
+    worker_manager = build_worker_manager(db_manager)
+
+    asyncio.run(_serve_and_work(app, worker_manager, host, port))
+
+
+def build_rpc_server(db_manager: DatabaseManager, settings: Settings) -> RpcServer:
+    """The server's services over one workspace, as `run_server` serves them."""
     from chronicler.core.services import (
         ChronicleService,
         SystemService,
         TaskService,
         TranscriptService,
     )
+    from chronicler.core.services.chronicle_service import LinkPolicy
 
-    rpc_server = RpcServer(
+    container = Container()
+    register_local_repositories(container, db_manager)
+    # Every caller of a server is remote, so a chronicle's database may only be named
+    # inside the configured folders. See docs/security.md.
+    container.register_instance(LinkPolicy, LinkPolicy(settings.server.linked_chronicle_dirs))
+
+    return RpcServer(
         container,
         services=[
             ChronicleService,
@@ -68,14 +85,6 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
         ],
         api_key=settings.api_key,
     )
-    app = rpc_server.build()
-    # Never the key itself: logs get shared. The last characters are enough to tell which
-    # key a server expects. See docs/security.md.
-    logger.info(f"RPC server API key configured (ends in ...{rpc_server.api_key[-4:]})")
-
-    worker_manager = build_worker_manager(db_manager)
-
-    asyncio.run(_serve_and_work(app, worker_manager, host, port))
 
 
 async def _serve_and_work(app, worker_manager: WorkerManager, host: str, port: int) -> None:
