@@ -193,7 +193,7 @@ Stop a pattern from freezing the app, make opening chronicles cheap, settle what
 
 - [x] [044-T4 Optional extras never run in CI](044-T4_extras_ci_job.md) · medium · S · after 004
 
-- [ ] [057-P6 Normalization decodes the file three times](057-P6_normalization_single_pass.md) · low · S · after 044
+- [x] [057-P6 Normalization decodes the file three times](057-P6_normalization_single_pass.md) · low · S · after 044
 
 - [x] [076-L14 Remote callers can point a chronicle at any path on the server](076-L14_project_path_from_rpc_callers.md) · low · S
 
