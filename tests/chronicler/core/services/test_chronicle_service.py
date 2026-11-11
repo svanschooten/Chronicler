@@ -404,3 +404,63 @@ async def test_add_audio_source_still_keeps_a_readable_name(tmp_path):
     result = await service.add_audio_source(chronicle_id, str(staged), "session-3 GM.wav")
 
     assert result == str(sources_dir / "session-3 GM.wav")
+
+
+class TestEditChronicle:
+    """Ticket 075: a user edits four fields, and nothing else of the chronicle moves."""
+
+    def _service(self, tmp_path, chronicle):
+        repo = _repo_holding(chronicle)
+        return ChronicleService(repo, _db_manager(tmp_path)), repo
+
+    @pytest.mark.asyncio
+    async def test_only_the_given_fields_change(self, tmp_path):
+        chronicle = Chronicle(
+            title="Old",
+            description="Keep me",
+            duration="1h 24m",
+            status="Transcribed",
+            speakers_count=3,
+            project_path=str(tmp_path / "x" / "project.db"),
+        )
+        service, _ = self._service(tmp_path, chronicle)
+
+        edited = await service.edit_chronicle(chronicle.id, title="New")
+
+        assert edited.title == "New"
+        assert (edited.description, edited.duration) == ("Keep me", "1h 24m")
+        assert (edited.status, edited.speakers_count) == ("Transcribed", 3)
+        assert edited.project_path == chronicle.project_path
+
+    @pytest.mark.asyncio
+    async def test_an_empty_string_clears_an_optional_field(self, tmp_path):
+        chronicle = Chronicle(title="T", description="d", kind="Campaign", duration="5m")
+        service, _ = self._service(tmp_path, chronicle)
+
+        edited = await service.edit_chronicle(chronicle.id, description="", kind="", duration="")
+
+        assert (edited.description, edited.kind, edited.duration) == (None, "Unknown", None)
+
+    @pytest.mark.asyncio
+    async def test_a_blank_title_is_ignored(self, tmp_path):
+        chronicle = Chronicle(title="Kept")
+        service, _ = self._service(tmp_path, chronicle)
+
+        assert (await service.edit_chronicle(chronicle.id, title="")).title == "Kept"
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_chronicle_is_refused(self, tmp_path):
+        repo = MagicMock(spec=ChronicleRepository)
+        repo.get_by_id = AsyncMock(return_value=None)
+
+        with pytest.raises(LookupError):
+            await ChronicleService(repo, _db_manager(tmp_path)).edit_chronicle(uuid4(), title="x")
+
+
+def test_the_whole_object_update_is_not_a_remote_method():
+    from chronicler.core.rpc import exposed_methods
+
+    exposed = exposed_methods(ChronicleService)
+
+    assert "edit_chronicle" in exposed
+    assert "update_chronicle" not in exposed
