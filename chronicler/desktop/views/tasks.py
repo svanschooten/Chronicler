@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime
 from uuid import UUID
@@ -6,7 +7,7 @@ import flet as ft
 
 from chronicler.core.models import Task, TaskStatus
 from chronicler.core.services.chronicle_service import ChronicleService
-from chronicler.core.services.task_service import TaskService
+from chronicler.core.services.task_service import CANCELLABLE_WHILE_WORKING, TaskService
 from chronicler.desktop.theme import theme_colors
 from chronicler.i18n import t
 
@@ -14,7 +15,11 @@ logger = logging.getLogger(__name__)
 
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
 
-RETRYABLE = (TaskStatus.FAILED, TaskStatus.DONE)
+RETRYABLE = (TaskStatus.FAILED, TaskStatus.DONE, TaskStatus.CANCELLED)
+CANCELLABLE = (TaskStatus.PENDING, TaskStatus.WORKING)
+
+POLL_SECONDS = 2.0
+"""How often the list is re-read while a task is queued or running."""
 
 
 class TasksView(ft.Column):
@@ -32,6 +37,8 @@ class TasksView(ft.Column):
         self.query = ""
         self.hide_completed = True
         self.chronicle_titles: dict[UUID, str] = {}
+        self._active = False
+        self._mounted = False
 
         super().__init__(
             expand=True,
@@ -72,10 +79,23 @@ class TasksView(ft.Column):
 
     def did_mount(self):
         logger.debug("TasksView loaded")
+        self._mounted = True
         self.page.run_task(self.load_tasks)
+        self.page.run_task(self.poll_while_active)
 
     def will_unmount(self):
         logger.debug("TasksView unloaded")
+        self._mounted = False
+
+    async def poll_while_active(self) -> None:
+        """
+        Re-reads the list every few seconds while a task is queued or running, so progress
+        moves. It goes through the service, so a thin client sees it too.
+        """
+        while self._mounted:
+            await asyncio.sleep(POLL_SECONDS)
+            if self._mounted and self._active:
+                await self.load_tasks()
 
     def show_snackbar(self, message: str):
         self.page.show_dialog(ft.SnackBar(ft.Text(message)))
@@ -95,6 +115,11 @@ class TasksView(ft.Column):
         self.hide_completed = e.control.value
         await self.load_tasks()
 
+    async def cancel_clicked(self, e):
+        cancelled = await self.task_service.cancel_task(e.control.data)
+        self.show_snackbar(t("tasks.cancelled" if cancelled else "tasks.not_cancelled"))
+        await self.load_tasks()
+
     async def retry_clicked(self, e):
         await self.task_service.retry_task(e.control.data)
         self.show_snackbar("Task re-queued")
@@ -110,6 +135,7 @@ class TasksView(ft.Column):
             if self.hide_completed:
                 tasks = [t for t in tasks if t.status != TaskStatus.DONE]
 
+            self._active = any(task.status in CANCELLABLE for task in tasks)
             await self._load_chronicle_titles()
 
             self.task_list.controls = [self.create_task_row(t) for t in tasks] or [
@@ -154,7 +180,7 @@ class TasksView(ft.Column):
             parts.append(f"Next attempt {task.not_before.strftime(TIMESTAMP_FORMAT)}")
         if task.claimed_at:
             parts.append(f"Started {task.claimed_at.strftime(TIMESTAMP_FORMAT)}")
-        if task.status in (TaskStatus.DONE, TaskStatus.FAILED):
+        if task.status in (TaskStatus.DONE, TaskStatus.FAILED, TaskStatus.CANCELLED):
             parts.append(f"Completed {task.updated_at.strftime(TIMESTAMP_FORMAT)}")
         return " · ".join(parts)
 
@@ -174,6 +200,18 @@ class TasksView(ft.Column):
         trailing: list[ft.Control] = [
             ft.Text(f"{task.progress}%", weight=ft.FontWeight.BOLD, color=self.colors.text)
         ]
+        if task.status == TaskStatus.PENDING or (
+            task.status == TaskStatus.WORKING and task.type in CANCELLABLE_WHILE_WORKING
+        ):
+            trailing.append(
+                ft.IconButton(
+                    icon=ft.Icons.CANCEL_OUTLINED,
+                    icon_color=self.colors.muted,
+                    data=task.id,
+                    on_click=self.cancel_clicked,
+                    tooltip=t("tasks.cancel_tooltip"),
+                )
+            )
         if task.status in RETRYABLE:
             trailing.append(
                 ft.IconButton(
@@ -208,4 +246,6 @@ class TasksView(ft.Column):
             return ft.Icons.CHECK_CIRCLE
         if status == TaskStatus.FAILED:
             return ft.Icons.ERROR_OUTLINE
+        if status == TaskStatus.CANCELLED:
+            return ft.Icons.CANCEL_OUTLINED
         return ft.Icons.PENDING_ACTIONS
