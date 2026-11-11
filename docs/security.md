@@ -30,9 +30,12 @@ verbatim, so `"../../../../pwned.wav"` wrote outside the workspace entirely.
 
 ### Linked chronicles
 
-`create_chronicle` and `link_external_chronicle` take a `project_path`, which is the
-"linked chronicle" feature for local desktop use. Over RPC it reaches further than it
-looks: adding a source creates `sources/` beside that path and moves an uploaded file into
+`link_external_chronicle` takes a `project_path`, which is the "linked chronicle" feature
+for local desktop use. It is the only way to place a chronicle's database outside the
+workspace: it first checks that the file is a Chronicler project this version can open
+(`check_linkable_project`). `create_chronicle` used to take a `project_path` too, without
+that check, so a caller could have Chronicler's tables written into any SQLite file it
+could name; it no longer does. Over RPC a `project_path` reaches further than it looks: adding a source creates `sources/` beside that path and moves an uploaded file into
 it, cleaning creates `snapshots/` there, opening the chronicle runs the project migrations
 against whatever SQLite file it names, and a zip export with sources reads everything in
 that `sources/`.

@@ -1,3 +1,5 @@
+import sqlite3
+from contextlib import closing
 from unittest.mock import patch
 
 import pytest
@@ -409,11 +411,32 @@ async def test_document_exports_reach_a_thin_client(tmp_path):
         await db_manager.close_all()
 
 
+def _project_db(path):
+    """A project.db at the current schema, as Link accepts."""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine
+
+    from chronicler.core.database_manager import _MIGRATIONS_ROOT
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    engine = create_engine(f"sqlite:///{path}")
+    with engine.begin() as connection:
+        cfg = Config()
+        cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
+        cfg.attributes["connection"] = connection
+        command.upgrade(cfg, "head")
+    engine.dispose()
+    return path
+
+
 @pytest.mark.asyncio
-async def test_a_remote_caller_can_name_a_project_path_only_in_an_allowed_folder(tmp_path):
+async def test_a_remote_caller_can_link_a_project_path_only_in_an_allowed_folder(tmp_path):
     """Ticket 076: a server confines `project_path` to `server.linked_chronicle_dirs`."""
     workspace = tmp_path / "workspace"
     shared = tmp_path / "shared"
+    outside = _project_db(tmp_path / "elsewhere" / "project.db")
+    inside = _project_db(shared / "project.db")
     db_manager, app = _build_server_app(workspace, linked_chronicle_dirs=[shared])
     try:
         await db_manager.init_archive()
@@ -421,27 +444,53 @@ async def test_a_remote_caller_can_name_a_project_path_only_in_an_allowed_folder
         transport = ASGITransport(app=app, raise_app_exceptions=False)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             refused = await client.post(
-                "/chronicle/create_chronicle",
-                json={"title": "Out", "project_path": str(tmp_path / "elsewhere" / "p.db")},
-                headers=headers,
-            )
-            linked = await client.post(
                 "/chronicle/link_external_chronicle",
-                json={"project_path": str(tmp_path / "elsewhere" / "project.db")},
+                json={"project_path": str(outside)},
                 headers=headers,
             )
             allowed = await client.post(
-                "/chronicle/create_chronicle",
-                json={"title": "In", "project_path": str(shared / "project.db")},
+                "/chronicle/link_external_chronicle",
+                json={"project_path": str(inside)},
                 headers=headers,
             )
             listed = await client.post("/chronicle/list_chronicles", json={}, headers=headers)
 
         assert refused.status_code >= 400
-        assert linked.status_code >= 400
         assert allowed.status_code == 200
-        assert [chronicle["title"] for chronicle in listed.json()] == ["In"]
-        assert not (tmp_path / "elsewhere").exists()
+        assert [chronicle["project_path"] for chronicle in listed.json()] == [str(inside.resolve())]
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_create_chronicle_cannot_name_a_database_elsewhere(tmp_path):
+    """
+    Only Link, which checks the file first, places a chronicle's database outside the
+    workspace. Create used to take a `project_path` that skipped that check, so any SQLite
+    file in an allowed folder could get Chronicler's tables written into it.
+    """
+    shared = tmp_path / "shared"
+    foreign = shared / "someone-elses.db"
+    shared.mkdir()
+    with closing(sqlite3.connect(foreign)) as connection, connection:
+        connection.execute("CREATE TABLE notes (body TEXT)")
+    db_manager, app = _build_server_app(tmp_path / "workspace", linked_chronicle_dirs=[shared])
+    try:
+        await db_manager.init_archive()
+        headers = {"X-API-Key": "test-key"}
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            created = await client.post(
+                "/chronicle/create_chronicle",
+                json={"title": "Sneaky", "project_path": str(foreign)},
+                headers=headers,
+            )
+
+        assert created.status_code == 200
+        assert created.json()["project_path"] is None
+        with closing(sqlite3.connect(foreign)) as connection:
+            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master")}
+        assert tables == {"notes"}
     finally:
         await db_manager.close_all()
 

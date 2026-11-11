@@ -189,31 +189,27 @@ class TestLinkPolicy:
         repo.create = AsyncMock(side_effect=lambda chronicle: chronicle)
         return ChronicleService(repo, _db_manager(tmp_path), link_policy=LinkPolicy(allowed))
 
-    @pytest.mark.asyncio
-    async def test_a_path_inside_an_allowed_folder_is_kept(self, tmp_path):
+    def test_a_path_inside_an_allowed_folder_is_kept(self, tmp_path):
         allowed = tmp_path / "shared"
-        service = self._service(tmp_path, [allowed])
 
-        created = await service.create_chronicle("Inside", str(allowed / "a" / "project.db"))
+        confined = LinkPolicy([allowed]).confine(str(allowed / "a" / "project.db"))
 
-        assert created.project_path == str((allowed / "a" / "project.db").resolve())
+        assert confined == (allowed / "a" / "project.db").resolve()
 
-    @pytest.mark.asyncio
     @pytest.mark.parametrize("name", ["elsewhere/project.db", "shared/../elsewhere/project.db"])
-    async def test_a_path_outside_every_allowed_folder_is_refused(self, tmp_path, name):
-        service = self._service(tmp_path, [tmp_path / "shared"])
-
+    def test_a_path_outside_every_allowed_folder_is_refused(self, tmp_path, name):
         with pytest.raises(LinkRefusedError) as refused:
-            await service.create_chronicle("Outside", str(tmp_path / name))
+            LinkPolicy([tmp_path / "shared"]).confine(str(tmp_path / name))
         assert refused.value.reason == "not_allowed"
-        service.repository.create.assert_not_awaited()
+
+    def test_no_allowed_folders_allows_no_linked_chronicle(self, tmp_path):
+        with pytest.raises(LinkRefusedError):
+            LinkPolicy([]).confine(str(tmp_path / "project.db"))
 
     @pytest.mark.asyncio
-    async def test_no_allowed_folders_allows_no_linked_chronicle(self, tmp_path):
+    async def test_create_always_puts_the_database_in_the_workspace(self, tmp_path):
         service = self._service(tmp_path, [])
 
-        with pytest.raises(LinkRefusedError):
-            await service.create_chronicle("Anywhere", str(tmp_path / "project.db"))
         assert (await service.create_chronicle("In the workspace")).project_path is None
 
     @pytest.mark.asyncio
@@ -236,9 +232,10 @@ class TestLinkPolicy:
         repo.create = AsyncMock(side_effect=lambda chronicle: chronicle)
         service = ChronicleService(repo, _db_manager(tmp_path))
 
-        created = await service.create_chronicle("Anywhere", str(tmp_path / "x" / "project.db"))
-
-        assert created.project_path == str(tmp_path / "x" / "project.db")
+        assert LinkPolicy().confine(str(tmp_path / "x" / "project.db")) == (
+            tmp_path / "x" / "project.db"
+        )
+        assert service.link_policy.allowed_dirs is None
 
 
 @pytest.mark.asyncio
