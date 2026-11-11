@@ -1,6 +1,8 @@
 """Tests for the IMPORT task handler."""
 
+import asyncio
 import json
+import threading
 from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -8,9 +10,9 @@ from uuid import uuid4
 import pytest
 
 from chronicler.core.database_manager import DatabaseManager
-from chronicler.core.models import Chronicle, Task, TaskType
+from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
 from chronicler.core.processing.handlers import WorkerHandlers
-from chronicler.core.processing.importers import RegexImporter
+from chronicler.core.processing.importers import DefaultImporter, RegexImporter
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
 from tests.chronicler.core.processing.handlers.helpers import read_chronicle
 
@@ -452,5 +454,66 @@ async def test_a_slow_pattern_does_not_stall_the_event_loop_during_an_import(tmp
             ticking.cancel()
 
         assert longest_stall < 0.3
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_handle_import_parses_without_holding_the_database(tmp_path):
+    """
+    A slow parse holds no lock, so the chronicle can still be written to meanwhile, and an
+    appended file lands after whatever was added while it parsed.
+    """
+    # A short busy timeout: the write fails fast if the import still holds a lock.
+    db_manager = DatabaseManager(tmp_path, busy_timeout=0.2)
+    await db_manager.init_archive()
+    try:
+        handlers = WorkerHandlers(db_manager)
+        imports_dir = db_manager.get_imports_path()
+        chronicle_id = uuid4()
+        first_file = imports_dir / "part1.txt"
+        first_file.write_text("Alice: Hello\nBob: Hi\n")
+        await handlers.handle_import(
+            Task(
+                type=TaskType.IMPORT,
+                chronicle_id=chronicle_id,
+                data=json.dumps({"file_path": str(first_file)}),
+            ),
+            _noop_progress,
+        )
+
+        second_file = imports_dir / "part2.txt"
+        second_file.write_text("Carol: Later on\n")
+        started, release = threading.Event(), threading.Event()
+        real_parse = DefaultImporter.parse
+
+        def slow_parse(self: Any, content: Any, start_offset: float = 0.0) -> Any:
+            started.set()
+            release.wait(5)
+            return real_parse(self, content, start_offset=start_offset)
+
+        with patch.object(DefaultImporter, "parse", slow_parse):
+            importing = asyncio.create_task(
+                handlers.handle_import(
+                    Task(
+                        type=TaskType.IMPORT,
+                        chronicle_id=chronicle_id,
+                        data=json.dumps({"file_path": str(second_file), "append": True}),
+                    ),
+                    _noop_progress,
+                )
+            )
+            await asyncio.to_thread(started.wait, 5)
+            async with db_manager.transaction(chronicle_id, must_exist=False) as session:
+                await SQLiteTranscriptRepository(session).add_lines(
+                    [TranscriptLine(text="Added meanwhile", start_time=2.0, end_time=10.0)]
+                )
+            release.set()
+            await importing
+
+        async with await db_manager.get_project_session(str(chronicle_id)) as session:
+            lines = await SQLiteTranscriptRepository(session).get_lines()
+        carol = next(line for line in lines if line.speaker_name == "Carol")
+        assert carol.start_time == 10.0
     finally:
         await db_manager.close_all()

@@ -12,7 +12,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from chronicler.core.config_sections import CleaningSettings
-from chronicler.core.models import Task
+from chronicler.core.models import Task, TranscriptLine
 from chronicler.core.processing.cleaners import TranscriptCleaner
 from chronicler.core.processing.handlers.base import HandlerBase, ProgressCallback
 from chronicler.core.sqlite import SQLiteTranscriptRepository
@@ -24,6 +24,9 @@ SNAPSHOTS_KEPT = 3
 How many before-clean snapshots a chronicle keeps: the oldest, which holds the
 transcript as it was before any clean, and the newest of the rest.
 """
+
+CLEAN_ATTEMPTS = 3
+"""How many times a clean starts again when the transcript changed while it ran."""
 
 
 class CleanHandler(HandlerBase):
@@ -49,20 +52,7 @@ class CleanHandler(HandlerBase):
         snapshot = await self.snapshot_before_clean(chronicle_id)
         logger.info(f"Saved the transcript before cleaning to {snapshot}")
 
-        async with self.transaction(chronicle_id) as session:
-            repo = SQLiteTranscriptRepository(session)
-            lines = await repo.get_lines()
-            logger.info(f"Cleaning {len(lines)} lines for chronicle {chronicle_id}")
-
-            await update_progress(30)
-
-            cleaned_lines = await asyncio.to_thread(TranscriptCleaner(cleaning).clean, lines)
-            logger.info(f"Cleaned down to {len(cleaned_lines)} lines")
-
-            await update_progress(70)
-
-            await repo.delete_all_lines()
-            await repo.add_lines(cleaned_lines)
+        cleaned_lines = await self._clean_lines(chronicle_id, cleaning, update_progress)
 
         speakers_count = len({line.speaker_name for line in cleaned_lines})
         await self.backfill_speakers_count(chronicle_id, speakers_count)
@@ -71,6 +61,40 @@ class CleanHandler(HandlerBase):
         logger.info(
             f"Transcript clean finished for chronicle {chronicle_id}: "
             f"{len(cleaned_lines)} lines, {speakers_count} speakers"
+        )
+
+    async def _clean_lines(
+        self, chronicle_id: UUID, cleaning: CleaningSettings, update_progress: ProgressCallback
+    ) -> list[TranscriptLine]:
+        """
+        Cleans outside any transaction, then writes the result only if the lines it read
+        are still the lines there.
+
+        Cleaning can take up to the regex time limit. Holding the transaction across it
+        made every edit to this chronicle fail with "database is locked" meanwhile. An
+        edit that lands while cleaning runs is not overwritten: the clean starts again from
+        the new lines, and gives up after `CLEAN_ATTEMPTS`. See docs/storage.md.
+        """
+        for _ in range(CLEAN_ATTEMPTS):
+            async with await self.project_session(chronicle_id) as session:
+                lines = await SQLiteTranscriptRepository(session).get_lines()
+            logger.info(f"Cleaning {len(lines)} lines for chronicle {chronicle_id}")
+            await update_progress(30)
+
+            cleaned_lines = await asyncio.to_thread(TranscriptCleaner(cleaning).clean, lines)
+            logger.info(f"Cleaned down to {len(cleaned_lines)} lines")
+            await update_progress(70)
+
+            async with self.transaction(chronicle_id) as session:
+                repo = SQLiteTranscriptRepository(session)
+                if await repo.get_lines() == lines:
+                    await repo.delete_all_lines()
+                    await repo.add_lines(cleaned_lines)
+                    return cleaned_lines
+            logger.info(f"Chronicle {chronicle_id} changed while it was cleaned; starting again")
+        raise RuntimeError(
+            "The transcript kept changing while it was being cleaned. Run Clean again once "
+            "nothing else is editing it."
         )
 
     async def snapshot_before_clean(self, chronicle_id: UUID) -> Path:

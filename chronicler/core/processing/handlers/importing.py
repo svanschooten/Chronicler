@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from uuid import UUID
 
 from chronicler.core.models import Task
 from chronicler.core.processing.handlers.base import HandlerBase, ProgressCallback
@@ -29,20 +30,28 @@ class ImportHandler(HandlerBase):
 
         append = bool(data.get("append"))
 
+        # Parsed before the transaction opens: a slow pattern can take up to the regex time
+        # limit, and holding the write lock that long makes every edit to this chronicle
+        # fail with "database is locked". See docs/storage.md.
+        start_offset = await self._end_of_transcript(chronicle_id) if append else 0.0
+        lines = await asyncio.to_thread(importer.parse, content, start_offset=start_offset)
+        logger.info(f"Parsed {len(lines)} lines from {file_path}")
+
+        await update_progress(50)
+
         async with self.transaction(chronicle_id) as session:
             repo = SQLiteTranscriptRepository(session)
             if append:
                 existing_lines = await repo.get_lines()
-                start_offset = max((line.end_time for line in existing_lines), default=0.0)
+                # Lines added while this parsed move the end of the timeline; times are
+                # offsets from it, so they shift with it.
+                shift = max((line.end_time for line in existing_lines), default=0.0) - start_offset
+                for line in lines:
+                    line.start_time += shift
+                    line.end_time += shift
             else:
                 existing_lines = []
-                start_offset = 0.0
                 await repo.delete_all_lines()
-
-            lines = await asyncio.to_thread(importer.parse, content, start_offset=start_offset)
-            logger.info(f"Parsed {len(lines)} lines from {file_path}")
-
-            await update_progress(50)
 
             speaker_map = await self.attach_speakers(repo, lines)
             await repo.add_lines(lines)
@@ -59,6 +68,12 @@ class ImportHandler(HandlerBase):
             f"Transcript import finished for chronicle {chronicle_id}: "
             f"{len(lines)} lines, {final_speaker_count} speakers"
         )
+
+    async def _end_of_transcript(self, chronicle_id: UUID) -> float:
+        """Where an appended file starts on the chronicle's timeline."""
+        async with await self.project_session(chronicle_id) as session:
+            lines = await SQLiteTranscriptRepository(session).get_lines()
+        return max((line.end_time for line in lines), default=0.0)
 
     @staticmethod
     def _importer_for(data: dict) -> RegexImporter | DefaultImporter:

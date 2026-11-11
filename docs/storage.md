@@ -100,6 +100,16 @@ chronicle id, never a path:
   `get_project_session` when asked. Handlers without an archive connection to check
   against skip it.
 
+**Keep a transaction short.** Project databases use SQLite's rollback journal, so a
+transaction that has read holds a lock that stops anyone else committing, and one that has
+written stops everyone else writing. Another writer waits `busy_timeout` (5 seconds) and
+then fails with "database is locked". Slow work therefore happens outside the transaction:
+Import parses the file first, and Clean reads the lines, cleans them on a worker thread,
+then writes the result in a short transaction only if the lines are still the ones it read
+(it starts again from the new lines otherwise, and gives up after three tries). Both can
+take up to the regex time limit, so an edit made meanwhile now goes through instead of
+failing.
+
 The cache is dropped by `close_project`, which `delete_chronicle` calls after the row is
 gone. Nothing else can make it stale: a chronicle's `project_path` is set when it is
 created or linked, and `update_chronicle` keeps the stored one (ticket 076).

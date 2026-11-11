@@ -1,7 +1,9 @@
 """Tests for the CLEAN task handler."""
 
+import asyncio
 import json
 import sqlite3
+import threading
 from contextlib import closing
 from typing import Any
 from unittest.mock import patch
@@ -11,7 +13,9 @@ import pytest
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
+from chronicler.core.processing.cleaners import TranscriptCleaner
 from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.handlers.cleaning import CLEAN_ATTEMPTS
 from chronicler.core.sqlite import (
     SQLiteAudioSourceRepository,
     SQLiteChronicleRepository,
@@ -483,5 +487,85 @@ class TestSnapshotBeforeCleaning:
             snapshots = list((folder / "snapshots").iterdir())
             assert first in snapshots
             assert len([path for path in snapshots if str(ids[1]) in path.name]) == 3
+        finally:
+            await db_manager.close_all()
+
+
+class TestCleaningOutsideTheTransaction:
+    """A slow clean holds no lock, and an edit made while it runs is not overwritten."""
+
+    @staticmethod
+    async def _edit_first_line(db_manager, chronicle_id, text):
+        async with db_manager.transaction(chronicle_id) as session:
+            repo = SQLiteTranscriptRepository(session)
+            first = (await repo.get_lines())[0]
+            await repo.update_line(first.id, text=text)
+
+    @pytest.mark.asyncio
+    async def test_an_edit_while_cleaning_runs_is_kept_and_cleaned(self, tmp_path):
+        # A short busy timeout: the edit fails fast if the clean still holds a lock.
+        db_manager = DatabaseManager(tmp_path, busy_timeout=0.2)
+        try:
+            chronicle_id = uuid4()
+            await _chronicle_with_lines(db_manager, chronicle_id, "We ride.", "At dawn.")
+
+            started, release = threading.Event(), threading.Event()
+            calls = []
+            real_clean = TranscriptCleaner.clean
+
+            def slow_clean(self, lines):
+                calls.append([line.text for line in lines])
+                if len(calls) == 1:
+                    started.set()
+                    release.wait(5)
+                return real_clean(self, lines)
+
+            with patch.object(TranscriptCleaner, "clean", slow_clean):
+                cleaning = asyncio.create_task(
+                    WorkerHandlers(db_manager).handle_clean(
+                        Task(type=TaskType.CLEAN, chronicle_id=chronicle_id), _noop_progress
+                    )
+                )
+                await asyncio.to_thread(started.wait, 5)
+                await self._edit_first_line(db_manager, chronicle_id, "We   ride  together.")
+                release.set()
+                await cleaning
+
+            assert calls[1][0] == "We   ride  together."
+            assert len(calls) == 2
+            # Cleaned from the edited text: whitespace collapsed, one speaker's lines merged.
+            assert await _texts(db_manager, chronicle_id) == ["We ride together. At dawn."]
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_transcript_that_never_settles_fails_the_clean_unchanged(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        try:
+            chronicle_id = uuid4()
+            await _chronicle_with_lines(db_manager, chronicle_id, "We ride.")
+            loop = asyncio.get_running_loop()
+            edits = []
+            real_clean = TranscriptCleaner.clean
+
+            def clean_while_editing(self, lines):
+                edit = f"edit {len(edits)}"
+                edits.append(edit)
+                asyncio.run_coroutine_threadsafe(
+                    TestCleaningOutsideTheTransaction._edit_first_line(
+                        db_manager, chronicle_id, edit
+                    ),
+                    loop,
+                ).result(5)
+                return real_clean(self, lines)
+
+            with patch.object(TranscriptCleaner, "clean", clean_while_editing):
+                with pytest.raises(RuntimeError, match="kept changing"):
+                    await WorkerHandlers(db_manager).handle_clean(
+                        Task(type=TaskType.CLEAN, chronicle_id=chronicle_id), _noop_progress
+                    )
+
+            assert len(edits) == CLEAN_ATTEMPTS
+            assert await _texts(db_manager, chronicle_id) == [edits[-1]]
         finally:
             await db_manager.close_all()
