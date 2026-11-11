@@ -28,6 +28,21 @@ the server into the chronicle — destroying the original and exposing its conte
 through the transcript — and `original_name` was joined onto the sources directory
 verbatim, so `"../../../../pwned.wav"` wrote outside the workspace entirely.
 
+### Linked chronicles
+
+`create_chronicle` and `link_external_chronicle` take a `project_path`, which is the
+"linked chronicle" feature for local desktop use. Over RPC it reaches further than it
+looks: adding a source creates `sources/` beside that path and moves an uploaded file into
+it, cleaning creates `snapshots/` there, opening the chronicle runs the project migrations
+against whatever SQLite file it names, and a zip export with sources reads everything in
+that `sources/`.
+
+So a server confines it. `LinkPolicy` refuses a path outside `server.linked_chronicle_dirs`
+with `LinkRefusedError("not_allowed")`, before anything is read or created, and the list is
+empty by default. The full-stack app registers no policy and links anywhere, since its
+caller is the machine's own user. `update_chronicle` never changes `project_path`, so a
+chronicle cannot be moved past the check afterwards.
+
 ## Filename sanitisation
 
 Two different rules, for two different jobs.
@@ -111,13 +126,5 @@ chunks, checking the running total as it goes rather than trusting a declared
 
 ## What is deliberately still open
 
-* **A caller can name any `project_path`.** `create_chronicle`, `link_external_chronicle`
-  and `update_chronicle` all accept one, which is the "linked chronicle" feature for local
-  desktop use. Over RPC it reaches further than it looks: adding a source creates
-  `sources/` beside that path and moves an uploaded file into it, cleaning creates
-  `snapshots/` there, opening the chronicle runs the project migrations against whatever
-  SQLite file it names, and a zip export with sources reads everything in that
-  `sources/`. So anyone holding the API key can write wherever the server process can.
-  Ticket 076 confines it.
 * **No per-user identity.** One API key grants full access. Multi-user access control is
   not designed yet.

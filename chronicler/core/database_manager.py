@@ -99,6 +99,7 @@ class LinkRefusedError(ValueError):
         "not_found": "no such file",
         "not_chronicler": "not a Chronicler database",
         "newer_version": "made by a newer version of Chronicler",
+        "not_allowed": "outside the folders this server allows chronicles in",
         "unreadable": "could not be read",
     }
 

@@ -1,5 +1,6 @@
 """Grouped settings sections nested under `Settings`."""
 
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -219,6 +220,16 @@ class SummarySettings(BaseModel):
         if not cleaned or cleaned == AUTO_LANGUAGE:
             return None
         return cleaned
+
+
+class ServerSettings(BaseModel):
+    """What a server lets the clients holding its API key do."""
+
+    # Where a chronicle's project.db may be created or linked by a remote caller. Empty, the
+    # default, allows none: a server keeps its chronicles in its workspace. The full-stack
+    # app ignores this, since there the caller is the machine's own user. See
+    # docs/security.md.
+    linked_chronicle_dirs: list[Path] = Field(default_factory=list)
 
 
 class ExtrasSettings(BaseModel):

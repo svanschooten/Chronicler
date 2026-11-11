@@ -227,6 +227,10 @@ MESSAGES = {
             "{path} kann nicht verknüpft werden: Mit einer neueren Chronicler-Version erstellt"
         ),
         "link_unreadable": ("{path} kann nicht verknüpft werden: Nicht lesbar ({detail})"),
+        "link_not_allowed": (
+            "{path} kann nicht verknüpft werden: Liegt außerhalb der Ordner, die der Server "
+            "für Chroniken erlaubt"
+        ),
         "transcript_exists_title": "Es gibt schon ein Transkript",
         "transcript_exists_message": (
             "Diese Chronicle hat bereits ein importiertes Transkript. Mit der neuen Datei "

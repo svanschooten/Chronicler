@@ -25,6 +25,7 @@ from chronicler.core.config_sections import (
     ExtrasSettings,
     LlmSettings,
     NormalizationSettings,
+    ServerSettings,
     SummarySettings,
     TranscriptionSettings,
     UiSettings,
@@ -39,6 +40,7 @@ SECTION_MODELS: dict[str, type] = {
     "summary": SummarySettings,
     "ui": UiSettings,
     "extras": ExtrasSettings,
+    "server": ServerSettings,
 }
 
 logger = logging.getLogger(__name__)
@@ -232,6 +234,7 @@ class Settings(BaseSettings):
     summary: SummarySettings = Field(default_factory=SummarySettings)
     ui: UiSettings = Field(default_factory=UiSettings)
     extras: ExtrasSettings = Field(default_factory=ExtrasSettings)
+    server: ServerSettings = Field(default_factory=ServerSettings)
 
     @property
     def config_dir(self) -> Path:

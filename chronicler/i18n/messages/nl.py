@@ -221,6 +221,10 @@ MESSAGES = {
             "Kan {path} niet koppelen: het is gemaakt door een nieuwere versie van Chronicler"
         ),
         "link_unreadable": "Kan {path} niet koppelen: het kon niet worden gelezen ({detail})",
+        "link_not_allowed": (
+            "Kan {path} niet koppelen: het staat buiten de mappen waarin de server "
+            "Chronicles toestaat"
+        ),
         "transcript_exists_title": "Er is al een transcript",
         "transcript_exists_message": (
             "Deze Chronicle heeft al een geimporteerd transcript. Overschrijven met het "

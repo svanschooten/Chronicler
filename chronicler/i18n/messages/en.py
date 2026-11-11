@@ -218,6 +218,9 @@ MESSAGES = {
         "link_not_chronicler": "Cannot link {path}: it is not a Chronicler database",
         "link_newer_version": "Cannot link {path}: it was made by a newer version of Chronicler",
         "link_unreadable": "Cannot link {path}: it could not be read ({detail})",
+        "link_not_allowed": (
+            "Cannot link {path}: it is outside the folders the server allows chronicles in"
+        ),
         "transcript_exists_title": "Transcript already exists",
         "transcript_exists_message": (
             "This chronicle already has an imported transcript. Overwrite it with the "
