@@ -1,13 +1,12 @@
 """
 The first-run setup screen for the desktop app.
 
-The console wizard in `core.wizard` cannot serve a packaged desktop build: with no console
-attached there is nowhere for `input()` to read from, and a windowless Windows executable
-has no stdio at all. This asks the same questions through Flet instead.
+A console wizard cannot serve a packaged desktop build: with no console attached there is
+nowhere for `input()` to read from, and a windowless Windows executable has no stdio at
+all. This asks its questions through Flet instead.
 
 It covers only the two modes a desktop window can actually run in - full stack and thin
-client. Server setup stays in the console wizard, which runs from the terminal the server
-is started from anyway.
+client. The server is set up with flags or environment variables (`core.wizard`).
 """
 
 import asyncio
@@ -31,7 +30,7 @@ CARD_WIDTH = 560
 
 class FletSetupWizard:
     """
-    Collects the same settings the console wizard does, one step at a time, and saves them.
+    Collects the settings a desktop run needs, one step at a time, and saves them.
 
     `run()` returns only once the user has finished, so the caller can treat it as "config
     now exists" and carry on building the runtime.
