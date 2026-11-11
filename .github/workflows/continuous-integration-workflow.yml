@@ -63,7 +63,8 @@ jobs:
 
   # The tests job installs no extras, so normalization and transcription code would go
   # untested. This installs the runtime locks the embedded build ships - hash-checked, no
-  # resolver - and fails if any test is skipped for a missing extra. See
+  # resolver - and fails if any test is skipped for a missing extra. Every such skip says
+  # "requires the '<extra>' extra" through tests/extras.py, which a test enforces. See
   # docs/runtime-build.md.
   extras:
     name: Tests With Every Extra (${{ matrix.os }})
