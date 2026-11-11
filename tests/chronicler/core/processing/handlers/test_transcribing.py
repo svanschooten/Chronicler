@@ -601,3 +601,22 @@ class TestTranscriptionParameters:
             assert "model exploded" in record.transcription_error
         finally:
             await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_re_transcribing_a_track_keeps_a_copy_to_restore_from(tmp_path):
+    db_manager = DatabaseManager(tmp_path)
+    handlers = WorkerHandlers(db_manager)
+    chronicle_id = uuid4()
+    try:
+        await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "First pass")
+        assert await db_manager.list_snapshots(chronicle_id) == []
+
+        await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "Second pass")
+
+        (snapshot,) = await db_manager.list_snapshots(chronicle_id)
+        assert snapshot.kind == "transcribe"
+        await db_manager.restore_project(chronicle_id, snapshot.name)
+        assert await _texts(db_manager, chronicle_id) == {("Alice", "First pass")}
+    finally:
+        await db_manager.close_all()
