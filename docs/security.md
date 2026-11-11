@@ -105,9 +105,20 @@ on another machine is the reason server mode exists.
 
 ## Uploads
 
-`/upload` caps at `MAX_UPLOAD_SIZE` (500 MB, headroom for audio) and streams in 1 MB
-chunks, checking the running total as it goes rather than trusting a declared
-`Content-Length`. A file that exceeds the cap is deleted rather than left as a partial.
+`/upload` caps at `MAX_UPLOAD_SIZE` (500 MB, headroom for audio), and the cap holds while
+the body is being received, not only once it has been.
+
+Starlette spools a multipart body to a temporary file before the endpoint runs, so a check
+in the endpoint alone limits what is kept, not what reaches the disk. `_UploadSizeLimit`, an
+ASGI middleware on `/upload`, closes that:
+
+1. A declared `Content-Length` over the cap plus `MULTIPART_OVERHEAD` (64 KB for the
+   boundary and part headers) gets a 413 before a byte of the body is read.
+2. It counts the bytes that actually arrive, so a client that sends no length, or a false
+   one, is stopped with a 413 as soon as it passes the same limit.
+
+The endpoint then holds the file itself to exactly `MAX_UPLOAD_SIZE` as it streams it in
+1 MB chunks, and deletes a file that exceeds it rather than leave a partial.
 
 ## What is deliberately still open
 
