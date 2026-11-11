@@ -56,9 +56,14 @@ are others; the chronicle's own find shows them all. A chronicle that cannot be 
 is skipped and logged, not an error: a linked file that moved, or one a newer Chronicler
 upgraded.
 
-**Searching opens every chronicle, so it upgrades every one** that this version has not
-opened yet, linked ones included. That is the 074 rule at work, not something search
-adds. See [storage.md](storage.md#opening-a-chronicle-upgrades-it).
+**Searching never upgrades a linked chronicle.** Opening a chronicle migrates it to this
+version's schema (the 074 rule), and a linked `project.db` may be shared with someone on an
+older Chronicler, who could not open it afterwards. So before opening a linked chronicle
+this process has not opened yet, search reads its stamped revision read-only
+(`DatabaseManager.would_upgrade_linked`), and skips it if opening would migrate it. It is
+searched once someone opens it. The workspace's own chronicles belong to this workspace
+alone, so search still upgrades and searches them. See
+[storage.md](storage.md#opening-a-chronicle-upgrades-it).
 
 ## In the desktop
 

@@ -54,6 +54,40 @@ def _known_revisions(chain: str) -> frozenset[str]:
     )
 
 
+@cache
+def _head_revisions(chain: str) -> frozenset[str]:
+    """The revisions a database of this chain is stamped with once fully migrated."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / chain))
+    return frozenset(ScriptDirectory.from_config(cfg).get_heads())
+
+
+def _behind_head(path: Path) -> bool:
+    """
+    Whether the project.db at `path` is stamped with a revision this version knows and
+    would migrate. Read-only. False for anything else (missing, unreadable, newer, not a
+    Chronicler file), which opening it reports better.
+    """
+    try:
+        connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return False
+    try:
+        stamped = {row[0] for row in connection.execute("SELECT version_num FROM alembic_version")}
+    except sqlite3.Error:
+        return False
+    finally:
+        connection.close()
+    return (
+        bool(stamped)
+        and stamped <= _known_revisions("project")
+        and (stamped != _head_revisions("project"))
+    )
+
+
 def _refuse_newer_schema(connection: Connection, chain: str) -> None:
     """
     Raises NewerSchemaError if the database is stamped with a revision this version does
@@ -251,6 +285,22 @@ class DatabaseManager:
         if must_exist and path and not path.is_file():
             raise FileNotFoundError(f"The linked project database {path} was not found")
         return path
+
+    async def would_upgrade_linked(self, chronicle_id: UUID | str) -> bool:
+        """
+        Whether opening this chronicle would migrate a linked project.db that this process
+        has not opened yet. Its file may be shared, and once upgraded an older Chronicler
+        cannot open it, so only an explicit open should do that - not, say, a search
+        across the workspace. A chronicle in the workspace is never "linked" here. See
+        docs/storage.md.
+        """
+        key = str(chronicle_id)
+        if key in self._project_engines:
+            return False
+        path = await self.project_path_for(key)
+        if path is None:
+            return False
+        return await asyncio.to_thread(_behind_head, path)
 
     async def get_project_session(
         self, chronicle_id: UUID | str, must_exist: bool = False

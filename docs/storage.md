@@ -190,7 +190,9 @@ file moves to the newest schema in place and without asking.
 
 This matters for anything shared: a chronicle in a synced folder, one sent as a zip, or a
 linked `project.db`. Whoever opens it with the newest version decides the version everyone
-else needs. Searching the workspace opens every chronicle, so it upgrades them all (see
+else needs. Only opening a chronicle does this: searching the workspace upgrades the
+workspace's own chronicles, but skips a linked one that it would upgrade, until someone
+opens it (`DatabaseManager.would_upgrade_linked`, see
 [search.md](search.md#across-the-workspace-a-fan-out)).
 
 **The rule (ticket 074):**

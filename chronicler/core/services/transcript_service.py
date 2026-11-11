@@ -94,8 +94,9 @@ class TranscriptService:
 
         A fan-out over each chronicle's own index rather than one workspace index, so there
         is nothing to keep in sync. A chronicle that cannot be opened (a linked file that
-        moved, one a newer Chronicler upgraded) is skipped, not an error. See
-        docs/search.md.
+        moved, one a newer Chronicler upgraded) is skipped, not an error, and so is a
+        linked one that opening would upgrade: its file may be shared with an older
+        Chronicler. See docs/search.md.
         """
         if not query.strip():
             return []
@@ -105,6 +106,12 @@ class TranscriptService:
         async def search_one(chronicle: Chronicle) -> TranscriptMatch | None:
             async with limit:
                 try:
+                    if await self.db_manager.would_upgrade_linked(chronicle.id):
+                        logger.info(
+                            f"Skipped linked chronicle {chronicle.id} in search: opening it "
+                            "would upgrade its file"
+                        )
+                        return None
                     async with await self._project_session(chronicle.id) as session:
                         lines = await SQLiteTranscriptRepository(session).search(
                             query, limit=MATCHES_PER_CHRONICLE + 1
