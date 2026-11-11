@@ -217,7 +217,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [ ] [075-L13 Saving the edit dialog can erase a duration a task just computed](075-L13_edit_drops_computed_duration.md) · low · S
 
-- [ ] [078-L16 Archive search can show results for an earlier query](078-L16_archive_search_out_of_order.md) · low · XS
+- [x] [078-L16 Archive search can show results for an earlier query](078-L16_archive_search_out_of_order.md) · low · XS
 
 - [ ] [079-L17 Some model replies crash the summary or end up in it](079-L17_llm_reply_shapes.md) · low · XS
 
