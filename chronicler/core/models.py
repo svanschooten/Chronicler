@@ -85,6 +85,15 @@ class Chronicle(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TranscriptMatch(BaseModel):
+    """One chronicle's transcript lines that matched a workspace search."""
+
+    chronicle: Chronicle
+    lines: list[TranscriptLine]
+    # More lines matched than `lines` holds; the chronicle's own find shows them all.
+    has_more: bool = False
+
+
 class Task(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     type: TaskType

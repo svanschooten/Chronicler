@@ -333,7 +333,7 @@ class TestTheRealServices:
 
         assert surface == {
             "ChronicleService": 8,
-            "TranscriptService": 15,
+            "TranscriptService": 17,
             "TaskService": 8,
             "SystemService": 3,
         }

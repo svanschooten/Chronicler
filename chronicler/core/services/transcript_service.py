@@ -5,11 +5,12 @@ import textwrap
 from pathlib import Path
 from uuid import UUID
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.database_manager import DatabaseManager, NewerSchemaError
 from chronicler.core.formatting import format_timestamp
-from chronicler.core.models import AudioSource, Summary, TranscriptLine
+from chronicler.core.models import AudioSource, Chronicle, Summary, TranscriptLine, TranscriptMatch
 from chronicler.core.processing.fingerprint import fingerprint_file
 from chronicler.core.repositories import ChronicleRepository, KnownSpeakerRepository
 from chronicler.core.rpc import service
@@ -30,6 +31,9 @@ from chronicler.core.sqlite import (
 logger = logging.getLogger(__name__)
 
 PLAINTEXT_EXPORT_WIDTH = 140
+# Lines shown per chronicle in a workspace search, and chronicles searched at once.
+MATCHES_PER_CHRONICLE = 3
+SEARCH_CONCURRENCY = 8
 NORMALIZED_SUFFIX = ".normalized.wav"
 
 
@@ -48,6 +52,8 @@ NORMALIZED_SUFFIX = ".normalized.wav"
         "list_summaries",
         "read_transcript_text",
         "refresh_speaker_count",
+        "search_transcript",
+        "search_transcripts",
         "speaker_suggestions",
         "update_line",
     ]
@@ -75,6 +81,47 @@ class TranscriptService:
     async def get_transcript(self, chronicle_id: UUID) -> list[TranscriptLine]:
         async with await self._project_session(chronicle_id) as session:
             return await SQLiteTranscriptRepository(session).get_lines()
+
+    async def search_transcript(self, chronicle_id: UUID, query: str) -> list[TranscriptLine]:
+        """This chronicle's lines containing every word of `query`. See docs/search.md."""
+        async with await self._project_session(chronicle_id) as session:
+            return await SQLiteTranscriptRepository(session).search(query)
+
+    async def search_transcripts(self, query: str) -> list[TranscriptMatch]:
+        """
+        Every chronicle whose transcript has a line containing every word of `query`, with
+        its first few matching lines, newest chronicle first.
+
+        A fan-out over each chronicle's own index rather than one workspace index, so there
+        is nothing to keep in sync. A chronicle that cannot be opened (a linked file that
+        moved, one a newer Chronicler upgraded) is skipped, not an error. See
+        docs/search.md.
+        """
+        if not query.strip():
+            return []
+        chronicles = await self.chronicle_repository.get_all()
+        limit = asyncio.Semaphore(SEARCH_CONCURRENCY)
+
+        async def search_one(chronicle: Chronicle) -> TranscriptMatch | None:
+            async with limit:
+                try:
+                    async with await self._project_session(chronicle.id) as session:
+                        lines = await SQLiteTranscriptRepository(session).search(
+                            query, limit=MATCHES_PER_CHRONICLE + 1
+                        )
+                except (LookupError, OSError, NewerSchemaError, SQLAlchemyError) as error:
+                    logger.warning(f"Skipped chronicle {chronicle.id} in search: {error}")
+                    return None
+            if not lines:
+                return None
+            return TranscriptMatch(
+                chronicle=chronicle,
+                lines=lines[:MATCHES_PER_CHRONICLE],
+                has_more=len(lines) > MATCHES_PER_CHRONICLE,
+            )
+
+        found = await asyncio.gather(*(search_one(chronicle) for chronicle in chronicles))
+        return [match for match in found if match is not None]
 
     async def update_line(
         self,
