@@ -16,6 +16,7 @@ MESSAGES = {
         "delete": "Löschen",
         "close": "Schließen",
         "unknown": "Unbekannt",
+        "ok": "OK",
     },
     "settings": {
         "title": "Einstellungen",
@@ -177,6 +178,13 @@ MESSAGES = {
         "clear_with_failed": "Erledigte und fehlgeschlagene",
         "cleared": "{count} Aufgaben gelöscht",
         "retry_tooltip": "Diese Aufgabe erneut ausfuehren",
+        "requeued": "Aufgabe erneut eingereiht",
+        "load_failed": "Fehler beim Laden der Aufgaben: {error}",
+        "status": "Status: {status}",
+        "created": "Erstellt {time}",
+        "next_attempt": "Nächster Versuch {time}",
+        "started": "Gestartet {time}",
+        "completed": "Abgeschlossen {time}",
         "empty": "Noch keine Aufgaben.",
         "queued_normalize": "Normalisierung von '{name}' eingereiht",
         "queued_transcribe": "Transkription von '{name}' als {speaker} eingereiht",
@@ -234,6 +242,12 @@ MESSAGES = {
         },
         "no_snapshots": "Es gibt noch keine frühere Version zum Wiederherstellen.",
         "restored": "Vorherige Version wiederhergestellt",
+        "audio_added": "Audioquelle '{name}' hinzugefügt",
+        "audio_created": "'{title}' erstellt und Audioquelle hinzugefügt",
+        "import_created": "'{title}' erstellt und Transkriptimport eingereiht",
+        "append_queued": "Anhängen des Transkripts eingereiht",
+        "import_queued": "Transkriptimport eingereiht",
+        "linked": "'{title}' verknüpft - {count} Sprecher",
         "clean_title": "Transkript bereinigen?",
         "clean_message": (
             "Beim Bereinigen von '{title}' werden Füllzeilen und Wiederholungen entfernt und "
@@ -374,6 +388,7 @@ MESSAGES = {
         "failed": "Fehler beim Exportieren: {error}",
         "write_failed": "Fehler beim Schreiben der Datei: {error}",
         "no_picker": "Dateiauswahl nicht verfügbar.",
+        "plaintext_title": "Transkript als reinen Text exportieren",
     },
     "extras": {
         "title": "Zusatzkomponente erforderlich",
@@ -387,6 +402,18 @@ MESSAGES = {
         "installing": "{name} wird installiert ({size})...",
         "installed": "{name} ist einsatzbereit",
         "failed": "{name} konnte nicht installiert werden: {error}",
+        "purposes": {
+            "transcription": "Audio mit Whisper transkribieren",
+            "normalization": "Die Lautstärke einer Audioquelle normalisieren",
+            "llm": "Ein lokales GGUF-Sprachmodell für Zusammenfassungen ausführen",
+            "recording": "Audio mit einem Mikrofon aufnehmen",
+            "server": "Chronicler als Server ausführen",
+        },
+        "notes": {
+            "transcription": "Das Whisper-Modell wird beim ersten Start separat heruntergeladen.",
+            "llm": "Nur für lokale Modelle nötig; ein entferntes Gateway braucht nichts.",
+            "recording": "sounddevice ist eine Anbindung, kein Paket: es braucht PortAudio.",
+        },
     },
     "wizard": {
         "title": "Willkommen bei Chronicler",

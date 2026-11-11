@@ -28,19 +28,18 @@ ends, so anything that prints or reads goes nowhere. Two things follow.
 
 ### Desktop setup happens on screen
 
-The console wizard in `core/wizard.py` is `input()` all the way down. It cannot serve a
-packaged desktop launch, and not only on Windows: a Linux binary started from a file
-manager has no controlling terminal either, so `input()` raises `EOFError` there too.
+A wizard built on `input()` cannot serve a packaged desktop launch, and not only on Windows:
+a Linux binary started from a file manager has no controlling terminal either, so `input()`
+raises `EOFError` there too.
 
-Desktop mode therefore uses `desktop/views/wizard.py`, which asks the same questions as
-Flet controls inside the window that is already open. `__main__.main()` routes to it by
-not calling `run_wizard` for the desktop at all; `desktop.main.start()` decides,
+Desktop mode therefore uses `desktop/views/wizard.py`, which asks its questions as Flet
+controls inside the window that is already open. `__main__.main()` routes to it by not
+calling `configure_server` for the desktop at all; `desktop.main.start()` decides,
 using the same `Settings.validate_for_mode` gate the other modes use.
 
 The Flet wizard deliberately covers **only** the two modes a desktop window can run in —
-full stack and thin client. The server is started from a terminal, which is exactly
-where the console wizard works, so it keeps it and the desktop wizard does not duplicate
-it.
+full stack and thin client. The server is configured with flags or environment variables
+(`configure_server` in `core/wizard.py`), so it needs no screen and no terminal.
 
 ### `chronicler server` borrows the calling terminal
 
@@ -160,7 +159,7 @@ from Linux:
   with no config present shows the setup wizard rather than dying silently
 * `Chronicler.exe --help` **from PowerShell** prints, rather than returning to the prompt
   with nothing — this is `attach_windows_console()` doing its job
-* `Chronicler.exe server` from a terminal reaches the console wizard when unconfigured
+* `Chronicler.exe server` from a terminal with `--workspace PATH` configures itself, and without it asks in a terminal
 * the folder picker on the workspace step opens a native dialog
 
 On either platform, a release binary is only proven by running it somewhere that has never
