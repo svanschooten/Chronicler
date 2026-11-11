@@ -4,9 +4,14 @@ from uuid import uuid4
 
 import pytest
 
+from chronicler.core.database_manager import LinkRefusedError
 from chronicler.core.models import Chronicle
 from chronicler.core.repositories import ChronicleRepository
-from chronicler.core.services.chronicle_service import ChronicleService, remove_directory
+from chronicler.core.services.chronicle_service import (
+    ChronicleService,
+    LinkPolicy,
+    remove_directory,
+)
 
 
 def _db_manager(workspace_path):
@@ -161,26 +166,79 @@ def _repo_holding(chronicle: Chronicle):
 
 
 @pytest.mark.asyncio
-async def test_changing_a_project_path_forgets_the_old_location(tmp_path):
-    chronicle = Chronicle(title="Moved", project_path=str(tmp_path / "old" / "project.db"))
-    db_manager = _db_manager(tmp_path)
-    service = ChronicleService(_repo_holding(chronicle), db_manager)
+async def test_an_update_cannot_move_a_chronicle(tmp_path):
+    """Ticket 076: where a chronicle's database lives is set when it is created or linked."""
+    chronicle = Chronicle(title="Linked", project_path=str(tmp_path / "old" / "project.db"))
+    repo = _repo_holding(chronicle)
+    service = ChronicleService(repo, _db_manager(tmp_path))
 
-    moved = chronicle.model_copy(update={"project_path": str(tmp_path / "new" / "project.db")})
-    await service.update_chronicle(moved)
+    moved = chronicle.model_copy(
+        update={"title": "Renamed", "project_path": str(tmp_path / "new" / "project.db")}
+    )
+    updated = await service.update_chronicle(moved)
 
-    db_manager.close_project.assert_awaited_once_with(str(chronicle.id))
+    assert updated.title == "Renamed"
+    assert updated.project_path == chronicle.project_path
 
 
-@pytest.mark.asyncio
-async def test_an_update_that_keeps_the_project_path_keeps_the_database_open(tmp_path):
-    chronicle = Chronicle(title="Same", project_path=str(tmp_path / "project.db"))
-    db_manager = _db_manager(tmp_path)
-    service = ChronicleService(_repo_holding(chronicle), db_manager)
+class TestLinkPolicy:
+    """Ticket 076: a server confines the project paths its remote callers can name."""
 
-    await service.update_chronicle(chronicle.model_copy(update={"title": "Renamed"}))
+    def _service(self, tmp_path, allowed):
+        repo = MagicMock(spec=ChronicleRepository)
+        repo.create = AsyncMock(side_effect=lambda chronicle: chronicle)
+        return ChronicleService(repo, _db_manager(tmp_path), link_policy=LinkPolicy(allowed))
 
-    db_manager.close_project.assert_not_awaited()
+    @pytest.mark.asyncio
+    async def test_a_path_inside_an_allowed_folder_is_kept(self, tmp_path):
+        allowed = tmp_path / "shared"
+        service = self._service(tmp_path, [allowed])
+
+        created = await service.create_chronicle("Inside", str(allowed / "a" / "project.db"))
+
+        assert created.project_path == str((allowed / "a" / "project.db").resolve())
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("name", ["elsewhere/project.db", "shared/../elsewhere/project.db"])
+    async def test_a_path_outside_every_allowed_folder_is_refused(self, tmp_path, name):
+        service = self._service(tmp_path, [tmp_path / "shared"])
+
+        with pytest.raises(LinkRefusedError) as refused:
+            await service.create_chronicle("Outside", str(tmp_path / name))
+        assert refused.value.reason == "not_allowed"
+        service.repository.create.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_no_allowed_folders_allows_no_linked_chronicle(self, tmp_path):
+        service = self._service(tmp_path, [])
+
+        with pytest.raises(LinkRefusedError):
+            await service.create_chronicle("Anywhere", str(tmp_path / "project.db"))
+        assert (await service.create_chronicle("In the workspace")).project_path is None
+
+    @pytest.mark.asyncio
+    async def test_linking_outside_is_refused_before_the_file_is_read(self, tmp_path):
+        service = self._service(tmp_path, [tmp_path / "shared"])
+
+        with (
+            patch("chronicler.core.services.chronicle_service.check_linkable_project") as check,
+            pytest.raises(LinkRefusedError) as refused,
+        ):
+            await service.link_external_chronicle(str(tmp_path / "elsewhere" / "project.db"))
+
+        assert refused.value.reason == "not_allowed"
+        check.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_without_a_policy_any_path_is_allowed(self, tmp_path):
+        """The full-stack app: the caller is the machine's own user."""
+        repo = MagicMock(spec=ChronicleRepository)
+        repo.create = AsyncMock(side_effect=lambda chronicle: chronicle)
+        service = ChronicleService(repo, _db_manager(tmp_path))
+
+        created = await service.create_chronicle("Anywhere", str(tmp_path / "x" / "project.db"))
+
+        assert created.project_path == str(tmp_path / "x" / "project.db")
 
 
 @pytest.mark.asyncio

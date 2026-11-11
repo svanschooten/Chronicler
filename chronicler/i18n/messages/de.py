@@ -184,6 +184,10 @@ MESSAGES = {
         "loading": "Transkript wird geladen...",
         "empty": "Transkript ist leer oder wird noch verarbeitet.",
         "error": "Fehler beim Laden des Transkripts: {error}",
+        "newer_version": (
+            "Diese Chronik wurde mit einer neueren Chronicler-Version erstellt. Aktualisiere "
+            "Chronicler, um sie zu öffnen. Die Datei wurde nicht geändert."
+        ),
         "show_timestamps": "Zeitstempel anzeigen",
         "chronicle": "Chronicle",
         "speakers": "Sprecher",
@@ -223,6 +227,10 @@ MESSAGES = {
             "{path} kann nicht verknüpft werden: Mit einer neueren Chronicler-Version erstellt"
         ),
         "link_unreadable": ("{path} kann nicht verknüpft werden: Nicht lesbar ({detail})"),
+        "link_not_allowed": (
+            "{path} kann nicht verknüpft werden: Liegt außerhalb der Ordner, die der Server "
+            "für Chroniken erlaubt"
+        ),
         "transcript_exists_title": "Es gibt schon ein Transkript",
         "transcript_exists_message": (
             "Diese Chronicle hat bereits ein importiertes Transkript. Mit der neuen Datei "
@@ -438,6 +446,12 @@ MESSAGES = {
         "workspace_not_writable_hint": (
             "Prüfe die Berechtigungen des Ordners oder wähle einen anderen Arbeitsbereich und "
             "starte Chronicler dann erneut."
+        ),
+        "workspace_newer_version": (
+            "Der Arbeitsbereich unter {path} wurde mit einer neueren Chronicler-Version erstellt."
+        ),
+        "workspace_newer_version_hint": (
+            "Aktualisiere Chronicler, um ihn zu öffnen. Im Arbeitsbereich wurde nichts geändert."
         ),
     },
 }

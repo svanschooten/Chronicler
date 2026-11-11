@@ -97,9 +97,9 @@ chronicle id, never a path:
   file that has moved into `FileNotFoundError`, instead of silently creating a new empty
   database. Handlers without an archive connection to check against skip it.
 
-The cache is dropped by `close_project`, which runs whenever the cached answer stops being
-true: `ChronicleService.update_chronicle` calls it when `project_path` changes, and
-`delete_chronicle` after the row is gone.
+The cache is dropped by `close_project`, which `delete_chronicle` calls after the row is
+gone. Nothing else can make it stale: a chronicle's `project_path` is set when it is
+created or linked, and `update_chronicle` keeps the stored one (ticket 076).
 
 ## Migrations are serialised process-wide
 
@@ -173,13 +173,28 @@ workspace holds a dangling reference.
 
 The first open of a project database in a process runs its migration chain to head (see
 [Migrations are serialised process-wide](#migrations-are-serialised-process-wide)), so the
-file moves to the newest schema in place. An older Chronicler cannot open it afterwards:
-Alembic stops with `Can't locate revision identified by '…'`.
+file moves to the newest schema in place and without asking.
 
 This matters for anything shared: a chronicle in a synced folder, one sent as a zip, or a
-linked `project.db`. Whoever opens it with the newest version decides the version
-everyone else needs. Until ticket 074 settles a compatibility rule, keep everyone sharing
-chronicles on the same release.
+linked `project.db`. Whoever opens it with the newest version decides the version everyone
+else needs.
+
+**The rule (ticket 074):**
+
+1. **An older Chronicler refuses a newer file, and says so.** Before migrating, the stamped
+   revision is compared with the chain this version ships. An unknown one raises
+   `NewerSchemaError`: "This chronicle was made by a newer version of Chronicler. Update
+   Chronicler to open it; the file is unchanged." Alembic's own `Can't locate revision`
+   never reaches the user, and nothing is written to the file. The workspace database gets
+   the same check. *Link* refuses such a file up front, with `newer_version`.
+2. **Project migrations must be additive** - new tables, new nullable columns - so the data
+   an older version understands is never rewritten. This does not let an older version
+   open a newer file today; it keeps that option open, and it keeps the change recoverable
+   by updating. A migration that cannot be additive says so in its own ticket.
+3. **No prompt before upgrading.** Asking before a linked chronicle is upgraded was
+   considered and left out: it needs a dialog on the desktop and an answer over RPC, and
+   what it protects is already covered by the refusal above plus keeping a shared
+   chronicle's users on one release.
 
 ## Deleting a chronicle closes its database first
 

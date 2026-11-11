@@ -187,7 +187,7 @@ Stop a pattern from freezing the app, make opening chronicles cheap, settle what
 
 - [x] [033-L1 Three panel loads share one database session](033-L1_shared_session_panel_loads.md) · low · closed by 032
 
-- [ ] [074-A2 A chronicle opened by a newer Chronicler cannot be opened by an older one](074-A2_schema_versions_for_shared_chronicles.md) · medium · S
+- [x] [074-A2 A chronicle opened by a newer Chronicler cannot be opened by an older one](074-A2_schema_versions_for_shared_chronicles.md) · medium · S
 
 - [ ] [063-F1 Full-text transcript search](063-F1_full_text_search.md) · medium · L · after 031, 032, 020, 074
 
@@ -195,7 +195,7 @@ Stop a pattern from freezing the app, make opening chronicles cheap, settle what
 
 - [ ] [057-P6 Normalization decodes the file three times](057-P6_normalization_single_pass.md) · low · S · after 044
 
-- [ ] [076-L14 Remote callers can point a chronicle at any path on the server](076-L14_project_path_from_rpc_callers.md) · low · S
+- [x] [076-L14 Remote callers can point a chronicle at any path on the server](076-L14_project_path_from_rpc_callers.md) · low · S
 
 - [x] [053-L9 The upload cap does not limit what is received](053-L9_upload_size_cap.md) · low · S
 

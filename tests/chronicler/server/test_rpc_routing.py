@@ -5,6 +5,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler import __version__
+from chronicler.core.config import Settings
+from chronicler.core.config_sections import ServerSettings
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.local_container import register_local_repositories
@@ -13,7 +15,6 @@ from chronicler.core.repositories import ChronicleRepository, TagRepository, Tas
 from chronicler.core.rpc import RpcServer, service
 from chronicler.core.services import (
     ChronicleService,
-    SystemService,
     TaskService,
     TranscriptService,
 )
@@ -22,6 +23,7 @@ from chronicler.core.sqlite import (
     SQLiteTaskRepository,
     SQLiteTranscriptRepository,
 )
+from chronicler.server.main import build_rpc_server
 
 
 @service(expose=["session_id"])
@@ -38,24 +40,15 @@ class _SessionIdProbeService:
         return id(self.repository.session)  # type: ignore[attr-defined]
 
 
-def _build_server_app(tmp_path, api_key: str = "test-key"):
-    """Mirrors the wiring in chronicler/server/main.py::run_server."""
+def _build_server_app(tmp_path, api_key: str = "test-key", linked_chronicle_dirs=()):
+    """The wiring `run_server` serves, from chronicler/server/main.py."""
     db_manager = DatabaseManager(tmp_path)
-
-    container = Container()
-    register_local_repositories(container, db_manager)
-
-    server = RpcServer(
-        container,
-        services=[
-            ChronicleService,
-            SystemService,
-            TaskService,
-            TranscriptService,
-        ],
+    settings = Settings(
+        workspace_path=tmp_path,
         api_key=api_key,
+        server=ServerSettings(linked_chronicle_dirs=list(linked_chronicle_dirs)),
     )
-    return db_manager, server.build()
+    return db_manager, build_rpc_server(db_manager, settings).build()
 
 
 @pytest.mark.asyncio
@@ -412,5 +405,42 @@ async def test_document_exports_reach_a_thin_client(tmp_path):
         with zipfile.ZipFile(io.BytesIO(bytes(archive))) as bundle:
             assert "Remote Exports/project.db" in bundle.namelist()
             assert bundle.read("Remote Exports/project.db").startswith(b"SQLite format 3")
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_a_remote_caller_can_name_a_project_path_only_in_an_allowed_folder(tmp_path):
+    """Ticket 076: a server confines `project_path` to `server.linked_chronicle_dirs`."""
+    workspace = tmp_path / "workspace"
+    shared = tmp_path / "shared"
+    db_manager, app = _build_server_app(workspace, linked_chronicle_dirs=[shared])
+    try:
+        await db_manager.init_archive()
+        headers = {"X-API-Key": "test-key"}
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            refused = await client.post(
+                "/chronicle/create_chronicle",
+                json={"title": "Out", "project_path": str(tmp_path / "elsewhere" / "p.db")},
+                headers=headers,
+            )
+            linked = await client.post(
+                "/chronicle/link_external_chronicle",
+                json={"project_path": str(tmp_path / "elsewhere" / "project.db")},
+                headers=headers,
+            )
+            allowed = await client.post(
+                "/chronicle/create_chronicle",
+                json={"title": "In", "project_path": str(shared / "project.db")},
+                headers=headers,
+            )
+            listed = await client.post("/chronicle/list_chronicles", json={}, headers=headers)
+
+        assert refused.status_code >= 400
+        assert linked.status_code >= 400
+        assert allowed.status_code == 200
+        assert [chronicle["title"] for chronicle in listed.json()] == ["In"]
+        assert not (tmp_path / "elsewhere").exists()
     finally:
         await db_manager.close_all()

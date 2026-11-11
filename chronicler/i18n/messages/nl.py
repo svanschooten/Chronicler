@@ -179,6 +179,10 @@ MESSAGES = {
         "loading": "Transcript laden...",
         "empty": "Transcript is leeg of wordt nog verwerkt.",
         "error": "Fout bij laden van transcript: {error}",
+        "newer_version": (
+            "Deze Chronicle is gemaakt door een nieuwere versie van Chronicler. Werk "
+            "Chronicler bij om haar te openen. Het bestand is niet gewijzigd."
+        ),
         "show_timestamps": "Tijdcodes tonen",
         "chronicle": "Chronicle",
         "speakers": "Sprekers",
@@ -217,6 +221,10 @@ MESSAGES = {
             "Kan {path} niet koppelen: het is gemaakt door een nieuwere versie van Chronicler"
         ),
         "link_unreadable": "Kan {path} niet koppelen: het kon niet worden gelezen ({detail})",
+        "link_not_allowed": (
+            "Kan {path} niet koppelen: het staat buiten de mappen waarin de server "
+            "Chronicles toestaat"
+        ),
         "transcript_exists_title": "Er is al een transcript",
         "transcript_exists_message": (
             "Deze Chronicle heeft al een geimporteerd transcript. Overschrijven met het "
@@ -426,6 +434,12 @@ MESSAGES = {
         "workspace_not_writable_hint": (
             "Controleer de rechten van de map of kies een andere werkruimte en start "
             "Chronicler daarna opnieuw."
+        ),
+        "workspace_newer_version": (
+            "De werkruimte in {path} is gemaakt door een nieuwere versie van Chronicler."
+        ),
+        "workspace_newer_version_hint": (
+            "Werk Chronicler bij om haar te openen. Er is niets in de werkruimte gewijzigd."
         ),
     },
 }

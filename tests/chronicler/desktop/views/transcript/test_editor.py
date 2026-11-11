@@ -282,3 +282,19 @@ class TestConcurrency:
 
         saved = {call.kwargs["text"] for call in service.update_line.await_args_list}
         assert saved == {"First edited", "Second edited"}
+
+
+class TestDescribeTranscriptError:
+    def test_a_chronicle_from_a_newer_chronicler_says_to_update(self):
+        from chronicler.core.database_manager import NewerSchemaError
+        from chronicler.desktop.views.transcript.editor import describe_transcript_error
+
+        message = describe_transcript_error(NewerSchemaError("project"))
+
+        assert "newer version" in message
+        assert "Update Chronicler" in message
+
+    def test_any_other_error_is_shown_as_it_is(self):
+        from chronicler.desktop.views.transcript.editor import describe_transcript_error
+
+        assert "disk on fire" in describe_transcript_error(OSError("disk on fire"))

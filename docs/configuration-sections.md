@@ -13,6 +13,8 @@ all — still loads.
 | `normalization` | Loudness targets in EBU R128 units |
 | `llm` | Which language model backs summarisation and how to reach it |
 | `ui` | Interface locale |
+| `extras` | Whether a missing optional component installs without asking |
+| `server` | What a server lets its remote callers do |
 
 ## In a config file
 
@@ -79,6 +81,16 @@ Off by default: a download that starts on its own, into the environment the app 
 running in, is not something to opt a user into silently. The confirmation dialog offers
 to set it, and the Settings page's *Optional components* section can turn it back off.
 See [optional-extras.md](optional-extras.md).
+
+## `server`
+
+| Field | Default | Meaning |
+| ----- | ------- | ------- |
+| `linked_chronicle_dirs` | `[]` | Folders a remote caller may put a linked chronicle's `project.db` in |
+
+Read only by `chronicler server`. Empty allows none, so a server keeps every chronicle in
+its workspace unless you name folders here. The full-stack app ignores it. See
+[security.md](security.md#linked-chronicles).
 
 ## Defaults versus per-task overrides
 

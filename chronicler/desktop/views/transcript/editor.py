@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 
 import flet as ft
 
+from chronicler.core.database_manager import NewerSchemaError
 from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.transcript_service import TranscriptService
@@ -23,6 +24,13 @@ from chronicler.i18n import t
 logger = logging.getLogger(__name__)
 
 CONFIRMATION_EXCERPT = 60
+
+
+def describe_transcript_error(error: BaseException) -> str:
+    """What to show when a chronicle's transcript cannot be loaded, in the user's language."""
+    if isinstance(error, NewerSchemaError):
+        return t("transcript.newer_version")
+    return t("transcript.error", error=error)
 
 
 class TranscriptEditor(ft.Column):
@@ -50,7 +58,7 @@ class TranscriptEditor(ft.Column):
             speakers = await self.transcript_service.speaker_suggestions(self.chronicle.id)
         except Exception as error:
             logger.exception("Could not load the transcript for editing")
-            self._show_message(t("transcript.error", error=error))
+            self._show_message(describe_transcript_error(error))
             return
 
         self.lines = {str(line.id): line for line in lines}

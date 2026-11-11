@@ -178,6 +178,10 @@ MESSAGES = {
         "loading": "Loading transcript...",
         "empty": "Transcript is empty or still processing.",
         "error": "Error loading transcript: {error}",
+        "newer_version": (
+            "This chronicle was made by a newer version of Chronicler. Update Chronicler to "
+            "open it. The file was not changed."
+        ),
         "show_timestamps": "Show timestamps",
         "chronicle": "Chronicle",
         "speakers": "Speakers",
@@ -214,6 +218,9 @@ MESSAGES = {
         "link_not_chronicler": "Cannot link {path}: it is not a Chronicler database",
         "link_newer_version": "Cannot link {path}: it was made by a newer version of Chronicler",
         "link_unreadable": "Cannot link {path}: it could not be read ({detail})",
+        "link_not_allowed": (
+            "Cannot link {path}: it is outside the folders the server allows chronicles in"
+        ),
         "transcript_exists_title": "Transcript already exists",
         "transcript_exists_message": (
             "This chronicle already has an imported transcript. Overwrite it with the "
@@ -413,6 +420,12 @@ MESSAGES = {
         "workspace_not_writable_hint": (
             "Check the folder's permissions, or choose a different workspace, then start "
             "Chronicler again."
+        ),
+        "workspace_newer_version": (
+            "The workspace at {path} was made by a newer version of Chronicler."
+        ),
+        "workspace_newer_version_hint": (
+            "Update Chronicler to open it. Nothing in the workspace was changed."
         ),
     },
 }
