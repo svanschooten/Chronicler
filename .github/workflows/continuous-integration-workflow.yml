@@ -61,6 +61,94 @@ jobs:
             junit.xml
             coverage.xml
 
+  # The tests job installs no extras, so normalization and transcription code would go
+  # untested. This installs the runtime locks the embedded build ships - hash-checked, no
+  # resolver - and fails if any test is skipped for a missing extra. See
+  # docs/runtime-build.md.
+  extras:
+    name: Tests With Every Extra (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+        name: Checkout Repository
+
+      - uses: actions/setup-python@v7
+        name: Setup Python
+        with:
+          python-version: "3.12"
+
+      # sounddevice is a binding: Linux needs PortAudio from the system. The Windows wheel
+      # bundles it.
+      - name: Install PortAudio
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+
+      # The test tools go in first, so the locks installed after them win any overlap.
+      - name: Install the runtime locks
+        shell: bash
+        run: |
+          locks=scripts/runtime/locks/${{ runner.os == 'Windows' && 'windows' || 'linux' }}
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=9.1.1,<10" pytest-asyncio "pytest-cov>=7.1.0,<8" "pypdf>=6,<7"
+          python -m pip install --require-hashes --no-deps -r "$locks/base.lock" \
+            $(for lock in "$locks"/component-*.lock; do printf -- '-r %s ' "$lock"; done)
+          python -m pip install --no-deps -e .
+          python -m pip check
+
+      - name: Run the tests
+        shell: bash
+        run: |
+          python -m pytest -rs --cov=chronicler --cov-report=term | tee pytest.log
+          if grep -E "SKIPPED.*requires the '[a-z]+' extra" pytest.log; then
+            echo "::error::A test was skipped for a missing extra"
+            exit 1
+          fi
+
+  # Installing every lock at once hides a component that is missing a dependency of its
+  # own, as numpy once reached normalization only through transcription (ticket 067).
+  extras-alone:
+    name: ${{ matrix.component }} Imports On Its Own
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [transcription, normalization, recording, server]
+    steps:
+      - uses: actions/checkout@v7
+        name: Checkout Repository
+
+      - uses: actions/setup-python@v7
+        name: Setup Python
+        with:
+          python-version: "3.12"
+
+      - name: Install PortAudio
+        if: matrix.component == 'recording'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+
+      - name: Install base.lock and this component's lock
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --require-hashes --no-deps \
+            -r scripts/runtime/locks/linux/base.lock \
+            -r scripts/runtime/locks/linux/component-${{ matrix.component }}.lock
+          python -m pip install --no-deps -e .
+          python -m pip check
+
+      - name: Import the component
+        run: |
+          python -c "
+          import importlib
+          from chronicler.core.extras import get_extra
+          for module in get_extra('${{ matrix.component }}').modules:
+              importlib.import_module(module)
+              print('imported', module)
+          "
+
   runtime-locks:
     name: Runtime Locks Are Current
     runs-on: ubuntu-latest
