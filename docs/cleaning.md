@@ -26,6 +26,10 @@ example transcript, 1,686 turns became 1,242. So:
   the transcript as it was before any clean, and the two newest. The chronicle id in the
   name keeps linked chronicles whose databases share a folder from pruning each other's
   copies.
+* The cleaning itself runs on a worker thread with no transaction open, so the chronicle
+  can be edited meanwhile. An edit that lands before the result is written makes the clean
+  start again from the edited lines rather than overwrite it. See
+  [storage.md](storage.md#one-owner-for-opening-a-chronicles-database).
 
 There is no restore button yet; that is ticket 065. Until then a snapshot can be put
 back by hand: close Chronicler and copy it over `project.db`.
