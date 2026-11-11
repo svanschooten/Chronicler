@@ -93,9 +93,12 @@ chronicle id, never a path:
   it raises, so a handler holds no `try / commit / except: rollback` and never calls
   `commit` itself.
 - `get_project_session(id)` is for reads. The caller closes it with `async with`.
-- Both take `must_exist`, which turns an unknown chronicle into `LookupError` and a linked
-  file that has moved into `FileNotFoundError`, instead of silently creating a new empty
-  database. Handlers without an archive connection to check against skip it.
+- `snapshot_project(id, destination)` copies it, for Clean and the zip export.
+- All three take `must_exist`, which turns an unknown chronicle into `LookupError` and a
+  linked file that has moved into `FileNotFoundError`, instead of silently creating a new
+  empty database. `transaction` and `snapshot_project` check by default, and
+  `get_project_session` when asked. Handlers without an archive connection to check
+  against skip it.
 
 The cache is dropped by `close_project`, which `delete_chronicle` calls after the row is
 gone. Nothing else can make it stale: a chronicle's `project_path` is set when it is

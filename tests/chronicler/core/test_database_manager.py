@@ -316,6 +316,31 @@ class TestProjectSnapshots:
         await db_manager.close_all()
 
     @pytest.mark.asyncio
+    async def test_snapshot_of_a_moved_linked_file_creates_nothing(self, tmp_path):
+        """Clean and zip export snapshot first; a moved file must not be recreated empty."""
+        db_manager = DatabaseManager(tmp_path)
+        gone = tmp_path / "gone" / "project.db"
+        await register_chronicle(db_manager, "moved", gone)
+
+        with pytest.raises(FileNotFoundError):
+            await db_manager.snapshot_project("moved", tmp_path / "out" / "project.db")
+
+        assert not gone.parent.exists()
+        assert not (tmp_path / "out").exists()
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_snapshot_of_an_unknown_chronicle_creates_nothing(self, tmp_path):
+        db_manager = DatabaseManager(tmp_path)
+        await register_chronicle(db_manager, "known")
+
+        with pytest.raises(LookupError):
+            await db_manager.snapshot_project("unknown", tmp_path / "out.db")
+
+        assert not (tmp_path / "chronicles" / "unknown").exists()
+        await db_manager.close_all()
+
+    @pytest.mark.asyncio
     async def test_snapshot_refuses_to_overwrite_an_existing_file(self, tmp_path):
         """
         SQLite's own rule, surfaced rather than swallowed: VACUUM INTO will not write over

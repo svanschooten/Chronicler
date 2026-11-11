@@ -341,3 +341,21 @@ class TestExportsLeaveTheEventLoopFree:
         with _opened(archive) as bundle:
             assert bundle.testzip() is None
         assert seen and seen[0] is not threading.main_thread()
+
+    @pytest.mark.asyncio
+    async def test_a_linked_file_that_has_moved_is_not_exported_empty(self, tmp_path):
+        """The snapshot used to create an empty database where the file had been."""
+        db_manager = DatabaseManager(tmp_path / "workspace")
+        await db_manager.init_archive()
+        gone = tmp_path / "gone" / "project.db"
+        async with db_manager.get_archive_session() as session:
+            chronicle = await SQLiteChronicleRepository(session).create(
+                Chronicle(title="Moved", project_path=str(gone))
+            )
+            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+
+            with pytest.raises(FileNotFoundError):
+                await service.export_zip(chronicle.id)
+
+        assert not gone.parent.exists()
+        await db_manager.close_all()
