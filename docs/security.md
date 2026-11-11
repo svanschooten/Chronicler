@@ -124,12 +124,16 @@ on another machine is the reason server mode exists.
 the body is being received, not only once it has been.
 
 Starlette spools a multipart body to a temporary file before the endpoint runs, so a check
-in the endpoint alone limits what is kept, not what reaches the disk. `_UploadSizeLimit`, an
-ASGI middleware on `/upload`, closes that:
+in the endpoint alone limits what is kept, not what reaches the disk. FastAPI also reads
+that body before it runs the endpoint's dependencies, the API key check among them, so
+without more an unauthenticated client could make the server write up to the cap to disk
+on every request. `_UploadGuard`, an ASGI middleware on `/upload`, closes both:
 
-1. A declared `Content-Length` over the cap plus `MULTIPART_OVERHEAD` (64 KB for the
-   boundary and part headers) gets a 413 before a byte of the body is read.
-2. It counts the bytes that actually arrive, so a client that sends no length, or a false
+1. A missing `X-API-Key` gets a 401 and a wrong one a 403, the answers the app-wide check
+   gives, before a byte of the body is read.
+2. A declared `Content-Length` over the cap plus `MULTIPART_OVERHEAD` (64 KB for the
+   boundary and part headers) gets a 413, also before anything is read.
+3. It counts the bytes that actually arrive, so a client that sends no length, or a false
    one, is stopped with a 413 as soon as it passes the same limit.
 
 The endpoint then holds the file itself to exactly `MAX_UPLOAD_SIZE` as it streams it in
