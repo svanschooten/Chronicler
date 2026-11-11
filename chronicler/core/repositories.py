@@ -86,6 +86,13 @@ class TaskRepository(ABC):
         pass
 
     @abstractmethod
+    async def cancel(self, task_id: UUID, while_working: bool = False) -> bool:
+        """
+        Marks a PENDING task (and a WORKING one, if `while_working`) CANCELLED. Returns
+        whether it did; a task that already finished is left alone.
+        """
+
+    @abstractmethod
     async def claim_next(self, worker_id: str) -> Task | None:
         """
         Atomically claim one PENDING task (PENDING -> WORKING, stamped with

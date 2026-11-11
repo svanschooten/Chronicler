@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from chronicler.core.processing.transcriber import transcribe_audio
 
 
@@ -39,3 +41,49 @@ def test_transcribe_audio_skips_empty_segments():
         lines = transcribe_audio("/tmp/alice.mp3", "Alice")
 
     assert [line.text for line in lines] == ["Hello"]
+
+
+def _timed_model(duration, *segments):
+    model = _stub_model(*segments)
+    inner = model.transcribe
+    model.transcribe = lambda path, **kwargs: (
+        inner(path, **kwargs)[0],
+        SimpleNamespace(duration=duration),
+    )
+    return model
+
+
+def test_transcribe_audio_reports_the_fraction_done_after_each_segment():
+    model = _timed_model(4.0, ("One", 0.0, 1.0), ("Two", 1.0, 3.0), ("Three", 3.0, 4.0))
+    seen: list[float] = []
+
+    with patch("chronicler.core.processing.transcriber._get_model", return_value=model):
+        transcribe_audio("/tmp/alice.mp3", "Alice", on_progress=seen.append)
+
+    assert seen == [0.25, 0.75, 1.0]
+
+
+def test_a_cancelled_task_stops_between_segments():
+    import threading
+
+    from chronicler.core.cancellation import TaskCancelledError, cancel_event
+
+    model = _timed_model(3.0, ("One", 0.0, 1.0), ("Two", 1.0, 2.0), ("Three", 2.0, 3.0))
+    flag = threading.Event()
+    token = cancel_event.set(flag)
+    seen: list[float] = []
+
+    def on_progress(fraction):
+        seen.append(fraction)
+        flag.set()  # cancelled while the first segment was being reported
+
+    try:
+        with (
+            patch("chronicler.core.processing.transcriber._get_model", return_value=model),
+            pytest.raises(TaskCancelledError),
+        ):
+            transcribe_audio("/tmp/alice.mp3", "Alice", on_progress=on_progress)
+    finally:
+        cancel_event.reset(token)
+
+    assert len(seen) == 1

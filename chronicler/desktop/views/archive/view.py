@@ -23,6 +23,9 @@ from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
 
+# Typing pauses this long before the title search starts, so the box does not cost a query
+# and a rebuilt list per keystroke, and a slow answer for "a" cannot land after "abc".
+SEARCH_DEBOUNCE = 0.25
 # Typing pauses this long before the transcript search starts, so one is not started per
 # keystroke. The search opens every chronicle. See docs/search.md.
 TRANSCRIPT_SEARCH_DELAY = 0.3
@@ -183,7 +186,11 @@ class ArchiveView(ft.Column):
         await self.load_chronicles()
 
     async def search_changed(self, e):
-        self.query = e.data
+        typed = e.data
+        self.query = typed
+        await asyncio.sleep(SEARCH_DEBOUNCE)
+        if self.query != typed:
+            return  # typing went on, and that keystroke's own call will load
         await self.load_chronicles(transcript_delay=TRANSCRIPT_SEARCH_DELAY)
 
     async def load_chronicles(self, transcript_delay: float = 0.0):
@@ -200,8 +207,14 @@ class ArchiveView(ft.Column):
                 chronicles = await self.chronicle_service.list_chronicles()
         except Exception as e:
             logger.exception(f"Error loading chronicles: {e}")
-            self.chronicle_list.controls = [ft.Text(t("archive.load_failed", error=e))]
-            self.update()
+            if generation == self._generation:
+                self.chronicle_list.controls = [ft.Text(t("archive.load_failed", error=e))]
+                self.update()
+            return
+
+        # A newer load started while this one waited: its answer is for the box as it is now,
+        # and this one is for an earlier query that may have arrived last.
+        if generation != self._generation:
             return
 
         cards: list[ft.Control] = [self.create_chronicle_card(c) for c in chronicles]

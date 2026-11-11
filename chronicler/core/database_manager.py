@@ -1,8 +1,13 @@
 import asyncio
 import logging
+import os
+import re
+import shutil
 import sqlite3
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from functools import cache
 from pathlib import Path
 from uuid import UUID
@@ -18,11 +23,83 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import NullPool
 
 from chronicler.core.database import DBChronicle
+from chronicler.core.models import Snapshot
 from chronicler.core.workspace_lock import WorkspaceLock
 
 logger = logging.getLogger(__name__)
 
 _MIGRATIONS_ROOT = Path(__file__).resolve().parent.parent / "migrations"
+
+
+SNAPSHOTS_KEPT = 3
+"""
+How many snapshots of one kind a chronicle keeps: the oldest, which holds the transcript
+as it was before the first such change, and the newest of the rest.
+"""
+
+SNAPSHOT_STAMP = "%Y%m%d-%H%M%S-%f"
+SWAP_ATTEMPTS = 5
+SWAP_BACKOFF_SECONDS = 0.1
+
+
+def _snapshot_pattern(chronicle_id: str) -> re.Pattern[str]:
+    """`before-<kind>-<chronicle id>-<stamp>.db`; the id keeps linked chronicles apart."""
+    return re.compile(
+        rf"^before-(?P<kind>[a-z]+)-{re.escape(chronicle_id)}-(?P<stamp>\d{{8}}-\d{{6}}-\d{{6}})\.db$"
+    )
+
+
+def _vacuum_into(source: Path, destination: Path) -> None:
+    literal = str(destination).replace("'", "''")
+    connection = sqlite3.connect(source)
+    try:
+        connection.execute(f"VACUUM INTO '{literal}'")
+    finally:
+        connection.close()
+
+
+def _rebuild_search_index(path: Path) -> None:
+    """
+    Rebuilds a chronicle's FTS index from its lines. The index is keyed on the implicit
+    rowid of `transcript_lines`, which SQLite may renumber when it copies the table; a stale
+    index finds the wrong lines rather than failing. See docs/search.md.
+    """
+    connection = sqlite3.connect(path)
+    try:
+        has_index = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'transcript_search'"
+        ).fetchone()
+        if has_index:
+            connection.execute(
+                "INSERT INTO transcript_search(transcript_search) VALUES ('rebuild')"
+            )
+            connection.commit()
+    finally:
+        connection.close()
+
+
+def _swap_in(snapshot: Path, live: Path) -> None:
+    """
+    Puts a copy of `snapshot` where `live` is, indexed and ready. The copy is made beside the
+    live file and renamed over it, so the swap is one step: a crash leaves the old file or the
+    new one, never half of either. The snapshot itself stays, so a restore can be repeated.
+    """
+    staged = live.with_name(live.name + ".restoring")
+    try:
+        shutil.copyfile(snapshot, staged)
+        _rebuild_search_index(staged)
+        for attempt in range(SWAP_ATTEMPTS):
+            try:
+                os.replace(staged, live)
+                return
+            except PermissionError:
+                # Windows refuses to replace a file something still has open; a virus
+                # scanner does the same for a moment.
+                if attempt == SWAP_ATTEMPTS - 1:
+                    raise
+                time.sleep(SWAP_BACKOFF_SECONDS * (attempt + 1))
+    finally:
+        staged.unlink(missing_ok=True)
 
 
 class NewerSchemaError(RuntimeError):
@@ -195,6 +272,7 @@ class DatabaseManager:
         # remember what it read after it.
         self._closes: dict[str, int] = {}
         self._migration_lock = asyncio.Lock()
+        self._chronicle_locks: dict[str, asyncio.Lock] = {}
         self._workspace_lock = WorkspaceLock(workspace_path)
 
     async def init_archive(self):
@@ -349,6 +427,17 @@ class DatabaseManager:
         through a process-global proxy, so two chains running concurrently corrupt each
         other's context even when they target different files. See docs/storage.md.
         """
+        # The chronicle's own lock first: a restore holds it while it swaps the file, so
+        # nothing reopens the database between closing it and the swap.
+        async with self._chronicle_lock(chronicle_id):
+            return await self._open_project_engine(chronicle_id, custom_path)
+
+    def _chronicle_lock(self, chronicle_id: str) -> asyncio.Lock:
+        return self._chronicle_locks.setdefault(chronicle_id, asyncio.Lock())
+
+    async def _open_project_engine(
+        self, chronicle_id: str, custom_path: Path | None
+    ) -> AsyncEngine:
         engine = self._project_engines.get(chronicle_id)
         if engine is not None:
             return engine
@@ -403,6 +492,90 @@ class DatabaseManager:
         async with engine.begin() as conn:
             await conn.exec_driver_sql(f"VACUUM INTO '{literal}'")
         return destination
+
+    async def snapshot_before(
+        self, chronicle_id: UUID | str, kind: str, must_exist: bool = True
+    ) -> Path:
+        """
+        Copies the chronicle's database to `snapshots/before-<kind>-<id>-<time>.db` beside its
+        project.db, then prunes that kind to `SNAPSHOTS_KEPT`. Call it before a change that
+        drops or replaces text, outside any transaction: VACUUM INTO cannot run inside one.
+        See docs/storage.md.
+        """
+        key = str(chronicle_id)
+        # Checked before the snapshots folder is made beside a linked file that has moved.
+        path = await self.project_path_for(key, must_exist=must_exist)
+        directory = self.snapshots_path_for(key, path)
+        prefix = f"before-{kind}-{key}-"
+        destination = directory / f"{prefix}{datetime.now().strftime(SNAPSHOT_STAMP)}.db"
+        await self.snapshot_project(key, destination, must_exist=must_exist)
+        self._prune_snapshots(directory, prefix)
+        return destination
+
+    @staticmethod
+    def _prune_snapshots(directory: Path, prefix: str) -> None:
+        snapshots = sorted(directory.glob(f"{prefix}*.db"))
+        oldest, rest = snapshots[:1], snapshots[1:]
+        for old in rest[: max(len(rest) - (SNAPSHOTS_KEPT - len(oldest)), 0)]:
+            old.unlink()
+
+    async def list_snapshots(self, chronicle_id: UUID | str) -> list[Snapshot]:
+        """This chronicle's snapshots, newest first. Reads only: no folder is created."""
+        key = str(chronicle_id)
+        path = await self.project_path_for(key, must_exist=True)
+        directory = self._chronicle_root(key, path) / "snapshots"
+        if not directory.is_dir():
+            return []
+        pattern = _snapshot_pattern(key)
+        found = []
+        for file in directory.iterdir():
+            match = pattern.match(file.name)
+            if match and file.is_file():
+                found.append(
+                    Snapshot(
+                        name=file.name,
+                        kind=match["kind"],
+                        created_at=datetime.strptime(match["stamp"], SNAPSHOT_STAMP),
+                        size_bytes=file.stat().st_size,
+                    )
+                )
+        return sorted(found, key=lambda s: s.created_at, reverse=True)
+
+    async def restore_project(self, chronicle_id: UUID | str, snapshot_name: str) -> None:
+        """
+        Replaces the chronicle's database with one of its snapshots.
+
+        The state being replaced is snapshotted first (kind `restore`), so a restore can be
+        undone like anything else. The chronicle's own lock is held from closing the engine
+        to the swap, and `_project_engine` takes it too: the transcript view loads three
+        panels at once, and any of them would otherwise reopen the file in between. The
+        restored file is indexed before anything can open it. Raises LookupError for a name
+        that is not one of this chronicle's snapshots, and LinkRefusedError for one a newer
+        Chronicler wrote. Whatever still has a session open on the file can make the swap
+        fail on Windows, after a few retries.
+        """
+        key = str(chronicle_id)
+        path = await self.project_path_for(key, must_exist=True)
+        live = path or self.workspace_path / "chronicles" / key / "project.db"
+        directory = self._chronicle_root(key, path) / "snapshots"
+        snapshot = directory / snapshot_name
+        if (
+            Path(snapshot_name).name != snapshot_name
+            or not _snapshot_pattern(key).match(snapshot_name)
+            or not snapshot.is_file()
+        ):
+            raise LookupError(f"No snapshot {snapshot_name!r} for chronicle {key}")
+        await asyncio.to_thread(check_linkable_project, snapshot)
+
+        async with self._chronicle_lock(key):
+            await self.close_project(key)
+            if live.is_file():
+                prefix = f"before-restore-{key}-"
+                safety = directory / f"{prefix}{datetime.now().strftime(SNAPSHOT_STAMP)}.db"
+                await asyncio.to_thread(_vacuum_into, live, safety)
+                self._prune_snapshots(directory, prefix)
+            await asyncio.to_thread(_swap_in, snapshot, live)
+        logger.info(f"Restored chronicle {key} from {snapshot_name}")
 
     async def close_project(self, chronicle_id: str) -> None:
         """
