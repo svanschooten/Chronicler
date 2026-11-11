@@ -66,7 +66,8 @@ the output would give, without decoding either file again.
 Each frame is scaled to full scale by its own sample format before it is measured: 8-bit
 (unsigned, centred on 128), 16-, 24- and 32-bit integer audio, and float, all read the same
 level for the same sound. A 24-bit WAV decodes to 32-bit samples, which used to be divided
-by 16-bit full scale and read about 96 dB too loud.
+by 16-bit full scale and read about 96 dB too loud. A frame that cannot be measured at
+all leaves that figure empty; it never fails the normalization itself.
 
 It answers the question the panel actually asks — "was this track quiet, and is it still?"
 — and it is comparable between tracks. Measured on a real under-gained tone:

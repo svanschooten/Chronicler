@@ -110,14 +110,27 @@ class _Level:
     Not LUFS: PyAV exposes no way to read filter metadata, so the figure ffmpeg's own
     loudnorm computes internally cannot be read back out. This is a real, comparable
     measurement of the same thing in a simpler unit - see docs/audio-normalization.md.
+
+    A frame it cannot measure makes the level unknown (None) rather than raising: the
+    level is a report on the work, and must not fail the normalization it describes.
     """
 
     def __init__(self) -> None:
         self._np = _numpy()
         self._total = 0.0
         self._count = 0
+        self._failed = False
 
     def add(self, frame: Any) -> None:
+        if self._failed:
+            return
+        try:
+            self._add(frame)
+        except Exception:
+            logger.debug("Could not measure a %s frame", frame.format.name, exc_info=True)
+            self._failed = True
+
+    def _add(self, frame: Any) -> None:
         np = self._np
         raw = frame.to_ndarray()
         if raw.size == 0:
@@ -135,7 +148,7 @@ class _Level:
         self._count += samples.size
 
     def dbfs(self) -> float | None:
-        if not self._count:
+        if self._failed or not self._count:
             return None
         mean_square = self._total / self._count
         if mean_square <= 0:

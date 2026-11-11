@@ -206,6 +206,23 @@ class TestSinglePass:
 
         assert opened == [source]
 
+    def test_a_level_that_cannot_be_measured_does_not_fail_the_normalization(
+        self, tmp_path, monkeypatch
+    ):
+        from chronicler.core.processing import normalizer
+
+        def unmeasurable(self, frame):
+            raise ValueError("unsupported sample format")
+
+        monkeypatch.setattr(normalizer._Level, "_add", unmeasurable)
+        source = write_tone(tmp_path / "gm.wav")
+
+        result = normalize_audio(source)
+
+        assert result.output_path.exists()
+        assert result.loudness_before is None
+        assert result.loudness_after is None
+
     def test_silence_reports_the_silence_floor(self, tmp_path):
         source = write_tone(tmp_path / "quiet.wav", amplitude=0.0)
 
