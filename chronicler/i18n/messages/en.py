@@ -16,6 +16,7 @@ MESSAGES = {
         "delete": "Delete",
         "close": "Close",
         "unknown": "Unknown",
+        "ok": "OK",
     },
     "settings": {
         "title": "Settings",
@@ -172,6 +173,13 @@ MESSAGES = {
         "clear_with_failed": "Completed and failed",
         "cleared": "Cleared {count} tasks",
         "retry_tooltip": "Run this task again",
+        "requeued": "Task re-queued",
+        "load_failed": "Error loading tasks: {error}",
+        "status": "Status: {status}",
+        "created": "Created {time}",
+        "next_attempt": "Next attempt {time}",
+        "started": "Started {time}",
+        "completed": "Completed {time}",
         "empty": "No tasks yet.",
         "queued_normalize": "Queued normalization of '{name}'",
         "queued_transcribe": "Queued transcription of '{name}' as {speaker}",
@@ -212,6 +220,12 @@ MESSAGES = {
         "import_transcript": "Import transcript",
         "clean": "Clean transcript",
         "clean_queued": "Clean task queued",
+        "audio_added": "Added audio source '{name}'",
+        "audio_created": "Created '{title}' and added audio source",
+        "import_created": "Created '{title}' and queued transcript import",
+        "append_queued": "Transcript append task queued",
+        "import_queued": "Transcript import task queued",
+        "linked": "Linked '{title}' - {count} speaker(s)",
         "clean_title": "Clean transcript?",
         "clean_message": (
             "Cleaning '{title}' drops filler and repeated lines and merges consecutive turns. "
@@ -342,6 +356,7 @@ MESSAGES = {
         "failed": "Error exporting transcript: {error}",
         "write_failed": "Error writing export file: {error}",
         "no_picker": "File picker not available.",
+        "plaintext_title": "Export transcript as plain text",
     },
     "extras": {
         "title": "Extra component needed",
@@ -355,6 +370,18 @@ MESSAGES = {
         "installing": "Installing {name} ({size})...",
         "installed": "{name} is ready to use",
         "failed": "Could not install {name}: {error}",
+        "purposes": {
+            "transcription": "Transcribing audio with Whisper",
+            "normalization": "Normalizing the loudness of an audio source",
+            "llm": "Running a local GGUF language model for summaries",
+            "recording": "Recording audio from a microphone",
+            "server": "Running Chronicler as a server",
+        },
+        "notes": {
+            "transcription": "The Whisper model is downloaded separately the first time it runs.",
+            "llm": "Only needed for local models; a remote gateway needs nothing.",
+            "recording": "sounddevice is a binding, not a bundle: it needs PortAudio.",
+        },
     },
     "wizard": {
         "title": "Welcome to Chronicler",

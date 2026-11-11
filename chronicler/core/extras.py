@@ -9,6 +9,8 @@ import sysconfig
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from chronicler.i18n import t
+
 logger = logging.getLogger(__name__)
 
 INSTALL_TIMEOUT_SECONDS = 900
@@ -26,11 +28,20 @@ class Extra:
     name: str
     modules: tuple[str, ...]
     requirements: tuple[str, ...]
-    purpose: str
     download_mb: int
     system_packages: tuple[str, ...] = ()
-    note: str = ""
+    has_note: bool = False
     apt_hint: str = field(default="", repr=False)
+
+    @property
+    def purpose(self) -> str:
+        """What the extra is for, in the interface language - `extras.purposes.<name>`."""
+        return t(f"extras.purposes.{self.name}")
+
+    @property
+    def note(self) -> str:
+        """An aside shown with the install prompt, or "" - `extras.notes.<name>`."""
+        return t(f"extras.notes.{self.name}") if self.has_note else ""
 
     @property
     def pip_extra(self) -> str:
@@ -47,33 +58,29 @@ EXTRAS: dict[str, Extra] = {
         name="transcription",
         modules=("faster_whisper",),
         requirements=("faster-whisper>=1.1,<2",),
-        purpose="Transcribing audio with Whisper",
         download_mb=120,
-        note="The Whisper model itself is downloaded separately the first time it runs.",
+        has_note=True,
     ),
     "normalization": Extra(
         name="normalization",
         modules=("av", "numpy"),
         requirements=("av>=12,<20", "numpy>=1.26,<3"),
-        purpose="Normalizing the loudness of an audio source",
         download_mb=50,
     ),
     "llm": Extra(
         name="llm",
         modules=("llama_cpp",),
         requirements=("llama-cpp-python>=0.3,<1",),
-        purpose="Running a local GGUF language model for summaries",
         download_mb=30,
-        note="Only needed for local models; a remote OpenAI-compatible gateway needs nothing.",
+        has_note=True,
     ),
     "recording": Extra(
         name="recording",
         modules=("sounddevice",),
         requirements=("sounddevice>=0.4,<1",),
-        purpose="Recording audio from a microphone",
         download_mb=1,
         system_packages=("libportaudio2",),
-        note="sounddevice is a binding, not a bundle: it needs PortAudio from the system.",
+        has_note=True,
         apt_hint="sudo apt install libportaudio2",
     ),
     "server": Extra(
@@ -84,7 +91,6 @@ EXTRAS: dict[str, Extra] = {
             "uvicorn[standard]>=0.30,<1",
             "python-multipart>=0.0.13",
         ),
-        purpose="Running Chronicler as a server",
         download_mb=10,
     ),
 }

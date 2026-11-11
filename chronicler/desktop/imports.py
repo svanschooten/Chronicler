@@ -52,12 +52,12 @@ class ImportCoordinator:
 
         if chronicle_id is not None:
             await self.chronicle_service.add_audio_source(chronicle_id, staged_path, original_name)
-            return f"Added audio source '{original_name}'"
+            return t("actions.audio_added", name=original_name)
 
         title = original_name.rsplit(".", 1)[0]
         chronicle = await self.chronicle_service.create_chronicle(title)
         await self.chronicle_service.add_audio_source(chronicle.id, staged_path, original_name)
-        return f"Created '{title}' and added audio source"
+        return t("actions.audio_created", title=title)
 
     async def import_transcript(
         self,
@@ -77,7 +77,7 @@ class ImportCoordinator:
             title = original_name.rsplit(".", 1)[0]
             chronicle = await self.chronicle_service.create_chronicle(title)
             await self._queue_import(chronicle.id, staged_path, options, append=False)
-            return f"Created '{title}' and queued transcript import"
+            return t("actions.import_created", title=title)
 
         append = False
         if await self.transcript_service.get_transcript(chronicle_id):
@@ -87,7 +87,7 @@ class ImportCoordinator:
             append = choice == "append"
 
         await self._queue_import(chronicle_id, staged_path, options, append=append)
-        return "Transcript append task queued" if append else "Transcript import task queued"
+        return t("actions.append_queued" if append else "actions.import_queued")
 
     async def _queue_import(
         self,
@@ -118,4 +118,4 @@ class ImportCoordinator:
         except LinkRefusedError as refused:
             logger.warning(str(refused))
             return t(f"actions.link_{refused.reason}", path=refused.path, detail=refused.detail)
-        return f"Linked '{chronicle.title}' - {chronicle.speakers_count} speaker(s)"
+        return t("actions.linked", title=chronicle.title, count=chronicle.speakers_count)
