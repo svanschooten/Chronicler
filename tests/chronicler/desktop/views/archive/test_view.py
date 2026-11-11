@@ -253,7 +253,9 @@ async def test_refresh_keeps_the_search_and_the_open_form():
     """Ticket 027: a task finishing must not reset the query or touch an open form."""
     chronicle_service = AsyncMock()
     chronicle_service.search_chronicles.return_value = [Chronicle(title="Budget review")]
-    view = ArchiveView(chronicle_service, AsyncMock(), AsyncMock(), AsyncMock(), AsyncMock())
+    transcript_service = AsyncMock()
+    transcript_service.search_transcripts.return_value = []
+    view = ArchiveView(chronicle_service, AsyncMock(), AsyncMock(), AsyncMock(), transcript_service)
     view.update = MagicMock()
     view.query = "budget"
     form = view.create_form
@@ -270,3 +272,102 @@ async def test_refresh_keeps_the_search_and_the_open_form():
 def test_link_is_offered_by_default_and_hidden_for_a_thin_client(make_view):
     assert len(make_view()._link_items()) == 1
     assert make_view(can_link=False)._link_items() == []
+
+
+def _searching_view(found_by_title, matches):
+    chronicle_service = AsyncMock()
+    chronicle_service.search_chronicles.return_value = found_by_title
+    transcript_service = AsyncMock()
+    transcript_service.search_transcripts.return_value = matches
+    view = ArchiveView(chronicle_service, AsyncMock(), AsyncMock(), AsyncMock(), transcript_service)
+    view.update = MagicMock()
+    return view, transcript_service
+
+
+def _texts(control) -> list[str]:
+    from tests.chronicler.desktop.controls import text_values
+
+    return text_values(control)
+
+
+class TestTranscriptMatches:
+    """Ticket 063: the archive search also finds what was said."""
+
+    @pytest.mark.asyncio
+    async def test_matches_follow_the_chronicles_found_by_title(self):
+        from chronicler.core.models import TranscriptLine, TranscriptMatch
+
+        said = Chronicle(title="Standup")
+        line = TranscriptLine(speaker_name="Alice", text="the budget", start_time=0, end_time=1)
+        view, transcripts = _searching_view(
+            [Chronicle(title="Budget review")], [TranscriptMatch(chronicle=said, lines=[line])]
+        )
+        view.query = "budget"
+
+        await view.load_chronicles()
+
+        transcripts.search_transcripts.assert_awaited_once_with("budget")
+        texts = _texts(view.chronicle_list)
+        assert texts.index("Budget review") < texts.index("Standup")
+        assert "Alice: the budget" in texts
+        assert view.chronicle_list.controls[-1].data == said
+
+    @pytest.mark.asyncio
+    async def test_only_transcript_matches_replace_the_empty_message(self):
+        from chronicler.core.models import TranscriptLine, TranscriptMatch
+
+        line = TranscriptLine(text="hello", start_time=0, end_time=1)
+        view, _ = _searching_view(
+            [], [TranscriptMatch(chronicle=Chronicle(title="Said"), lines=[line])]
+        )
+        view.query = "hello"
+
+        await view.load_chronicles()
+
+        texts = _texts(view.chronicle_list)
+        assert "Said" in texts
+        assert not any("No chronicles" in text for text in texts)
+
+    @pytest.mark.asyncio
+    async def test_no_transcript_search_without_a_query(self):
+        view, transcripts = _searching_view([], [])
+
+        await view.load_chronicles()
+
+        transcripts.search_transcripts.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_search_overtaken_by_newer_typing_is_dropped(self):
+        from chronicler.core.models import TranscriptLine, TranscriptMatch
+
+        view, transcripts = _searching_view([], [])
+        stale = TranscriptMatch(
+            chronicle=Chronicle(title="Stale"),
+            lines=[TranscriptLine(text="old", start_time=0, end_time=1)],
+        )
+
+        async def slow_then_newer(query):
+            if query == "ol":
+                view.query = "old"
+                await view.load_chronicles()
+                return [stale]
+            return []
+
+        transcripts.search_transcripts.side_effect = slow_then_newer
+        view.query = "ol"
+
+        await view.load_chronicles()
+
+        assert "Stale" not in _texts(view.chronicle_list)
+
+    @pytest.mark.asyncio
+    async def test_a_failed_transcript_search_says_so_and_keeps_the_list(self):
+        view, transcripts = _searching_view([Chronicle(title="Kept")], [])
+        transcripts.search_transcripts.side_effect = RuntimeError("disk gone")
+        view.query = "x"
+
+        await view.load_chronicles()
+
+        texts = _texts(view.chronicle_list)
+        assert "Kept" in texts
+        assert any("disk gone" in text for text in texts)
