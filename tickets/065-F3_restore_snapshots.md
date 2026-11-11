@@ -26,6 +26,11 @@ re-transcribing are destructive too.
    and the swap: the transcript view loads three panels at once, and any of them would
    reopen it. Hold a per-chronicle lock that `_project_engine` also takes.
 3. Also snapshot before an overwriting import and before re-transcribing.
+4. Rebuild the restored file's search index before it is opened (`INSERT INTO
+   transcript_search(transcript_search) VALUES ('rebuild')`). The index is keyed on the
+   implicit rowid of `transcript_lines`, which SQLite may renumber when it copies a table;
+   `VACUUM INTO` keeps it today, but a stale index finds the wrong lines rather than
+   failing. See docs/search.md.
 
 Done when a clean, an overwrite and a re-transcribe can each be undone.
 
@@ -33,4 +38,5 @@ Done when a clean, an overwrite and a re-transcribe can each be undone.
 
 - (BLOCKER) [011-H4_clean_confirm_and_snapshot](011-H4_clean_confirm_and_snapshot.md): provides the snapshots
 - (BLOCKER) [031-S5_nullpool_project_engines](031-S5_nullpool_project_engines.md): with pooled connections, a held file handle makes the swap fail on Windows
+- (RELATED) [063-F1_full_text_search](063-F1_full_text_search.md): the search index a restore has to rebuild
 - (RELATED) [010-C5_transcript_line_source_id](010-C5_transcript_line_source_id.md): re-transcribing replaces hand edits
