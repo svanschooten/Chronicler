@@ -238,17 +238,55 @@ async def test_retry_clicked_requeues_the_task_and_reloads(make_view):
 
 
 @pytest.mark.asyncio
-async def test_load_tasks_hides_done_tasks_by_default(make_view):
+async def test_load_tasks_asks_the_service_for_unfinished_tasks_by_default(make_view):
     task_service = AsyncMock()
-    task_service.list_tasks.return_value = [
-        Task(type=TaskType.IMPORT, status=TaskStatus.DONE),
-        Task(type=TaskType.IMPORT, status=TaskStatus.WORKING),
-    ]
+    task_service.list_tasks.return_value = [Task(type=TaskType.IMPORT, status=TaskStatus.WORKING)]
     view = make_view(task_service=task_service)
 
     await view.load_tasks()
 
+    task_service.list_tasks.assert_awaited_once_with(include_finished=False)
     assert len(view.task_list.controls) == 1
+
+
+@pytest.mark.asyncio
+async def test_unhiding_completed_tasks_asks_for_the_finished_ones_too(make_view):
+    task_service = AsyncMock()
+    task_service.list_tasks.return_value = []
+    view = make_view(task_service=task_service)
+
+    await view.hide_completed_changed(MagicMock(control=MagicMock(value=False)))
+
+    task_service.list_tasks.assert_awaited_once_with(include_finished=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("choice", [False, True])
+async def test_clearing_finished_tasks_passes_the_choice_on(make_view, monkeypatch, choice):
+    task_service = AsyncMock()
+    task_service.clear_finished_tasks.return_value = 3
+    task_service.list_tasks.return_value = []
+    view = make_view(task_service=task_service)
+    view.show_snackbar = MagicMock()
+    monkeypatch.setattr("chronicler.desktop.views.tasks.ask_choice", AsyncMock(return_value=choice))
+    monkeypatch.setattr(TasksView, "page", MagicMock(), raising=False)
+
+    await view.clear_finished_clicked(MagicMock())
+
+    task_service.clear_finished_tasks.assert_awaited_once_with(include_failed=choice)
+    view.show_snackbar.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_cancelling_the_clear_dialog_deletes_nothing(make_view, monkeypatch):
+    task_service = AsyncMock()
+    view = make_view(task_service=task_service)
+    monkeypatch.setattr("chronicler.desktop.views.tasks.ask_choice", AsyncMock(return_value=None))
+    monkeypatch.setattr(TasksView, "page", MagicMock(), raising=False)
+
+    await view.clear_finished_clicked(MagicMock())
+
+    task_service.clear_finished_tasks.assert_not_awaited()
 
 
 @pytest.mark.asyncio
