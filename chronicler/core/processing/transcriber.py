@@ -1,7 +1,9 @@
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from chronicler.core import extras
+from chronicler.core.cancellation import raise_if_cancelled
 from chronicler.core.config_sections import AUTO_LANGUAGE, TranscriptionSettings
 from chronicler.core.models import TranscriptLine
 
@@ -37,8 +39,15 @@ def transcribe_audio(
     device: str | None = None,
     compute_type: str | None = None,
     settings: TranscriptionSettings | None = None,
+    on_progress: Callable[[float], None] | None = None,
 ) -> list[TranscriptLine]:
-    """Transcribes one single-speaker track, defaulting every parameter from settings."""
+    """
+    Transcribes one single-speaker track, defaulting every parameter from settings.
+
+    `on_progress` is called from this thread with the fraction of the audio done (0 to 1)
+    after each segment. A cancelled task (see `chronicler.core.cancellation`) raises
+    TaskCancelledError between segments.
+    """
     defaults = settings or TranscriptionSettings()
 
     resolved_language = language if language is not None else defaults.language
@@ -50,7 +59,7 @@ def transcribe_audio(
         device or defaults.device,
         compute_type or defaults.compute_type,
     )
-    segments, _info = model.transcribe(
+    segments, info = model.transcribe(
         file_path,
         language=resolved_language,
         no_speech_threshold=(
@@ -59,7 +68,11 @@ def transcribe_audio(
     )
 
     lines = []
+    duration = getattr(info, "duration", None) or 0.0
     for segment in segments:
+        raise_if_cancelled()
+        if on_progress is not None and duration > 0:
+            on_progress(min(segment.end / duration, 1.0))
         text = segment.text.strip()
         if not text:
             continue

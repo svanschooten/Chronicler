@@ -5,10 +5,12 @@ speaker it belongs to.
 
 import asyncio
 import logging
+from concurrent.futures import Future
 from dataclasses import dataclass
 from uuid import UUID
 
 from chronicler.core import extras
+from chronicler.core.cancellation import TaskCancelledError
 from chronicler.core.config_sections import AUTO_LANGUAGE
 from chronicler.core.formatting import format_duration
 from chronicler.core.models import Task
@@ -18,6 +20,12 @@ from chronicler.core.processing.handlers.normalizing import NormalizeHandler
 from chronicler.core.sqlite import SQLiteAudioSourceRepository, SQLiteTranscriptRepository
 
 logger = logging.getLogger(__name__)
+
+TRANSCRIBE_STARTS = 30
+TRANSCRIBE_ENDS = 70
+"""The share of a task's progress bar the transcription itself covers."""
+
+CANCELLED_REASON = "Cancelled"
 
 
 @dataclass(frozen=True)
@@ -84,7 +92,12 @@ class TranscribeHandler(NormalizeHandler):
         await update_progress(30)
 
         try:
-            lines = await self._transcribe(str(audio_path), speaker_name, parameters)
+            lines = await self._transcribe(
+                str(audio_path), speaker_name, parameters, update_progress
+            )
+        except TaskCancelledError:
+            await self._record_failure(chronicle_id, resolved_path.name, CANCELLED_REASON)
+            raise
         except Exception as error:
             await self._record_failure(chronicle_id, resolved_path.name, str(error))
             raise
@@ -163,26 +176,51 @@ class TranscribeHandler(NormalizeHandler):
             pass  # the source row is gone, so there is nothing to mark
 
     @staticmethod
-    async def _transcribe(path: str, speaker_name: str, parameters: TranscriptionParameters):
+    async def _transcribe(
+        path: str,
+        speaker_name: str,
+        parameters: TranscriptionParameters,
+        update_progress: ProgressCallback,
+    ):
         """
         The ImportError guard wraps the call, not the import: faster-whisper is imported
         lazily inside the transcriber, so a missing extra only surfaces once a model is
         actually built.
+
+        The transcriber reports from its own thread. Each whole-percent step is handed to
+        the event loop, scaled into the span between model start and database write.
         """
+        loop = asyncio.get_running_loop()
+        pending: list[Future] = []
+        reported = TRANSCRIBE_STARTS
+
+        def on_progress(fraction: float) -> None:
+            nonlocal reported
+            percent = TRANSCRIBE_STARTS + int(fraction * (TRANSCRIBE_ENDS - TRANSCRIBE_STARTS))
+            if percent > reported:
+                reported = percent
+                pending.append(asyncio.run_coroutine_threadsafe(update_progress(percent), loop))
+
         try:
             from chronicler.core.processing import transcriber
 
-            return await asyncio.to_thread(
-                lambda: transcriber.transcribe_audio(
-                    path,
-                    speaker_name,
-                    language=parameters.language,
-                    no_speech_threshold=parameters.no_speech_threshold,
-                    model_size=parameters.model_size,
-                    device=parameters.device,
-                    compute_type=parameters.compute_type,
+            try:
+                return await asyncio.to_thread(
+                    lambda: transcriber.transcribe_audio(
+                        path,
+                        speaker_name,
+                        language=parameters.language,
+                        no_speech_threshold=parameters.no_speech_threshold,
+                        model_size=parameters.model_size,
+                        device=parameters.device,
+                        compute_type=parameters.compute_type,
+                        on_progress=on_progress,
+                    )
                 )
-            )
+            finally:
+                await asyncio.gather(
+                    *(asyncio.wrap_future(f) for f in pending), return_exceptions=True
+                )
         except ImportError as ex:
             raise RuntimeError(extras.missing_message("transcription", ex)) from ex
 

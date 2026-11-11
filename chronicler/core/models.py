@@ -10,6 +10,7 @@ class TaskStatus(str, Enum):
     WORKING = "WORKING"
     DONE = "DONE"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class SourceState(str, Enum):
