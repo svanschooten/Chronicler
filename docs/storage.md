@@ -177,7 +177,8 @@ file moves to the newest schema in place and without asking.
 
 This matters for anything shared: a chronicle in a synced folder, one sent as a zip, or a
 linked `project.db`. Whoever opens it with the newest version decides the version everyone
-else needs.
+else needs. Searching the workspace opens every chronicle, so it upgrades them all (see
+[search.md](search.md#across-the-workspace-a-fan-out)).
 
 **The rule (ticket 074):**
 
@@ -190,7 +191,9 @@ else needs.
 2. **Project migrations must be additive** - new tables, new nullable columns - so the data
    an older version understands is never rewritten. This does not let an older version
    open a newer file today; it keeps that option open, and it keeps the change recoverable
-   by updating. A migration that cannot be additive says so in its own ticket.
+   by updating. A migration that cannot be additive says so in its own ticket. One that
+   rebuilds `transcript_lines` must also rebuild its search index; see
+   [search.md](search.md#the-index-in-each-chronicle).
 3. **No prompt before upgrading.** Asking before a linked chronicle is upgraded was
    considered and left out: it needs a dialog on the desktop and an answer over RPC, and
    what it protects is already covered by the refusal above plus keeping a shared

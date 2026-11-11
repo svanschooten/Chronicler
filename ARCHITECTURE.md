@@ -216,14 +216,12 @@ Responsible for:
 
 * Chronicle metadata search — implemented
 * tag and task search — implemented
-* full-text search within a Chronicle — **Planned**
+* full-text search within a Chronicle and across the workspace — implemented
 * speaker search — **Planned**
 
-The two unimplemented methods raise `NotImplementedError` rather than returning an empty
-list, because transcript lines and speakers live in per-Chronicle databases: answering
-those queries needs either a workspace-level FTS index or a fan-out across every project
-database, not a query against the workspace database. An empty result would be
-indistinguishable from "no matches".
+Transcript lines live in per-Chronicle databases, so transcript search uses an FTS5
+index in each one and fans out across them for the workspace. See
+[docs/search.md](docs/search.md).
 
 Future search implementations may include semantic or vector search.
 
@@ -509,14 +507,10 @@ current scale, and the obvious thing to optimize first.
 
 ## Chronicle search
 
-**Planned.** Searching transcript content within a Chronicle. Nothing implements this yet:
-`SQLiteTranscriptRepository.search` and `SearchService.search_chronicle_content` both
-raise `NotImplementedError`.
-
-The design problem to settle first is scope. Transcript lines live in per-Chronicle
-databases, so "search my whole workspace for a phrase" is either a fan-out across every
-`project.db` or a workspace-level index that has to be kept in sync. SQLite FTS5 is the
-intended starting point for the single-Chronicle case.
+Searching transcript content. Each `project.db` holds an FTS5 index over its
+transcript lines, kept in sync by triggers. Searching the whole workspace is a fan-out
+across every `project.db`, not a workspace-level index that would have to be kept in
+sync: with `NullPool` an open costs about 2 ms. See [docs/search.md](docs/search.md).
 
 Future implementations may include:
 
