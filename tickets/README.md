@@ -189,7 +189,7 @@ Stop a pattern from freezing the app, make opening chronicles cheap, settle what
 
 - [x] [074-A2 A chronicle opened by a newer Chronicler cannot be opened by an older one](074-A2_schema_versions_for_shared_chronicles.md) · medium · S
 
-- [ ] [063-F1 Full-text transcript search](063-F1_full_text_search.md) · medium · L · after 031, 032, 020, 074
+- [x] [063-F1 Full-text transcript search](063-F1_full_text_search.md) · medium · L · after 031, 032, 020, 074
 
 - [x] [044-T4 Optional extras never run in CI](044-T4_extras_ci_job.md) · medium · S · after 004
 
