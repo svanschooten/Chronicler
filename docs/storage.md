@@ -216,6 +216,43 @@ opens it (`DatabaseManager.would_upgrade_linked`, see
    what it protects is already covered by the refusal above plus keeping a shared
    chronicle's users on one release.
 
+## Restoring a previous version
+
+Three things replace text that cannot be regenerated, and each first writes a snapshot with
+`DatabaseManager.snapshot_before(id, kind)`, to `snapshots/before-<kind>-<id>-<time>.db`
+beside the chronicle's `project.db`:
+
+| Kind | When |
+| ---- | ---- |
+| `clean` | every clean |
+| `import` | an import that overwrites existing lines (not the first one, not an append) |
+| `transcribe` | re-transcribing a track that already has lines |
+| `restore` | a restore, holding the state it replaced |
+
+Each kind keeps `SNAPSHOTS_KEPT` copies: the oldest and the newest of the rest. The snapshot
+is taken outside any transaction, since `VACUUM INTO` cannot run inside one, and a failed
+snapshot fails the task so nothing is rewritten without a way back.
+
+`ChronicleService.list_snapshots` and `restore_snapshot` (both exposed over RPC) back the
+*Restore previous version* action, which offers the newest five. `DatabaseManager.restore_project`:
+
+1. accepts only a file name matching this chronicle's own `before-<kind>-<id>-<stamp>.db` in
+   its snapshots folder, so no path and no other chronicle's copy gets through, and refuses
+   one a newer Chronicler wrote;
+2. takes the chronicle's own lock, which `_project_engine` also takes. The transcript view
+   loads three panels at once, and any of them would otherwise reopen the file between
+   closing it and the swap;
+3. closes the engine and saves the current state as a `restore` snapshot;
+4. copies the snapshot beside the live file, rebuilds its search index (the index is keyed on
+   an implicit rowid that SQLite may renumber, and a stale one finds the wrong lines, see
+   [search.md](search.md)), and renames it over the live file with `os.replace`. The snapshot
+   stays, so a restore can be repeated.
+
+Then `restore_snapshot` reads the speaker count, duration and status back from the restored
+file. A session still open on the file can make the swap fail on Windows; it is retried a
+few times and then reported. `NullPool` (ticket 031) is what keeps idle connections from
+holding the file.
+
 ## Deleting a chronicle closes its database first
 
 `ChronicleService.delete_chronicle` deletes the row, then calls
