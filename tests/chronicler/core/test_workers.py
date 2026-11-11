@@ -766,3 +766,57 @@ async def test_an_error_that_is_not_a_lock_is_not_retried(tasks, caplog):
 
     assert calls == 1
     assert "retrying" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_task_cancelled_while_running_is_stopped_and_not_retried(tasks, monkeypatch):
+    monkeypatch.setattr("chronicler.core.workers.CANCEL_POLL_SECONDS", 0.01)
+    manager = WorkerManager(tasks.sessions)
+    started = asyncio.Event()
+
+    async def handler(task, update_progress):
+        from chronicler.core.cancellation import raise_if_cancelled
+
+        started.set()
+        while True:
+            await asyncio.sleep(0.01)
+            raise_if_cancelled()
+
+    manager.register_handler(TaskType.TRANSCRIBE, handler)
+    task = await tasks.create(Task(type=TaskType.TRANSCRIBE))
+
+    async def cancel_once_running():
+        await started.wait()
+        async with tasks.sessions() as session:
+            assert await SQLiteTaskRepository(session).cancel(task.id, while_working=True)
+
+    await asyncio.wait_for(
+        asyncio.gather(manager.process_tasks(), cancel_once_running()), timeout=5
+    )
+
+    final = await tasks.get_by_id(task.id)
+    assert final.status == TaskStatus.CANCELLED
+    assert final.attempts == 0
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_pending_task_is_never_claimed(tasks):
+    manager = WorkerManager(tasks.sessions)
+    handler = AsyncMock()
+    manager.register_handler(TaskType.CLEAN, handler)
+    task = await tasks.create(Task(type=TaskType.CLEAN))
+    async with tasks.sessions() as session:
+        assert await SQLiteTaskRepository(session).cancel(task.id)
+
+    await manager.process_tasks()
+
+    handler.assert_not_awaited()
+    assert (await tasks.get_by_id(task.id)).status == TaskStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_cancelling_does_not_touch_a_finished_task(tasks):
+    task = await tasks.create(Task(type=TaskType.CLEAN, status=TaskStatus.DONE))
+    async with tasks.sessions() as session:
+        assert not await SQLiteTaskRepository(session).cancel(task.id, while_working=True)
+    assert (await tasks.get_by_id(task.id)).status == TaskStatus.DONE
