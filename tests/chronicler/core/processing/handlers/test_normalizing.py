@@ -13,8 +13,9 @@ from chronicler.core.models import Task, TaskType
 from chronicler.core.processing.handlers import WorkerHandlers
 from chronicler.core.processing.normalizer import NORMALIZED_SUFFIX, NormalizationError
 from chronicler.core.sqlite import SQLiteAudioSourceRepository
+from tests.extras import require_extra
 
-pytest.importorskip("av", reason="requires the 'normalization' extra", exc_type=ImportError)
+require_extra("normalization")
 
 
 @pytest.fixture(autouse=True)

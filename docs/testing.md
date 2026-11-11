@@ -90,15 +90,25 @@ autouse fixture so no individual test can forget.
 
 ## Extras that may not be installed
 
-Tests that decode real audio call:
+A test module that needs an optional extra starts with:
 
 ```python
-pytest.importorskip("av", reason="requires the 'normalization' extra", exc_type=ImportError)
+from tests.extras import require_extra
+
+require_extra("normalization")
 ```
 
-`exc_type=ImportError` matters for more than the pytest 9.1 deprecation: it makes the
-skip mean "cannot be imported" rather than "is absent", which is the same distinction
-`extras.is_available()` draws.
+It imports every module the extra provides (`extras.get_extra(name).modules`) with
+`pytest.importorskip(..., exc_type=ImportError)` and skips the module with the reason
+"requires the 'normalization' extra". `exc_type=ImportError` matters for more than the
+pytest 9.1 deprecation: it makes the skip mean "cannot be imported" rather than "is
+absent", which is the same distinction `extras.is_available()` draws.
+
+Always go through `require_extra`. The *Tests With Every Extra* CI job installs every
+runtime lock and fails on a skip with exactly that wording, so a skip worded any other way
+would hide an extra that the locks failed to provide. `tests/test_extras_skips.py` fails on
+an `importorskip` anywhere but `tests/extras.py`. An extra with no runtime lock (`llm`)
+would fail that job, so its tests cannot use `require_extra` until it has one.
 
 CI installs no extras, so verifying that locally means hiding them. A directory of
 `av.py` / `faster_whisper.py` modules that raise `ImportError`, put first on

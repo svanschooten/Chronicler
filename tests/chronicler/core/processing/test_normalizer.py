@@ -4,8 +4,9 @@ import wave
 import pytest
 
 from chronicler.core.config_sections import NormalizationSettings
+from tests.extras import require_extra
 
-pytest.importorskip("av", reason="requires the 'normalization' extra", exc_type=ImportError)
+require_extra("normalization")
 
 from chronicler.core.processing.normalizer import (  # noqa: E402
     NORMALIZED_SUFFIX,
