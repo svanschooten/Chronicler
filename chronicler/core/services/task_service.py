@@ -7,17 +7,20 @@ from chronicler.core.processing.regex_guard import compile_pattern
 from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import service
 
-# A rerun of a transcription is expensive and a manual retry exists, so it is not repeated
-# automatically. Every other type keeps the model's default.
 CANCELLABLE_WHILE_WORKING = {TaskType.TRANSCRIBE}
 """Task types whose handler checks for cancellation as it runs."""
 
+FINISHED_LIST_LIMIT = 200
+
+# A rerun of a transcription is expensive and a manual retry exists, so it is not repeated
+# automatically. Every other type keeps the model's default.
 MAX_ATTEMPTS: dict[TaskType, int] = {TaskType.TRANSCRIBE: 1}
 
 
 @service(
     expose=[
         "cancel_task",
+        "clear_finished_tasks",
         "list_tasks",
         "queue_clean",
         "queue_import",
@@ -37,8 +40,20 @@ class TaskService:
         task.max_attempts = MAX_ATTEMPTS.get(task.type, task.max_attempts)
         return await self.repository.create(task)
 
-    async def list_tasks(self) -> list[Task]:
-        return await self.repository.get_all()
+    async def list_tasks(
+        self, include_finished: bool = False, limit: int = FINISHED_LIST_LIMIT
+    ) -> list[Task]:
+        """
+        Newest first. Unfinished tasks are always all there; with `include_finished` the
+        list is capped at `limit`, so its size does not grow with the task history.
+        """
+        if include_finished:
+            return await self.repository.get_all(limit=limit)
+        return await self.repository.get_all(include_finished=False)
+
+    async def clear_finished_tasks(self, include_failed: bool = False) -> int:
+        """Deletes DONE tasks, and FAILED ones too when asked. Returns how many went."""
+        return await self.repository.delete_finished(include_failed=include_failed)
 
     async def queue_import(
         self,

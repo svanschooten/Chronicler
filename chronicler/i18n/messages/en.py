@@ -161,6 +161,16 @@ MESSAGES = {
         "subtitle": "Scribes keep work moving, even when you close Chronicler.",
         "search": "Search tasks",
         "hide_completed": "Hide completed tasks",
+        "clear_finished": "Clear finished tasks",
+        "clear_title": "Clear finished tasks?",
+        "clear_message": (
+            "Completed tasks are removed from the list. "
+            "Failed tasks keep their error unless you clear them too."
+        ),
+        "clear_cancel": "Cancel",
+        "clear_done_only": "Completed only",
+        "clear_with_failed": "Completed and failed",
+        "cleared": "Cleared {count} tasks",
         "retry_tooltip": "Run this task again",
         "cancel_tooltip": "Cancel this task",
         "cancelled": "Task cancelled",
