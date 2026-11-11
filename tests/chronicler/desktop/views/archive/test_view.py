@@ -1,5 +1,6 @@
 """Tests for ArchiveView's own plumbing."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import flet as ft
@@ -7,6 +8,7 @@ import pytest
 
 from chronicler.core.models import Chronicle
 from chronicler.desktop.views.archive import ArchiveView
+from chronicler.desktop.views.archive import view as archive_view
 
 
 @pytest.fixture
@@ -249,8 +251,9 @@ class TestActionsDelegateToTheSharedOperations:
 
 
 @pytest.mark.asyncio
-async def test_refresh_keeps_the_search_and_the_open_form():
+async def test_refresh_keeps_the_search_and_the_open_form(monkeypatch):
     """Ticket 027: a task finishing must not reset the query or touch an open form."""
+    monkeypatch.setattr(archive_view, "REFRESH_SEARCH_DELAY", 0)
     chronicle_service = AsyncMock()
     chronicle_service.search_chronicles.return_value = [Chronicle(title="Budget review")]
     transcript_service = AsyncMock()
@@ -371,3 +374,73 @@ class TestTranscriptMatches:
         texts = _texts(view.chronicle_list)
         assert "Kept" in texts
         assert any("disk gone" in text for text in texts)
+
+
+def _match(chronicle, text="the budget"):
+    from chronicler.core.models import TranscriptLine, TranscriptMatch
+
+    line = TranscriptLine(speaker_name="Alice", text=text, start_time=0, end_time=1)
+    return TranscriptMatch(chronicle=chronicle, lines=[line])
+
+
+class TestTranscriptMatchesOnRefresh:
+    """A finished task re-reads the list without the "Said in" section blinking away."""
+
+    @pytest.mark.asyncio
+    async def test_a_chronicle_found_by_title_is_not_listed_again_under_said_in(self):
+        both = Chronicle(title="Budget review")
+        view, _ = _searching_view([both], [_match(both), _match(Chronicle(title="Standup"))])
+        view.query = "budget"
+
+        await view.load_chronicles()
+
+        assert _texts(view.chronicle_list).count("Budget review") == 1
+        assert "Standup" in _texts(view.chronicle_list)
+
+    @pytest.mark.asyncio
+    async def test_the_section_stays_on_screen_while_a_refresh_searches_again(self, monkeypatch):
+        monkeypatch.setattr(archive_view, "REFRESH_SEARCH_DELAY", 0)
+        view, transcripts = _searching_view([], [_match(Chronicle(title="Standup"))])
+        view.query = "budget"
+        await view.load_chronicles()
+
+        seen_while_searching = []
+
+        async def search(query):
+            seen_while_searching.extend(_texts(view.chronicle_list))
+            return [_match(Chronicle(title="Standup"))]
+
+        transcripts.search_transcripts.side_effect = search
+        await view.refresh()
+
+        assert "Standup" in seen_while_searching
+        assert "Standup" in _texts(view.chronicle_list)
+
+    @pytest.mark.asyncio
+    async def test_a_new_query_does_not_show_the_old_section(self):
+        view, transcripts = _searching_view([], [_match(Chronicle(title="Standup"))])
+        view.query = "budget"
+        await view.load_chronicles()
+
+        seen_while_searching = []
+
+        async def search(query):
+            seen_while_searching.extend(_texts(view.chronicle_list))
+            return []
+
+        transcripts.search_transcripts.side_effect = search
+        view.query = "lunch"
+        await view.load_chronicles()
+
+        assert "Standup" not in seen_while_searching
+        assert "Standup" not in _texts(view.chronicle_list)
+
+    @pytest.mark.asyncio
+    async def test_tasks_finishing_together_start_one_transcript_search(self, monkeypatch):
+        monkeypatch.setattr(archive_view, "REFRESH_SEARCH_DELAY", 0.05)
+        view, transcripts = _searching_view([], [])
+        view.query = "budget"
+
+        await asyncio.gather(view.refresh(), view.refresh(), view.refresh())
+
+        transcripts.search_transcripts.assert_awaited_once_with("budget")
