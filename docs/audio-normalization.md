@@ -63,6 +63,11 @@ source frames as they are decoded, "after" from the frames the filter graph emit
 graph ends in the s16 mono format that is written, so "after" is exactly what re-reading
 the output would give, without decoding either file again.
 
+Each frame is scaled to full scale by its own sample format before it is measured: 8-bit
+(unsigned, centred on 128), 16-, 24- and 32-bit integer audio, and float, all read the same
+level for the same sound. A 24-bit WAV decodes to 32-bit samples, which used to be divided
+by 16-bit full scale and read about 96 dB too loud.
+
 It answers the question the panel actually asks — "was this track quiet, and is it still?"
 — and it is comparable between tracks. Measured on a real under-gained tone:
 **-39.5 → -17.1 dBFS**.

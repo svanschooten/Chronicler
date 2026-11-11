@@ -123,8 +123,14 @@ class _Level:
         if raw.size == 0:
             return
         samples = raw.astype(np.float64)
+        # Scaled to [-1, 1] by the sample format's own full scale: a 24-bit WAV decodes to
+        # s32, and dividing that by 16-bit full scale read about 96 dB too loud. Unsigned
+        # (u8) audio is centred on half its range.
         if np.issubdtype(raw.dtype, np.integer):
-            samples /= 32768.0
+            half_scale = float(2 ** (raw.dtype.itemsize * 8 - 1))
+            if np.issubdtype(raw.dtype, np.unsignedinteger):
+                samples -= half_scale
+            samples /= half_scale
         self._total += float(np.sum(samples**2))
         self._count += samples.size
 
