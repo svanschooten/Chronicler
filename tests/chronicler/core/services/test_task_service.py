@@ -295,3 +295,32 @@ async def test_other_task_types_keep_three_attempts():
     task = await TaskService(repository).queue_clean(uuid4())
 
     assert task.max_attempts == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("task_type", "while_working"),
+    [(TaskType.TRANSCRIBE, True), (TaskType.IMPORT, False), (TaskType.CLEAN, False)],
+)
+async def test_cancel_task_stops_a_running_task_only_where_its_handler_can_notice(
+    task_type, while_working
+):
+    from chronicler.core.models import Task
+
+    task = Task(type=task_type)
+    repo = _repository()
+    repo.get_by_id = AsyncMock(return_value=task)
+    repo.cancel = AsyncMock(return_value=True)
+
+    assert await TaskService(repo).cancel_task(task.id) is True
+
+    repo.cancel.assert_awaited_once_with(task.id, while_working=while_working)
+
+
+@pytest.mark.asyncio
+async def test_cancelling_an_unknown_task_is_refused():
+    repo = _repository()
+    repo.get_by_id = AsyncMock(return_value=None)
+
+    assert await TaskService(repo).cancel_task(uuid4()) is False
+    repo.cancel.assert_not_called()

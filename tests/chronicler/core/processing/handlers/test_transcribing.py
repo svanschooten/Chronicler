@@ -618,5 +618,55 @@ async def test_re_transcribing_a_track_keeps_a_copy_to_restore_from(tmp_path):
         assert snapshot.kind == "transcribe"
         await db_manager.restore_project(chronicle_id, snapshot.name)
         assert await _texts(db_manager, chronicle_id) == {("Alice", "First pass")}
+
+async def test_progress_moves_through_the_transcription(tmp_path):
+    """The transcriber reports from its own thread; each step reaches update_progress."""
+    db_manager = DatabaseManager(tmp_path)
+    handlers = WorkerHandlers(db_manager)
+    chronicle_id = uuid4()
+    reported: list[int] = []
+
+    async def record(progress: int) -> None:
+        reported.append(progress)
+
+    def transcribe(_path, speaker_name, on_progress=None, **_kwargs):
+        for fraction in (0.25, 0.5, 1.0):
+            on_progress(fraction)
+        return [TranscriptLine(speaker_name=speaker_name, text="Hi", start_time=0, end_time=1)]
+
+    try:
+        task, _ = await _make_transcribe_task(db_manager, chronicle_id, "Alice")
+        with patch(
+            "chronicler.core.processing.transcriber.transcribe_audio", side_effect=transcribe
+        ):
+            await handlers.handle_transcribe(task, record)
+
+        assert reported == [10, 30, 40, 50, 70, 70, 100]
+    finally:
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_transcription_marks_the_source_and_writes_no_lines(tmp_path):
+    from chronicler.core.cancellation import TaskCancelledError
+
+    db_manager = DatabaseManager(tmp_path)
+    handlers = WorkerHandlers(db_manager)
+    chronicle_id = uuid4()
+
+    def transcribe(*_args, **_kwargs):
+        raise TaskCancelledError("The task was cancelled")
+
+    try:
+        task, _ = await _make_transcribe_task(db_manager, chronicle_id, "Alice")
+        with (
+            patch(
+                "chronicler.core.processing.transcriber.transcribe_audio", side_effect=transcribe
+            ),
+            pytest.raises(TaskCancelledError),
+        ):
+            await handlers.handle_transcribe(task, _noop_progress)
+
+        assert await _lines(db_manager, chronicle_id) == []
     finally:
         await db_manager.close_all()
