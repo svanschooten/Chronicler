@@ -3,7 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from chronicler.core.models import Task, TaskStatus, TaskType
-from chronicler.core.processing.regex_guard import assert_safe_pattern
+from chronicler.core.processing.regex_guard import compile_pattern
 from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import service
 
@@ -48,7 +48,7 @@ class TaskService:
     ) -> Task:
         data: dict[str, Any] = {"file_path": file_path}
         if regex:
-            assert_safe_pattern(regex)
+            compile_pattern(regex)
             data["regex"] = regex
             data["speaker_group"] = speaker_group
             data["text_group"] = text_group

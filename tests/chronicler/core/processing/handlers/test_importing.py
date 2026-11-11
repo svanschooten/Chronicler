@@ -404,3 +404,53 @@ async def test_handle_import_without_append_parses_from_zero(tmp_path):
         assert [(line.start_time, line.end_time) for line in lines] == [(0.0, 1.0)]
     finally:
         await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_a_slow_pattern_does_not_stall_the_event_loop_during_an_import(tmp_path, monkeypatch):
+    """
+    Ticket 035: the handler parses on a worker thread and `regex` releases the GIL while it
+    matches, so the window and other server clients keep running until the pattern times
+    out. Drives `handle_import` itself, so losing its `to_thread` fails this.
+    """
+    import asyncio
+    import time
+
+    from chronicler.core.processing import regex_guard
+    from chronicler.core.processing.regex_guard import PatternTimeoutError
+
+    monkeypatch.setattr(regex_guard, "MATCH_TIMEOUT_SECONDS", 5.0)
+    monkeypatch.setattr(regex_guard, "TOTAL_TIMEOUT_SECONDS", 0.5)
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    try:
+        handlers = WorkerHandlers(db_manager)
+        transcript_file = db_manager.get_imports_path() / "transcript.txt"
+        transcript_file.write_text("\n".join(["a" * 5000 + "!"] * 50))
+        task = Task(
+            type=TaskType.IMPORT,
+            chronicle_id=uuid4(),
+            data=json.dumps({"file_path": str(transcript_file), "regex": r"(\w+\s?)*$"}),
+        )
+
+        longest_stall = 0.0
+
+        async def ticker():
+            nonlocal longest_stall
+            last = time.monotonic()
+            while True:
+                await asyncio.sleep(0.01)
+                now = time.monotonic()
+                longest_stall = max(longest_stall, now - last)
+                last = now
+
+        ticking = asyncio.create_task(ticker())
+        try:
+            with pytest.raises(PatternTimeoutError):
+                await handlers.handle_import(task, _noop_progress)
+        finally:
+            ticking.cancel()
+
+        assert longest_stall < 0.3
+    finally:
+        await db_manager.close_all()

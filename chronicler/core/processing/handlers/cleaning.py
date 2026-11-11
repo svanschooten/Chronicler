@@ -3,6 +3,7 @@ The CLEAN task handler - re-run the transcript cleaner over lines already in a c
 project database.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -55,7 +56,7 @@ class CleanHandler(HandlerBase):
 
             await update_progress(30)
 
-            cleaned_lines = TranscriptCleaner(cleaning).clean(lines)
+            cleaned_lines = await asyncio.to_thread(TranscriptCleaner(cleaning).clean, lines)
             logger.info(f"Cleaned down to {len(cleaned_lines)} lines")
 
             await update_progress(70)

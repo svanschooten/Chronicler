@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from chronicler.core.processing.regex_guard import UnsafePatternError, assert_safe_pattern
+from chronicler.core.processing.regex_guard import UnsafePatternError, compile_pattern
 
 DEFAULT_HALLUCINATION_PHRASES: list[str] = [
     "you",
@@ -56,7 +56,7 @@ def _non_blank(values: list[str]) -> list[str]:
 def _guard_patterns(patterns: list[str]) -> list[str]:
     for pattern in patterns:
         try:
-            assert_safe_pattern(pattern)
+            compile_pattern(pattern)
         except UnsafePatternError as error:
             raise ValueError(str(error)) from error
     return patterns

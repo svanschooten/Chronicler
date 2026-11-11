@@ -46,33 +46,26 @@ stripped.
 
 ## Regex safety
 
-`chronicler/core/processing/regex_guard.py` statically rejects patterns shaped for
-catastrophic backtracking.
+User-supplied patterns (the custom import regex, cleaning strip patterns and regex
+hallucination phrases) go through `chronicler/core/processing/regex_guard.py`.
 
 Import regexes arrive from RPC callers and are matched against attacker-influenced
-content. `RegexImporter` matches line by line, so the realistic attack is a crafted
-pattern against a long adversarial line, which can blow up matching time exponentially
-in CPython's backtracking engine. Two shapes cause this in practice:
+content, so a crafted pattern against a long line can make a backtracking engine run for
+minutes. Two things bound that:
 
-1. A quantified group whose own body is itself quantified — `(a+)+`.
-2. A quantified group containing alternation whose branches can match overlapping
-   content — `(a|a)*`, `(a|aa)+`. The engine can attribute the same matched text to
-   different combinations of branch choices.
+1. Patterns are compiled with the third-party `regex` package, capped at 500 characters.
+   Every match goes through `run_timed`, which passes `timeout=` (5 seconds per call) and
+   `concurrent=True`. A whole import or clean also shares one 60-second budget
+   (`time_limit`), so a pattern just under the per-match limit cannot hold the worker for
+   hours over a long transcript. Either timeout raises `PatternTimeoutError` and fails the
+   task with a message naming the pattern.
+2. `handle_import` and `handle_clean` run parsing and cleaning with `asyncio.to_thread`.
+   `concurrent=True` releases the GIL while matching, so a slow pattern does not stall the
+   window or other server clients. Moving the call to a thread alone would not help, since
+   the standard `re` holds the GIL while it backtracks.
 
-The guard walks the parsed pattern via `re._parser` looking for both, and caps pattern
-length. `_leading_chars` returns `None` when it cannot determine a branch's leading
-character set confidently, and callers treat that conservatively as "might overlap with
-anything".
-
-**It is not a CPU-time bound.** Python threads cannot be force-killed and CPython's
-regex matcher does not release the GIL during backtracking, so a true hard bound needs
-a subprocess watchdog. That is deliberately deferred — it overlaps with worker-loop work
-already planned. The guard closes the realistic, textbook attack surface at zero runtime
-cost.
-
-The check runs in two places by design: `TaskService.queue_import` rejects at submission
-time, and `RegexImporter.__init__` rejects again, because it can be constructed directly
-by any other caller.
+`TaskService.queue_import` and the settings models still compile the pattern at
+submission time, so an overlong or invalid pattern is refused before a task exists.
 
 ## Authentication
 

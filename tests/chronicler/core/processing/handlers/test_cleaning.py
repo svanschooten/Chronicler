@@ -340,7 +340,7 @@ async def test_handle_clean_rejects_an_unsafe_override_pattern(tmp_path):
                 Task(
                     type=TaskType.CLEAN,
                     chronicle_id=chronicle_id,
-                    data=json.dumps({"cleaning": {"strip_patterns": ["(a+)+$"]}}),
+                    data=json.dumps({"cleaning": {"strip_patterns": ["(unclosed"]}}),
                 ),
                 _noop_progress,
             )

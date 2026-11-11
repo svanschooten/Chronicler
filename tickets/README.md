@@ -179,7 +179,7 @@ Small and independent. Users hit the first four, and the rest are under an hour 
 
 Stop a pattern from freezing the app, make opening chronicles cheap, settle what a shared chronicle's schema promises, then build the search the tagline promises. CI starts covering the optional extras alongside, and the server's two remaining hardening items close.
 
-- [ ] [035-S11 Replace the regex guard with a real timeout, so a pattern cannot freeze the app](035-S11_regex_timeout_instead_of_guard.md) · medium · S
+- [x] [035-S11 Replace the regex guard with a real timeout, so a pattern cannot freeze the app](035-S11_regex_timeout_instead_of_guard.md) · medium · S
 
 - [x] [031-S5 Project databases keep a thread and a file open per chronicle](031-S5_nullpool_project_engines.md) · medium · XS
 
