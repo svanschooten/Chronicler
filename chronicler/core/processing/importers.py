@@ -1,10 +1,9 @@
 import logging
-import re
 from abc import ABC, abstractmethod
 
 from chronicler.core.formatting import parse_timestamp
 from chronicler.core.models import TranscriptLine
-from chronicler.core.processing.regex_guard import assert_safe_pattern
+from chronicler.core.processing.regex_guard import compile_pattern, run_timed, time_limit
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +25,14 @@ class RegexImporter(Importer):
         text_group: int = 2,
         timestamp_group: int | None = None,
     ):
-        assert_safe_pattern(line_regex)
-        self.line_regex = re.compile(line_regex)
+        self.line_regex = compile_pattern(line_regex)
         self.speaker_group = speaker_group
         self.text_group = text_group
         self.timestamp_group = timestamp_group
 
     def parse(self, content: str, start_offset: float = 0.0) -> list[TranscriptLine]:
-        turns = self._collect_turns(content, start_offset)
+        with time_limit():
+            turns = self._collect_turns(content, start_offset)
         self._assign_times(turns, start_offset)
         for turn in turns:
             turn.synthetic_timing = self.timestamp_group is None
@@ -67,7 +66,7 @@ class RegexImporter(Importer):
             if not line.strip():
                 continue
 
-            match = self.line_regex.match(line)
+            match = run_timed(self.line_regex, self.line_regex.match, line)
             if match is None:
                 if speaker:
                     text.append(line.strip())
