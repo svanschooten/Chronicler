@@ -87,6 +87,18 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libportaudio2
 
+      # A fresh environment, as the runtime ships, without what the runner image
+      # preinstalls. Later steps find its python first on PATH.
+      - name: Create a virtual environment
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/extras"
+          if [ -d "$RUNNER_TEMP/extras/Scripts" ]; then
+            echo "$RUNNER_TEMP/extras/Scripts" >> "$GITHUB_PATH"
+          else
+            echo "$RUNNER_TEMP/extras/bin" >> "$GITHUB_PATH"
+          fi
+
       # The test tools go in first, so the locks installed after them win any overlap.
       - name: Install the runtime locks
         shell: bash
@@ -130,6 +142,11 @@ jobs:
         if: matrix.component == 'recording'
         run: sudo apt-get update && sudo apt-get install -y libportaudio2
 
+      - name: Create a virtual environment
+        run: |
+          python -m venv "$RUNNER_TEMP/component"
+          echo "$RUNNER_TEMP/component/bin" >> "$GITHUB_PATH"
+
       - name: Install base.lock and this component's lock
         run: |
           python -m pip install --upgrade pip
@@ -140,14 +157,7 @@ jobs:
           python -m pip check
 
       - name: Import the component
-        run: |
-          python -c "
-          import importlib
-          from chronicler.core.extras import get_extra
-          for module in get_extra('${{ matrix.component }}').modules:
-              importlib.import_module(module)
-              print('imported', module)
-          "
+        run: python scripts/import_component.py ${{ matrix.component }}
 
   runtime-locks:
     name: Runtime Locks Are Current
