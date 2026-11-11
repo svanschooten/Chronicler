@@ -135,14 +135,15 @@ class ChronicleService:
 
     async def update_chronicle(self, chronicle: Chronicle) -> Chronicle:
         """
-        Saves a chronicle's fields. When `project_path` changes, `DatabaseManager` forgets
-        the old location, so the next open reads the new file instead of the cached one.
+        Saves a chronicle's fields, except `project_path`: where its database lives is set
+        when it is created or linked, and kept. Changing it here would let a remote caller
+        move a chronicle past `LinkPolicy`, and leave `DatabaseManager`'s cached location
+        stale.
         """
-        before = await self.repository.get_by_id(chronicle.id)
-        updated = await self.repository.update(chronicle)
-        if before is not None and before.project_path != updated.project_path:
-            await self.db_manager.close_project(str(chronicle.id))
-        return updated
+        stored = await self.repository.get_by_id(chronicle.id)
+        if stored is not None:
+            chronicle = chronicle.model_copy(update={"project_path": stored.project_path})
+        return await self.repository.update(chronicle)
 
     async def delete_chronicle(self, chronicle_id: UUID) -> None:
         """
