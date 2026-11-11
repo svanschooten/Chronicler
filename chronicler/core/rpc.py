@@ -50,9 +50,60 @@ def get_services() -> list[type]:
     return _services
 
 
+class _UploadSizeLimit:
+    """
+    ASGI middleware that stops an upload at the cap while it is being received.
+
+    Starlette spools a multipart body to a temporary file before the endpoint runs, so a
+    check inside `/upload` limits what is kept, not what is received. This refuses a
+    declared `Content-Length` over the limit before reading anything, and counts the bytes
+    that actually arrive for a client that lies about it or sends none. See
+    docs/security.md.
+    """
+
+    def __init__(self, app: Any, path: str, limit: Callable[[], int]):
+        self.app = app
+        self.path = path
+        self.limit = limit
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["path"] != self.path:
+            await self.app(scope, receive, send)
+            return
+
+        from fastapi import HTTPException, status
+        from starlette.responses import JSONResponse
+
+        limit = self.limit()
+        detail = f"Upload exceeds the maximum of {limit} bytes"
+        declared = dict(scope["headers"]).get(b"content-length")
+        if declared is not None and declared.isdigit() and int(declared) > limit:
+            response = JSONResponse({"detail": detail}, status_code=413)
+            await response(scope, receive, send)
+            return
+
+        received = 0
+
+        async def counting_receive():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    # FastAPI passes an HTTPException raised while parsing the body
+                    # through as it is, so parsing stops here with a 413.
+                    raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, detail=detail)
+            return message
+
+        await self.app(scope, counting_receive, send)
+
+
 class RpcServer:
     MAX_UPLOAD_SIZE = 500 * 1024 * 1024
     UPLOAD_CHUNK_SIZE = 1024 * 1024
+    # Room for the multipart boundary and part headers around the file itself. The
+    # endpoint still holds the file to MAX_UPLOAD_SIZE exactly.
+    MULTIPART_OVERHEAD = 64 * 1024
 
     def __init__(
         self,
@@ -155,6 +206,11 @@ class RpcServer:
         self._app = FastAPI(
             title="Chronicler RPC Server",
             dependencies=[Depends(verify_api_key)],
+        )
+        self._app.add_middleware(
+            _UploadSizeLimit,
+            path="/upload",
+            limit=lambda: self.MAX_UPLOAD_SIZE + self.MULTIPART_OVERHEAD,
         )
 
         @self._app.post("/upload")
