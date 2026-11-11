@@ -434,6 +434,28 @@ class TestSnapshotBeforeCleaning:
             await db_manager.close_all()
 
     @pytest.mark.asyncio
+    async def test_a_linked_file_that_has_moved_fails_without_recreating_it(self, tmp_path):
+        """The snapshot used to create an empty database there, which was then "cleaned"."""
+        db_manager = DatabaseManager(tmp_path / "workspace")
+        await db_manager.init_archive()
+        try:
+            gone = tmp_path / "gone" / "project.db"
+            async with db_manager.get_archive_session() as session:
+                chronicle = await SQLiteChronicleRepository(session).create(
+                    Chronicle(title="Moved", project_path=str(gone))
+                )
+
+            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            with pytest.raises(FileNotFoundError):
+                await handlers.handle_clean(
+                    Task(type=TaskType.CLEAN, chronicle_id=chronicle.id), _noop_progress
+                )
+
+            assert not gone.parent.exists()
+        finally:
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
     async def test_chronicles_sharing_a_folder_keep_their_own_snapshots(self, tmp_path):
         """Two linked databases in one folder share `snapshots/`; pruning stays per chronicle."""
         db_manager = DatabaseManager(tmp_path / "workspace")

@@ -82,11 +82,13 @@ class CleanHandler(HandlerBase):
         The name carries the chronicle id because linked chronicles whose databases share
         a folder share its `snapshots/`, and pruning one must not touch another's copies.
         """
-        project_path = await self.db_manager.project_path_for(chronicle_id)
+        must_exist = self.archive_sessions is not None
+        # Checked before the snapshots folder is made beside a linked file that has moved.
+        project_path = await self.db_manager.project_path_for(chronicle_id, must_exist=must_exist)
         directory = self.db_manager.snapshots_path_for(str(chronicle_id), project_path)
         prefix = f"before-clean-{chronicle_id}-"
         destination = directory / f"{prefix}{datetime.now():%Y%m%d-%H%M%S-%f}.db"
-        await self.db_manager.snapshot_project(chronicle_id, destination)
+        await self.db_manager.snapshot_project(chronicle_id, destination, must_exist=must_exist)
 
         snapshots = sorted(directory.glob(f"{prefix}*.db"))
         oldest, rest = snapshots[:1], snapshots[1:]
