@@ -205,7 +205,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [ ] [077-L15 The task list keeps every task ever run](077-L15_task_history_grows.md) · low · S
 
-- [ ] [064-F2 Real transcription progress and cancel](064-F2_progress_and_cancel.md) · medium · M · after 009, 022
+- [x] [064-F2 Real transcription progress and cancel](064-F2_progress_and_cancel.md) · medium · M · after 009, 022
 
 - [ ] [046-L2 Service errors reach thin clients as a bare 500](046-L2_rpc_error_mapping.md) · low · S
 
