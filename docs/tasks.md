@@ -19,6 +19,15 @@ PENDING ──claim_next()──> WORKING ──success──> DONE
 An interruption is a task found `WORKING` when the worker starts; see
 [Interrupted tasks](#interrupted-tasks).
 
+## Listing and clearing finished tasks
+
+`TaskService.list_tasks(include_finished=False)` returns only PENDING and WORKING tasks,
+newest first, so the Tasks view's request does not grow with the history. With
+`include_finished` the list is capped at `FINISHED_LIST_LIMIT` (200) newest tasks.
+`clear_finished_tasks(include_failed=False)` deletes DONE tasks, and FAILED ones too when
+the user chooses to: a failed task is the only record of why it failed. Nothing prunes
+automatically; deleting a chronicle still removes its tasks.
+
 ## Atomic claiming
 
 `claim_next()` is a `SELECT` of candidates followed by a conditional `UPDATE` that only
