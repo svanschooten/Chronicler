@@ -190,6 +190,9 @@ MESSAGES = {
         "find": "Im Transkript suchen",
         "no_matches": "Keine Zeile enthält '{query}'.",
         "match_count": "{count} passende Zeilen",
+        "match_count_capped": (
+            "Die ersten {count} passenden Zeilen. Weitere Wörter grenzen die Suche ein."
+        ),
         "newer_version": (
             "Diese Chronik wurde mit einer neueren Chronicler-Version erstellt. Aktualisiere "
             "Chronicler, um sie zu öffnen. Die Datei wurde nicht geändert."

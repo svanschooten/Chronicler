@@ -39,7 +39,9 @@ without this, and that is what the 074 rule asks for anyway. See
 - **Each word is quoted.** Nothing typed is read as FTS5 syntax: `AND`, `NEAR(`, a column
   filter or an unbalanced quote are just words. Text with no words searches nothing.
 
-Matching lines come back in transcript order, capped at 200.
+Matching lines come back in transcript order, capped at 200 (`FIND_LIMIT`). A caller may
+ask for one more than that, and no further, to tell whether there are more: the find in
+the transcript panel does, and says "Showing the first 200 matching lines" when there are.
 
 ## Across the workspace: a fan-out
 
@@ -52,7 +54,7 @@ This is affordable because of ticket 031: with `NullPool` a project database cos
 chronicle in a process costs more, up to about 44 ms, because it runs its migrations.
 
 Each chronicle found carries its first three matching lines, and `has_more` when there
-are others; the chronicle's own find shows them all. A chronicle that cannot be opened
+are others; the chronicle's own find shows them, up to its cap of 200. A chronicle that cannot be opened
 is skipped and logged, not an error: a linked file that moved, or one a newer Chronicler
 upgraded.
 
@@ -79,7 +81,8 @@ them, and the *Said in* section already shown stays on screen until the new one 
 it.
 
 **Find in transcript**, in a chronicle's transcript panel, shows only the matching lines
-with a count, through that chronicle's index. Clearing the field shows the whole
+with a count, through that chronicle's index. Past 200 it shows the first 200 and says
+so, rather than a count that looks complete. Clearing the field shows the whole
 transcript again, and reloading after an edit keeps the find applied.
 
 Both work the same on a thin client: the server searches, and the results are typed

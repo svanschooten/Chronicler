@@ -184,6 +184,9 @@ MESSAGES = {
         "find": "Find in transcript",
         "no_matches": "No line contains '{query}'.",
         "match_count": "{count} matching lines",
+        "match_count_capped": (
+            "Showing the first {count} matching lines. Type more to narrow it down."
+        ),
         "newer_version": (
             "This chronicle was made by a newer version of Chronicler. Update Chronicler to "
             "open it. The file was not changed."
