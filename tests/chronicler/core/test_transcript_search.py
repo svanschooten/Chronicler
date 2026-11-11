@@ -127,21 +127,7 @@ class TestChronicleSearch:
 
     @pytest.mark.asyncio
     async def test_an_existing_chronicle_is_indexed_when_it_is_upgraded(self, tmp_path):
-        project_db = tmp_path / "older" / "project.db"
-        project_db.parent.mkdir()
-        engine = create_engine(f"sqlite:///{project_db}")
-        with engine.begin() as connection:
-            cfg = Config()
-            cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
-            cfg.attributes["connection"] = connection
-            command.upgrade(cfg, BEFORE_SEARCH)
-        engine.dispose()
-        with closing(sqlite3.connect(project_db)) as connection, connection:
-            connection.execute(
-                "INSERT INTO transcript_lines (id, start_time, end_time, text) "
-                "VALUES ('00000000-0000-0000-0000-000000000001', 0, 1, "
-                "'Recorded before search existed')"
-            )
+        project_db = _project_from_before_search(tmp_path / "older" / "project.db")
 
         db_manager = DatabaseManager(tmp_path)
         await register_chronicle(db_manager, "older", project_db)
@@ -150,6 +136,30 @@ class TestChronicleSearch:
             "Recorded before search existed"
         ]
         await db_manager.close_all()
+
+
+def _project_from_before_search(project_db):
+    """A project.db as the version before search left it, with one line in it."""
+    project_db.parent.mkdir(parents=True)
+    engine = create_engine(f"sqlite:///{project_db}")
+    with engine.begin() as connection:
+        cfg = Config()
+        cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
+        cfg.attributes["connection"] = connection
+        command.upgrade(cfg, BEFORE_SEARCH)
+    engine.dispose()
+    with closing(sqlite3.connect(project_db)) as connection, connection:
+        connection.execute(
+            "INSERT INTO transcript_lines (id, start_time, end_time, text) "
+            "VALUES ('00000000-0000-0000-0000-000000000001', 0, 1, "
+            "'Recorded before search existed')"
+        )
+    return project_db
+
+
+def _stamp(path) -> set[str]:
+    with closing(sqlite3.connect(path)) as connection:
+        return {row[0] for row in connection.execute("SELECT version_num FROM alembic_version")}
 
 
 async def _workspace(tmp_path):
@@ -215,6 +225,50 @@ class TestWorkspaceSearch:
 
             assert [match.chronicle.title for match in matches] == ["Here"]
             assert not (tmp_path / "gone").exists()
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_linked_chronicle_from_an_older_version_is_left_alone(self, tmp_path):
+        """Its file may be shared: searching must not upgrade it past an older Chronicler."""
+        db_manager, session, chronicles, service = await _workspace(tmp_path)
+        try:
+            shared = _project_from_before_search(tmp_path / "shared" / "project.db")
+            await chronicles.create(Chronicle(title="Shared", project_path=str(shared)))
+
+            assert await service.search_transcripts("before search") == []
+            assert _stamp(shared) == {BEFORE_SEARCH}
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_linked_chronicle_is_searched_once_it_has_been_opened(self, tmp_path):
+        db_manager, session, chronicles, service = await _workspace(tmp_path)
+        try:
+            shared = _project_from_before_search(tmp_path / "shared" / "project.db")
+            chronicle = await chronicles.create(Chronicle(title="Shared", project_path=str(shared)))
+            await service.get_transcript(chronicle.id)  # the user opens it
+
+            [match] = await service.search_transcripts("before search")
+
+            assert match.chronicle.title == "Shared"
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_an_older_chronicle_in_the_workspace_is_still_upgraded_and_found(self, tmp_path):
+        """The workspace's own chronicles are not shared, so search may upgrade them."""
+        db_manager, session, chronicles, service = await _workspace(tmp_path)
+        try:
+            chronicle = await chronicles.create(Chronicle(title="Own"))
+            _project_from_before_search(tmp_path / "chronicles" / str(chronicle.id) / "project.db")
+
+            [match] = await service.search_transcripts("before search")
+
+            assert match.chronicle.title == "Own"
         finally:
             await session.close()
             await db_manager.close_all()
