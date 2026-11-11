@@ -14,7 +14,8 @@ MAX_PATTERN_LENGTH = 500
 MATCH_TIMEOUT_SECONDS = 5.0
 TOTAL_TIMEOUT_SECONDS = 60.0
 
-_deadline: ContextVar[float | None] = ContextVar("regex_deadline", default=None)
+# When the enclosing `time_limit` ends, and how long it allowed, for the message.
+_deadline: ContextVar[tuple[float, float] | None] = ContextVar("regex_deadline", default=None)
 
 
 class UnsafePatternError(ValueError):
@@ -50,11 +51,11 @@ def time_limit(seconds: float | None = None) -> Iterator[None]:
     deadline.
     """
     limit = TOTAL_TIMEOUT_SECONDS if seconds is None else seconds
-    deadline = time.monotonic() + limit
+    bound = (time.monotonic() + limit, limit)
     outer = _deadline.get()
-    if outer is not None:
-        deadline = min(deadline, outer)
-    token = _deadline.set(deadline)
+    if outer is not None and outer[0] < bound[0]:
+        bound = outer
+    token = _deadline.set(bound)
     try:
         yield
     finally:
@@ -70,27 +71,29 @@ def run_timed(pattern: "regex.Pattern[str]", method, *args):
     thread does not stall the event loop.
     """
     timeout = MATCH_TIMEOUT_SECONDS
-    deadline = _deadline.get()
+    bound = _deadline.get()
     total_bound = False
-    if deadline is not None:
+    if bound is not None:
+        deadline, limit = bound
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise _too_slow_overall(pattern)
+            raise _too_slow_overall(pattern, limit)
         if remaining < timeout:
             timeout, total_bound = remaining, True
     try:
         return method(*args, timeout=timeout, concurrent=True)
     except TimeoutError as error:
-        if total_bound:
-            raise _too_slow_overall(pattern) from error
+        if bound is not None and total_bound:
+            raise _too_slow_overall(pattern, bound[1]) from error
         raise PatternTimeoutError(
             f"Pattern {pattern.pattern!r} took longer than {MATCH_TIMEOUT_SECONDS:g} seconds "
             "on one line. Simplify the pattern."
         ) from error
 
 
-def _too_slow_overall(pattern: "regex.Pattern[str]") -> PatternTimeoutError:
+def _too_slow_overall(pattern: "regex.Pattern[str]", limit: float) -> PatternTimeoutError:
+    """`limit` is what the enclosing `time_limit` allowed, which callers may set."""
     return PatternTimeoutError(
-        f"Pattern {pattern.pattern!r} took longer than {TOTAL_TIMEOUT_SECONDS:g} seconds "
+        f"Pattern {pattern.pattern!r} took longer than {limit:g} seconds "
         "over the whole transcript. Simplify the pattern."
     )

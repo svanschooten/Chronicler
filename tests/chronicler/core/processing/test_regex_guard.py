@@ -109,6 +109,22 @@ class TestTimeLimit:
             with pytest.raises(PatternTimeoutError, match="whole transcript"):
                 run_timed(compiled, compiled.search, "a")
 
+    @pytest.mark.parametrize("seconds", [0, 0.5])
+    def test_the_message_names_the_limit_that_ran_out(self, seconds):
+        compiled = compile_pattern(r"a")
+        with regex_guard.time_limit(seconds):
+            if seconds:
+                time.sleep(seconds)
+            with pytest.raises(PatternTimeoutError, match=f"longer than {seconds:g} seconds"):
+                run_timed(compiled, compiled.search, "a")
+
+    def test_a_nested_limit_names_the_outer_limit_it_kept(self):
+        compiled = compile_pattern(r"a")
+        with regex_guard.time_limit(0):
+            with regex_guard.time_limit(60):
+                with pytest.raises(PatternTimeoutError, match="longer than 0 seconds"):
+                    run_timed(compiled, compiled.search, "a")
+
     def test_a_nested_limit_keeps_the_earlier_deadline(self):
         compiled = compile_pattern(r"a")
         with regex_guard.time_limit(0):
