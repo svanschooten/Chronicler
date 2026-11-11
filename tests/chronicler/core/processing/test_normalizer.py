@@ -11,6 +11,7 @@ from chronicler.core.processing.normalizer import (  # noqa: E402
     NORMALIZED_SUFFIX,
     NormalizationError,
     build_filter_description,
+    measure_dbfs,
     normalize_audio,
     normalized_path_for,
 )
@@ -145,3 +146,60 @@ class TestNormalizeAudio:
 
         outputs = [item for item in tmp_path.iterdir() if item.name.endswith(NORMALIZED_SUFFIX)]
         assert len(outputs) == 1
+
+
+def write_stereo_tone(path, seconds=2.0, rate=44100):
+    """Two channels at CD rate, so the pass also resamples and downmixes."""
+    frames = bytearray()
+    for index in range(int(seconds * rate)):
+        left = int(0.1 * 32767 * math.sin(2 * math.pi * 220 * index / rate))
+        right = int(0.03 * 32767 * math.sin(2 * math.pi * 660 * index / rate))
+        frames += left.to_bytes(2, "little", signed=True)
+        frames += right.to_bytes(2, "little", signed=True)
+
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(2)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(bytes(frames))
+    return path
+
+
+class TestSinglePass:
+    """Ticket 057: the levels come from the one decode, and match measuring each file."""
+
+    @pytest.mark.parametrize("make_source", [write_tone, write_stereo_tone])
+    def test_the_reported_levels_match_measuring_each_file(self, tmp_path, make_source):
+        source = make_source(tmp_path / "gm.wav")
+
+        result = normalize_audio(source)
+
+        assert result.loudness_before == pytest.approx(measure_dbfs(source), abs=0.05)
+        assert result.loudness_after == pytest.approx(measure_dbfs(result.output_path), abs=0.05)
+
+    def test_the_source_is_decoded_once(self, tmp_path, monkeypatch):
+        from chronicler.core.processing import normalizer
+
+        opened = []
+        real_open = normalizer._open_source
+        monkeypatch.setattr(
+            normalizer, "_open_source", lambda path: opened.append(path) or real_open(path)
+        )
+        source = write_tone(tmp_path / "gm.wav")
+
+        normalize_audio(source)
+
+        assert opened == [source]
+
+    def test_silence_reports_the_silence_floor(self, tmp_path):
+        source = write_tone(tmp_path / "quiet.wav", amplitude=0.0)
+
+        result = normalize_audio(source)
+
+        assert result.loudness_before == normalizer_silence()
+
+
+def normalizer_silence() -> float:
+    from chronicler.core.processing.normalizer import SILENCE_DBFS
+
+    return SILENCE_DBFS
