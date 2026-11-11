@@ -282,3 +282,24 @@ class TestWorkspaceSearch:
         finally:
             await session.close()
             await db_manager.close_all()
+
+
+class TestFindLimit:
+    @pytest.mark.asyncio
+    async def test_a_caller_can_ask_for_one_more_than_the_limit_but_no_further(self, tmp_path):
+        from chronicler.core.services.transcript_service import FIND_LIMIT
+
+        db_manager, session, chronicles, service = await _workspace(tmp_path)
+        try:
+            chronicle = await chronicles.create(Chronicle(title="Talkative"))
+            await _add_lines(
+                db_manager, chronicle.id, *[f"again {i}" for i in range(FIND_LIMIT + 5)]
+            )
+
+            assert len(await service.search_transcript(chronicle.id, "again")) == FIND_LIMIT
+            assert len(await service.search_transcript(chronicle.id, "again", limit=10**6)) == (
+                FIND_LIMIT + 1
+            )
+        finally:
+            await session.close()
+            await db_manager.close_all()

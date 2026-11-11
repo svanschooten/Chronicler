@@ -27,6 +27,7 @@ from chronicler.core.sqlite import (
     SQLiteSummaryRepository,
     SQLiteTranscriptRepository,
 )
+from chronicler.core.sqlite.transcript_repository import SEARCH_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ PLAINTEXT_EXPORT_WIDTH = 140
 # Lines shown per chronicle in a workspace search, and chronicles searched at once.
 MATCHES_PER_CHRONICLE = 3
 SEARCH_CONCURRENCY = 8
+# Lines a chronicle's own find returns at most.
+FIND_LIMIT = SEARCH_LIMIT
 NORMALIZED_SUFFIX = ".normalized.wav"
 
 
@@ -82,10 +85,17 @@ class TranscriptService:
         async with await self._project_session(chronicle_id) as session:
             return await SQLiteTranscriptRepository(session).get_lines()
 
-    async def search_transcript(self, chronicle_id: UUID, query: str) -> list[TranscriptLine]:
-        """This chronicle's lines containing every word of `query`. See docs/search.md."""
+    async def search_transcript(
+        self, chronicle_id: UUID, query: str, limit: int = FIND_LIMIT
+    ) -> list[TranscriptLine]:
+        """
+        This chronicle's lines containing every word of `query`, at most `limit` of them
+        (no more than `FIND_LIMIT + 1`, so a caller can ask for one extra to tell whether
+        there are more). See docs/search.md.
+        """
+        limit = max(1, min(limit, FIND_LIMIT + 1))
         async with await self._project_session(chronicle_id) as session:
-            return await SQLiteTranscriptRepository(session).search(query)
+            return await SQLiteTranscriptRepository(session).search(query, limit=limit)
 
     async def search_transcripts(self, query: str) -> list[TranscriptMatch]:
         """

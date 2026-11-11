@@ -90,7 +90,7 @@ class TranscriptMatch(BaseModel):
 
     chronicle: Chronicle
     lines: list[TranscriptLine]
-    # More lines matched than `lines` holds; the chronicle's own find shows them all.
+    # More lines matched than `lines` holds; the chronicle's own find shows up to 200.
     has_more: bool = False
 
 

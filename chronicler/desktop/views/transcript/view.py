@@ -9,7 +9,7 @@ from chronicler.core.config import Mode, Settings, get_settings
 from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.task_service import TaskService
-from chronicler.core.services.transcript_service import TranscriptService
+from chronicler.core.services.transcript_service import FIND_LIMIT, TranscriptService
 from chronicler.desktop.dialogs import await_dialog
 from chronicler.desktop.extras_prompt import ExtraInstaller
 from chronicler.desktop.imports import ImportCoordinator
@@ -108,6 +108,8 @@ class TranscriptView(ft.Column):
         # searching). A result arriving for an older query is dropped.
         self.find_query = ""
         self.found_lines: list[TranscriptLine] | None = None
+        # More lines matched than `FIND_LIMIT`, which are all `found_lines` holds.
+        self.found_more = False
         self._find_generation = 0
 
         self.transcript_text = ft.Text(
@@ -602,8 +604,9 @@ class TranscriptView(ft.Column):
             self._render_transcript()
             return
         try:
+            # One more than is shown, to tell the user when there are more.
             found = await self.transcript_service.search_transcript(
-                self.chronicle.id, self.find_query
+                self.chronicle.id, self.find_query, limit=FIND_LIMIT + 1
             )
         except Exception as error:
             logger.exception("Could not search the transcript")
@@ -612,7 +615,7 @@ class TranscriptView(ft.Column):
             return
         if generation != self._find_generation:
             return
-        self.found_lines = found
+        self.found_lines, self.found_more = found[:FIND_LIMIT], len(found) > FIND_LIMIT
         self._render_transcript()
 
     def _render_transcript(self):
@@ -638,7 +641,10 @@ class TranscriptView(ft.Column):
     def _found_body(self, lines: list[TranscriptLine]) -> str:
         if not lines:
             return t("transcript.no_matches", query=self.find_query)
-        heading = t("transcript.match_count", count=len(lines))
+        if self.found_more:
+            heading = t("transcript.match_count_capped", count=len(lines))
+        else:
+            heading = t("transcript.match_count", count=len(lines))
         return f"{heading}\n\n{self._format_lines(lines, self.show_timestamps)}"
 
     @staticmethod

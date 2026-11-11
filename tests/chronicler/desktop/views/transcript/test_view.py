@@ -7,6 +7,7 @@ import pytest
 
 from chronicler.core.config import Mode, Settings
 from chronicler.core.models import Chronicle, Tag, TranscriptLine
+from chronicler.core.services.transcript_service import FIND_LIMIT
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.transcript import TranscriptView
 from chronicler.desktop.views.transcript.view import (
@@ -21,6 +22,7 @@ from chronicler.desktop.views.transcript.view import (
     TRANSCRIPT_LINE_HEIGHT,
     detail_panel_width,
 )
+from chronicler.i18n import t
 from tests.chronicler.desktop.controls import find_controls, text_values
 
 
@@ -587,7 +589,9 @@ class TestFindInTranscript:
 
         await view.find_changed(_typed("budg"))
 
-        service.search_transcript.assert_awaited_once_with(view.chronicle.id, "budg")
+        service.search_transcript.assert_awaited_once_with(
+            view.chronicle.id, "budg", limit=FIND_LIMIT + 1
+        )
         assert "Alice: the budget" in view.transcript_text.value
         assert "hello" not in view.transcript_text.value
         assert "1" in view.transcript_text.value.splitlines()[0]
@@ -632,13 +636,43 @@ class TestFindInTranscript:
         assert "hello" not in view.transcript_text.value
 
     @pytest.mark.asyncio
+    async def test_more_matches_than_are_shown_says_so(self, make_view):
+        service = AsyncMock()
+        service.get_transcript.return_value = [_line("again")]
+        service.search_transcript.return_value = [
+            _line(f"again {i}", i) for i in range(FIND_LIMIT + 1)
+        ]
+        view = make_view(transcript_service=service)
+        await view.load_transcript()
+
+        await view.find_changed(_typed("again"))
+
+        heading, *_ = view.transcript_text.value.splitlines()
+        assert heading == t("transcript.match_count_capped", count=FIND_LIMIT)
+        assert f"again {FIND_LIMIT - 1}" in view.transcript_text.value
+        assert f"again {FIND_LIMIT}" not in view.transcript_text.value
+
+    @pytest.mark.asyncio
+    async def test_exactly_the_limit_is_not_reported_as_more(self, make_view):
+        service = AsyncMock()
+        service.get_transcript.return_value = [_line("again")]
+        service.search_transcript.return_value = [_line(f"again {i}", i) for i in range(FIND_LIMIT)]
+        view = make_view(transcript_service=service)
+        await view.load_transcript()
+
+        await view.find_changed(_typed("again"))
+
+        heading, *_ = view.transcript_text.value.splitlines()
+        assert heading == t("transcript.match_count", count=FIND_LIMIT)
+
+    @pytest.mark.asyncio
     async def test_an_older_result_arriving_late_is_dropped(self, make_view):
         service = AsyncMock()
         service.get_transcript.return_value = [_line("budget"), _line("bud", 5)]
         view = make_view(transcript_service=service)
         await view.load_transcript()
 
-        async def search(chronicle_id, query):
+        async def search(chronicle_id, query, limit):
             if query == "bud":
                 await view.find_changed(_typed("budget"))
                 return [_line("bud", 5)]
