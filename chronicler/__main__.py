@@ -46,9 +46,9 @@ def main():
 
     Setup is split by where each mode can actually ask a question. Desktop collects its
     configuration on screen, in `desktop.views.wizard`, because the packaged build is
-    windowless and has nothing for `input()` to read from. The server keeps the console
-    wizard in `core.wizard`, since a terminal is where it is started anyway.
-    See docs/configuration.md.
+    windowless and has nothing for `input()` to read from. The server is configured with
+    flags or environment variables, and asks only when a terminal is attached, so it can
+    start under Docker or systemd. See docs/configuration.md.
     """
     attach_windows_console()
 
@@ -69,6 +69,22 @@ def main():
         "--port",
         type=int,
         help="Port to bind when running as a server",
+    )
+    parser.add_argument(
+        "--workspace",
+        metavar="PATH",
+        help=(
+            "Workspace folder for the server (or set CHRONICLER_WORKSPACE_PATH). "
+            "Saved to the configuration."
+        ),
+    )
+    parser.add_argument(
+        "--api-key",
+        metavar="KEY",
+        help=(
+            "API key thin clients must present (or set CHRONICLER_API_KEY). Generated and "
+            "printed once if none is configured."
+        ),
     )
     parser.add_argument(
         "--config",
@@ -98,13 +114,18 @@ def main():
         set_config_file_override(args.config)
 
     if args.mode == "server":
-        # Before the wizard, so nobody answers its questions only to hit a traceback.
+        # Before setup, so nobody answers its questions only to hit a traceback.
         require_server_extra()
 
-        from chronicler.core.wizard import run_wizard
+        from chronicler.core.wizard import SetupError, configure_server
 
-        if not is_config_initialized() or not get_settings().validate_for_mode(Mode.SERVER):
-            run_wizard(mode=Mode.SERVER)
+        settings = get_settings()
+        given = args.workspace or args.api_key
+        if given or not is_config_initialized() or not settings.validate_for_mode(Mode.SERVER):
+            try:
+                configure_server(settings, workspace=args.workspace, api_key=args.api_key)
+            except SetupError as error:
+                raise SystemExit(str(error)) from error
 
         server_main(host=args.host, port=args.port)
         return
