@@ -3,6 +3,7 @@ from typing import cast
 from uuid import UUID
 
 from sqlalchemy import CursorResult, or_, select
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,10 +28,23 @@ class SQLiteTaskRepository(TaskRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_all(self) -> list[Task]:
-        result = await self.session.execute(select(DBTask).order_by(DBTask.created_at.desc()))
-        db_tasks = result.scalars().all()
-        return [Task.model_validate(t) for t in db_tasks]
+    async def get_all(self, include_finished: bool = True, limit: int | None = None) -> list[Task]:
+        query = select(DBTask).order_by(DBTask.created_at.desc())
+        if not include_finished:
+            query = query.where(DBTask.status.in_([TaskStatus.PENDING, TaskStatus.WORKING]))
+        if limit is not None:
+            query = query.limit(limit)
+        result = await self.session.execute(query)
+        return [Task.model_validate(t) for t in result.scalars().all()]
+
+    async def delete_finished(self, include_failed: bool = False) -> int:
+        finished = [TaskStatus.DONE, TaskStatus.FAILED] if include_failed else [TaskStatus.DONE]
+        result = cast(
+            CursorResult,
+            await self.session.execute(sa_delete(DBTask).where(DBTask.status.in_(finished))),
+        )
+        await self.session.commit()
+        return result.rowcount
 
     async def get_pending(self) -> list[Task]:
         result = await self.session.execute(

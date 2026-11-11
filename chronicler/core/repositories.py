@@ -66,8 +66,12 @@ class TagRepository(ABC):
 
 class TaskRepository(ABC):
     @abstractmethod
-    async def get_all(self) -> list[Task]:
-        pass
+    async def get_all(self, include_finished: bool = True, limit: int | None = None) -> list[Task]:
+        """Newest first. Without `include_finished`, only PENDING and WORKING tasks."""
+
+    @abstractmethod
+    async def delete_finished(self, include_failed: bool = False) -> int:
+        """Deletes DONE tasks, and FAILED ones too if asked. Returns how many went."""
 
     @abstractmethod
     async def get_pending(self) -> list[Task]:

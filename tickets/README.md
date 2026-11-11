@@ -203,7 +203,7 @@ Stop a pattern from freezing the app, make opening chronicles cheap, settle what
 
 Progress and cancel for long transcriptions, explanations that reach thin clients, finished translations, unattended server setup and undo.
 
-- [ ] [077-L15 The task list keeps every task ever run](077-L15_task_history_grows.md) · low · S
+- [x] [077-L15 The task list keeps every task ever run](077-L15_task_history_grows.md) · low · S
 
 - [x] [064-F2 Real transcription progress and cancel](064-F2_progress_and_cancel.md) · medium · M · after 009, 022
 

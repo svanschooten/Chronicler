@@ -262,3 +262,55 @@ async def test_a_manual_retry_clears_the_wait(async_session):
 
     assert (await repo.get_by_id(task.id)).not_before is None
     assert await repo.claim_next("w") is not None
+
+
+async def _tasks_in_every_state(repo):
+    return {
+        status: await repo.create(Task(type=TaskType.IMPORT, status=status))
+        for status in (
+            TaskStatus.PENDING,
+            TaskStatus.WORKING,
+            TaskStatus.DONE,
+            TaskStatus.FAILED,
+        )
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_all_can_leave_out_finished_tasks(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    made = await _tasks_in_every_state(repo)
+
+    listed = await repo.get_all(include_finished=False)
+
+    assert {t.id for t in listed} == {made[TaskStatus.PENDING].id, made[TaskStatus.WORKING].id}
+
+
+@pytest.mark.asyncio
+async def test_get_all_limit_keeps_the_newest(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    for day in range(1, 6):
+        await repo.create(Task(type=TaskType.IMPORT, created_at=datetime(2026, 1, day)))
+
+    listed = await repo.get_all(limit=2)
+
+    assert [t.created_at.day for t in listed] == [5, 4]
+
+
+@pytest.mark.asyncio
+async def test_delete_finished_removes_done_and_only_then_failed(async_session):
+    repo = SQLiteTaskRepository(async_session)
+    made = await _tasks_in_every_state(repo)
+
+    assert await repo.delete_finished() == 1
+    assert {t.status for t in await repo.get_all()} == {
+        TaskStatus.PENDING,
+        TaskStatus.WORKING,
+        TaskStatus.FAILED,
+    }
+
+    assert await repo.delete_finished(include_failed=True) == 1
+    assert {t.id for t in await repo.get_all()} == {
+        made[TaskStatus.PENDING].id,
+        made[TaskStatus.WORKING].id,
+    }
