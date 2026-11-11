@@ -126,6 +126,35 @@ class TestChronicleSearch:
         await db_manager.close_all()
 
     @pytest.mark.asyncio
+    async def test_a_snapshot_keeps_the_index_pointing_at_the_right_lines(self, tmp_path):
+        """
+        The index is keyed on `transcript_lines`' implicit rowid, which SQLite's docs say
+        VACUUM may renumber. A snapshot (VACUUM INTO, used by Clean, the zip export and a
+        future restore) must still find the right lines, gaps from deletes included.
+        """
+        db_manager = DatabaseManager(tmp_path)
+        await register_chronicle(db_manager, "c")
+        await _add_lines(db_manager, "c", *[f"line {i} filler" for i in range(10)], "the needle")
+        async with db_manager.transaction("c") as session:
+            repo = SQLiteTranscriptRepository(session)
+            for line in (await repo.get_lines())[:5]:
+                await repo.delete_line(line.id)
+
+        copy = await db_manager.snapshot_project("c", tmp_path / "copy.db")
+        await db_manager.close_all()
+
+        with closing(sqlite3.connect(copy)) as connection:
+            connection.execute(
+                "INSERT INTO transcript_search(transcript_search, rank) "
+                "VALUES ('integrity-check', 1)"
+            )
+            found = connection.execute(
+                "SELECT text FROM transcript_lines WHERE rowid IN "
+                "(SELECT rowid FROM transcript_search WHERE transcript_search MATCH 'needle')"
+            ).fetchall()
+        assert found == [("the needle",)]
+
+    @pytest.mark.asyncio
     async def test_an_existing_chronicle_is_indexed_when_it_is_upgraded(self, tmp_path):
         project_db = _project_from_before_search(tmp_path / "older" / "project.db")
 

@@ -18,6 +18,14 @@ is searchable the first time this version opens it.
 The tokenizer is `unicode61 remove_diacritics 2`: case is folded in every script, and
 "cafe" finds "café" (and the other way round).
 
+**The index is keyed on rowid.** `transcript_lines` has a text primary key, so its rowid
+is SQLite's implicit one, which SQLite's documentation says `VACUUM` may renumber. In
+practice the copy keeps them (SQLite copies the table whole), and a test snapshots a
+chronicle with deleted lines and runs FTS5's `integrity-check` on the copy to keep it so.
+Anything that rebuilds the table another way, or puts a file back in place of the live
+one (ticket 065's restore), should still finish with the `rebuild` below: it costs
+moments, and a stale index finds the wrong lines rather than failing.
+
 **A migration that rebuilds `transcript_lines`** (anything using `batch_alter_table` on
 it) copies the table into a new one and drops the old, triggers included, and the copy's
 rowids need not match the index. Such a migration must recreate the three triggers and
