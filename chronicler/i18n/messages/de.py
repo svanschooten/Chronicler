@@ -178,6 +178,9 @@ MESSAGES = {
         "clear_with_failed": "Erledigte und fehlgeschlagene",
         "cleared": "{count} Aufgaben gelöscht",
         "retry_tooltip": "Diese Aufgabe erneut ausfuehren",
+        "cancel_tooltip": "Diese Aufgabe abbrechen",
+        "cancelled": "Aufgabe abgebrochen",
+        "not_cancelled": "Die Aufgabe war bereits fertig oder kann nicht gestoppt werden",
         "requeued": "Aufgabe erneut eingereiht",
         "load_failed": "Fehler beim Laden der Aufgaben: {error}",
         "status": "Status: {status}",
@@ -226,6 +229,22 @@ MESSAGES = {
         "import_transcript": "Transkript importieren",
         "clean": "Transkript bereinigen",
         "clean_queued": "Bereinigungsaufgabe eingereiht",
+        "restore": "Vorherige Version wiederherstellen",
+        "restore_title": "Eine vorherige Version wiederherstellen?",
+        "restore_message": (
+            "Ersetzt das aktuelle Transkript von '{title}' durch eine Kopie von vor einer "
+            "Bereinigung, einem Import oder einer erneuten Transkription. Die aktuelle Version "
+            "wird zuerst gesichert, das lässt sich also rückgängig machen."
+        ),
+        "restore_option": "{kind} - {time}",
+        "snapshot_kind": {
+            "clean": "Vor dem Bereinigen",
+            "import": "Vor einem Import",
+            "transcribe": "Vor erneutem Transkribieren",
+            "restore": "Vor einer Wiederherstellung",
+        },
+        "no_snapshots": "Es gibt noch keine frühere Version zum Wiederherstellen.",
+        "restored": "Vorherige Version wiederhergestellt",
         "audio_added": "Audioquelle '{name}' hinzugefügt",
         "audio_created": "'{title}' erstellt und Audioquelle hinzugefügt",
         "import_created": "'{title}' erstellt und Transkriptimport eingereiht",

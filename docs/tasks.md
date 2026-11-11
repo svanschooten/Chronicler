@@ -19,6 +19,29 @@ PENDING ──claim_next()──> WORKING ──success──> DONE
 An interruption is a task found `WORKING` when the worker starts; see
 [Interrupted tasks](#interrupted-tasks).
 
+## Progress and cancelling
+
+A transcription reports progress as it goes. faster-whisper yields segments lazily, so the
+transcriber calls `on_progress(fraction)` with `segment.end / info.duration` after each one,
+from its own thread. The handler hands each whole-percent step to the event loop with
+`run_coroutine_threadsafe` and maps it onto 30-70% of the task's bar. The Tasks view
+re-reads the list every 2 seconds while anything is queued or running, through the service,
+so a thin client sees it move too.
+
+`TaskService.cancel_task` sets the row to `CANCELLED`. A PENDING task is simply never
+claimed. A WORKING one is stopped only for the types in `CANCELLABLE_WHILE_WORKING`
+(transcription): the worker polls the row every second (`CANCEL_POLL_SECONDS`) and sets a
+`threading.Event`, which the transcriber checks between segments through the context
+variable in `chronicler/core/cancellation.py`. The task then ends within a segment, writes
+no lines, and marks its source failed with "Cancelled". The row is the only channel, so a
+cancel from another process works the same way.
+
+A cancelled task is not a failure. `mark_failed_or_retry` leaves a `CANCELLED` row alone, so
+the error that stopping it caused does not put it back in the queue, and recovery only
+looks at WORKING rows. *Run again* works on it like on any finished task. Other types are
+short, so cancelling one that is already running is refused instead of relabelling work
+that carries on.
+
 ## Listing and clearing finished tasks
 
 `TaskService.list_tasks(include_finished=False)` returns only PENDING and WORKING tasks,
