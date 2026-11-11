@@ -770,7 +770,7 @@ async def test_an_error_that_is_not_a_lock_is_not_retried(tasks, caplog):
 
 @pytest.mark.asyncio
 async def test_a_task_cancelled_while_running_is_stopped_and_not_retried(tasks, monkeypatch):
-    monkeypatch.setattr("chronicler.core.workers.CANCEL_POLL_SECONDS", 0.01)
+    monkeypatch.setattr("chronicler.core.workers.CANCEL_POLL_SECONDS", 0.05)
     manager = WorkerManager(tasks.sessions)
     started = asyncio.Event()
 

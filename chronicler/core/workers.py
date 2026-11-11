@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import threading
 import time
@@ -179,7 +180,13 @@ class WorkerManager:
             await self._record_outcome(lambda tasks: tasks.update_status(task.id, TaskStatus.DONE))
             logger.info(f"Task {task.id} ({task.type.value}) completed")
         finally:
+            # Waited for, not just cancelled: a watcher stopped mid-query would otherwise
+            # leave its database connection to be closed later, with the workspace's files
+            # still open when the caller moves on (a hang on Windows, which cannot close
+            # them from under a running thread).
             watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
             cancel_event.reset(token)
         await self._publish_completion(task.id)
 
