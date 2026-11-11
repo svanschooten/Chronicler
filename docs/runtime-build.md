@@ -70,10 +70,11 @@ longer match `pyproject.toml`. uv resolves for Windows from Linux, so one runner
 Two more jobs test what the locks install, since the main test job installs no extras:
 
 - *Tests With Every Extra* installs `base.lock` and every component lock, hash-checked and
-  with `--no-deps`, on Linux (with PortAudio) and Windows, and runs the whole suite. It
+  with `--no-deps`, into a fresh virtual environment on Linux (with PortAudio) and Windows, and runs the whole suite. It
   fails if a test is skipped with "requires the '…' extra".
 - *… Imports On Its Own* installs `base.lock` and one component lock, and imports that
-  component's modules. A combined install hides a component missing a dependency of its
+  component's modules with `scripts/import_component.py`. PortAudio failing to find an
+  audio server on the runner counts as imported: the library loaded. A combined install hides a component missing a dependency of its
   own, as numpy reached normalization only through transcription (ticket 067).
 
 `llama-cpp-python` is not a component and never will be here: PyPI has no wheels for it, so
