@@ -6,7 +6,7 @@ from typing import Any
 
 import flet as ft
 
-from chronicler.core.models import Chronicle
+from chronicler.core.models import Chronicle, TranscriptMatch
 from chronicler.desktop.theme import ThemeColors
 from chronicler.i18n import t
 
@@ -136,4 +136,37 @@ def _icon_action(
         data=data,
         on_click=on_click,
         tooltip=tooltip,
+    )
+
+
+def transcript_match_card(
+    match: TranscriptMatch, colors: ThemeColors, on_open: Handler
+) -> ft.Container:
+    """A chronicle found by what was said in it, with the lines that matched."""
+    lines = [
+        ft.Text(
+            f"{line.speaker_name or t('common.unknown')}: {line.text}",
+            max_lines=2,
+            color=colors.text,
+        )
+        for line in match.lines
+    ]
+    if match.has_more:
+        lines.append(ft.Text(t("archive.more_matches"), size=12, color=colors.muted))
+    return ft.Container(
+        bgcolor=colors.card,
+        padding=ft.Padding.all(18),
+        border=ft.Border.all(1, colors.border),
+        border_radius=12,
+        on_click=on_open,
+        data=match.chronicle,
+        content=ft.Column(
+            spacing=6,
+            controls=[
+                ft.Text(
+                    match.chronicle.title, size=18, weight=ft.FontWeight.BOLD, color=colors.text
+                ),
+                *lines,
+            ],
+        ),
     )

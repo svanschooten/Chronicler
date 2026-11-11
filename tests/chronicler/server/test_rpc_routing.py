@@ -444,3 +444,50 @@ async def test_a_remote_caller_can_name_a_project_path_only_in_an_allowed_folder
         assert not (tmp_path / "elsewhere").exists()
     finally:
         await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_a_thin_client_finds_a_spoken_phrase(tmp_path):
+    """
+    Ticket 063 end to end over RPC: upload a transcript, import it on the server, then find
+    the chronicle and the line from the thin client, as typed results.
+    """
+    import io
+
+    from chronicler.core.models import TranscriptMatch
+    from chronicler.core.remote import RemoteContainer
+    from chronicler.core.worker_wiring import build_worker_manager
+
+    db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
+    try:
+        await db_manager.init_archive()
+        worker_manager = build_worker_manager(db_manager)
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
+            chronicles = remote.resolve(ChronicleService)
+            tasks = remote.resolve(TaskService)
+            transcripts = remote.resolve(TranscriptService)
+
+            chronicle = await chronicles.create_chronicle("Quarterly planning")
+            transcript = b"Alice: Good morning everyone\nBob: Let's go over the budget for Q3\n"
+            uploaded = await client.post(
+                "/upload",
+                files={"file": ("meeting.txt", io.BytesIO(transcript), "text/plain")},
+                headers={"X-API-Key": "valid-key"},
+            )
+            await tasks.queue_import(chronicle.id, uploaded.json()["file_path"])
+            await worker_manager.process_tasks()
+
+            [match] = await transcripts.search_transcripts("budget for q3")
+            lines = await transcripts.search_transcript(chronicle.id, "good morning")
+
+        assert isinstance(match, TranscriptMatch)
+        assert match.chronicle.title == "Quarterly planning"
+        assert [(line.speaker_name, line.text) for line in match.lines] == [
+            ("Bob", "Let's go over the budget for Q3")
+        ]
+        assert [line.text for line in lines] == ["Good morning everyone"]
+    finally:
+        await db_manager.close_all()

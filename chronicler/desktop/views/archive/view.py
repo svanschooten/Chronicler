@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 
@@ -12,11 +13,19 @@ from chronicler.desktop.imports import ImportCoordinator
 from chronicler.desktop.operations import ChronicleOperations
 from chronicler.desktop.picking import FilePickerFlow
 from chronicler.desktop.theme import theme_colors
-from chronicler.desktop.views.archive.cards import ChronicleCardHandlers, chronicle_card
+from chronicler.desktop.views.archive.cards import (
+    ChronicleCardHandlers,
+    chronicle_card,
+    transcript_match_card,
+)
 from chronicler.desktop.widgets import amber_button
 from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
+
+# Typing pauses this long before the transcript search starts, so one is not started per
+# keystroke. The search opens every chronicle. See docs/search.md.
+TRANSCRIPT_SEARCH_DELAY = 0.3
 
 
 class ArchiveView(ft.Column):
@@ -38,6 +47,8 @@ class ArchiveView(ft.Column):
         self.colors = theme_colors(dark_mode)
         self.can_link = can_link
         self.query = ""
+        # Bumped by every load; a transcript search finishing for an older one is dropped.
+        self._generation = 0
         self.file_picker: ft.FilePicker | None = None
         self.picker = FilePickerFlow(lambda: self.file_picker, self.show_snackbar)
 
@@ -166,9 +177,15 @@ class ArchiveView(ft.Column):
 
     async def search_changed(self, e):
         self.query = e.data
-        await self.load_chronicles()
+        await self.load_chronicles(transcript_delay=TRANSCRIPT_SEARCH_DELAY)
 
-    async def load_chronicles(self):
+    async def load_chronicles(self, transcript_delay: float = 0.0):
+        """
+        The chronicles whose title, description or tags match, then, below them and once
+        it finishes, the ones whose transcripts do.
+        """
+        self._generation += 1
+        generation = self._generation
         try:
             if self.query:
                 chronicles = await self.chronicle_service.search_chronicles(self.query)
@@ -183,6 +200,49 @@ class ArchiveView(ft.Column):
             logger.exception(f"Error loading chronicles: {e}")
             self.chronicle_list.controls = [ft.Text(t("archive.load_failed", error=e))]
             self.update()
+            return
+
+        if self.query.strip():
+            await self._add_transcript_matches(generation, transcript_delay, bool(chronicles))
+
+    async def _add_transcript_matches(
+        self, generation: int, delay: float, found_chronicles: bool
+    ) -> None:
+        """Appends the transcript matches, unless a newer load started meanwhile."""
+        if delay:
+            await asyncio.sleep(delay)
+            if generation != self._generation:
+                return
+        failed: Exception | None = None
+        try:
+            matches = await self.transcript_service.search_transcripts(self.query)
+        except Exception as error:
+            logger.exception(f"Error searching transcripts: {error}")
+            matches, failed = [], error
+        if generation != self._generation:
+            return
+
+        section: list[ft.Control] = []
+        if failed is not None:
+            section = [ft.Text(t("archive.transcript_search_failed", error=failed))]
+        elif matches:
+            section = [
+                ft.Text(
+                    t("archive.in_transcripts"),
+                    size=16,
+                    weight=ft.FontWeight.BOLD,
+                    color=self.colors.text,
+                ),
+                *[
+                    transcript_match_card(match, self.colors, self.open_chronicle_clicked)
+                    for match in matches
+                ],
+            ]
+        if not section:
+            return
+        existing = self.chronicle_list.controls if found_chronicles else []
+        self.chronicle_list.controls = [*existing, *section]
+        self.update()
 
     def create_chronicle_card(self, item: Chronicle) -> ft.Container:
         return chronicle_card(
