@@ -28,6 +28,9 @@ AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "flac", "ogg"]
 TRANSCRIPT_EXTENSIONS = ["txt"]
 PROJECT_EXTENSIONS = ["db"]
 
+MAX_OFFERED = 5
+"""How many snapshots the restore dialog offers: a button each, so the newest few."""
+
 
 class ChronicleOperations:
     """
@@ -83,6 +86,47 @@ class ChronicleOperations:
 
         await self.task_service.queue_clean(chronicle.id)
         self.show_snackbar(t("actions.clean_queued"))
+        return True
+
+    async def restore(self, chronicle: Chronicle) -> bool:
+        """
+        Offers the chronicle's snapshots, newest first, and puts the chosen one back. The
+        state it replaces is saved first, so a restore can be undone like anything else.
+        """
+        snapshots = (await self.chronicle_service.list_snapshots(chronicle.id))[:MAX_OFFERED]
+        if not snapshots:
+            self.show_snackbar(t("actions.no_snapshots"))
+            return False
+
+        choices: list[Choice[str | None]] = [Choice(t("common.cancel"), None)]
+        choices += [
+            Choice(
+                t(
+                    "actions.restore_option",
+                    kind=t(f"actions.snapshot_kind.{snapshot.kind}"),
+                    time=snapshot.created_at.strftime("%Y-%m-%d %H:%M"),
+                ),
+                snapshot.name,
+            )
+            for snapshot in snapshots
+        ]
+        chosen = await ask_choice(
+            self.get_page(),
+            t("actions.restore_title"),
+            t("actions.restore_message", title=chronicle.title),
+            choices,
+            dismissed=None,
+        )
+        if chosen is None:
+            return False
+
+        try:
+            await self.chronicle_service.restore_snapshot(chronicle.id, chosen)
+        except Exception as error:
+            logger.exception("Restoring a snapshot failed")
+            self.show_snackbar(t("actions.failed", error=error))
+            return False
+        self.show_snackbar(t("actions.restored"))
         return True
 
     async def identify_speakers(self, chronicle: Chronicle) -> bool:

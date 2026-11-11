@@ -105,6 +105,11 @@ class TranscribeHandler(NormalizeHandler):
 
         await update_progress(70)
 
+        if await self._track_has_lines(chronicle_id, resolved_path.name):
+            # Re-transcribing replaces this track's lines, hand edits included.
+            snapshot = await self.snapshot_before(chronicle_id, "transcribe")
+            logger.info(f"Saved the transcript before re-transcribing: {snapshot}")
+
         async with self.transaction(chronicle_id) as session:
             repo = SQLiteTranscriptRepository(session)
             sources = SQLiteAudioSourceRepository(session)
@@ -150,6 +155,14 @@ class TranscribeHandler(NormalizeHandler):
             f"Transcription finished for chronicle {chronicle_id}: "
             f"{len(lines)} segments for speaker '{speaker_name}'"
         )
+
+    async def _track_has_lines(self, chronicle_id: UUID, filename: str) -> bool:
+        async with await self.project_session(chronicle_id) as session:
+            source = await SQLiteAudioSourceRepository(session).get_by_filename(filename)
+            if source is None:
+                return False
+            lines = await SQLiteTranscriptRepository(session).get_lines()
+        return any(line.source_id == source.id for line in lines)
 
     async def abandon_transcribe(self, task: Task) -> None:
         """Recovery failed this task, so its source must stop showing as transcribing."""

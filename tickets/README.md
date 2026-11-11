@@ -213,7 +213,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [x] [042-S10 Replace the console wizard with flags](042-S10_console_wizard_to_flags.md) · medium · S · after 012, 025
 
-- [ ] [065-F3 Restore after destructive actions](065-F3_restore_snapshots.md) · medium · M · after 011, 031
+- [x] [065-F3 Restore after destructive actions](065-F3_restore_snapshots.md) · medium · M · after 011, 031
 
 - [ ] [075-L13 Saving the edit dialog can erase a duration a task just computed](075-L13_edit_drops_computed_duration.md) · low · S
 

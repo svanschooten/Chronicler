@@ -358,3 +358,65 @@ class TestFormDrivenReload:
         await operations._import_clicked(None)
 
         reload.assert_not_awaited()
+
+
+class TestRestoring:
+    @staticmethod
+    def _snapshot(kind="clean", name="before-clean-x.db"):
+        from datetime import datetime
+
+        from chronicler.core.models import Snapshot
+
+        return Snapshot(
+            name=name, kind=kind, created_at=datetime(2026, 11, 11, 21, 30), size_bytes=1
+        )
+
+    @pytest.mark.asyncio
+    async def test_choosing_a_snapshot_restores_it(self, make_operations):
+        operations, parts, _ = make_operations()
+        parts["chronicle_service"].list_snapshots.return_value = [self._snapshot()]
+        chronicle = _chronicle()
+
+        with patch(
+            "chronicler.desktop.operations.ask_choice",
+            new=AsyncMock(return_value="before-clean-x.db"),
+        ) as ask:
+            assert await operations.restore(chronicle) is True
+
+        parts["chronicle_service"].restore_snapshot.assert_awaited_once_with(
+            chronicle.id, "before-clean-x.db"
+        )
+        offered = [choice.label for choice in ask.await_args.args[3]]
+        assert any("Before cleaning" in label and "2026-11-11 21:30" in label for label in offered)
+
+    @pytest.mark.asyncio
+    async def test_cancelling_restores_nothing(self, make_operations):
+        operations, parts, _ = make_operations()
+        parts["chronicle_service"].list_snapshots.return_value = [self._snapshot()]
+
+        with patch("chronicler.desktop.operations.ask_choice", new=AsyncMock(return_value=None)):
+            assert await operations.restore(_chronicle()) is False
+
+        parts["chronicle_service"].restore_snapshot.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_without_snapshots_it_says_so_and_asks_nothing(self, make_operations):
+        operations, parts, _ = make_operations()
+        parts["chronicle_service"].list_snapshots.return_value = []
+
+        with patch("chronicler.desktop.operations.ask_choice", new=AsyncMock()) as ask:
+            assert await operations.restore(_chronicle()) is False
+
+        ask.assert_not_awaited()
+        parts["show_snackbar"].assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_a_failed_restore_is_reported_not_raised(self, make_operations):
+        operations, parts, _ = make_operations()
+        parts["chronicle_service"].list_snapshots.return_value = [self._snapshot()]
+        parts["chronicle_service"].restore_snapshot.side_effect = PermissionError("in use")
+
+        with patch("chronicler.desktop.operations.ask_choice", new=AsyncMock(return_value="x.db")):
+            assert await operations.restore(_chronicle()) is False
+
+        assert "in use" in parts["show_snackbar"].call_args.args[0]

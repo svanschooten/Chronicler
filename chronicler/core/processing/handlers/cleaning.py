@@ -5,7 +5,6 @@ project database.
 
 import asyncio
 import logging
-from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -18,12 +17,6 @@ from chronicler.core.processing.handlers.base import HandlerBase, ProgressCallba
 from chronicler.core.sqlite import SQLiteTranscriptRepository
 
 logger = logging.getLogger(__name__)
-
-SNAPSHOTS_KEPT = 3
-"""
-How many before-clean snapshots a chronicle keeps: the oldest, which holds the
-transcript as it was before any clean, and the newest of the rest.
-"""
 
 CLEAN_ATTEMPTS = 3
 """How many times a clean starts again when the transcript changed while it ran."""
@@ -102,20 +95,5 @@ class CleanHandler(HandlerBase):
         Copies the chronicle's database to `snapshots/before-clean-<id>-<time>.db` beside
         its project.db. Cleaning drops and merges lines, and the text it removes cannot
         be regenerated. See docs/cleaning.md.
-
-        The name carries the chronicle id because linked chronicles whose databases share
-        a folder share its `snapshots/`, and pruning one must not touch another's copies.
         """
-        must_exist = self.archive_sessions is not None
-        # Checked before the snapshots folder is made beside a linked file that has moved.
-        project_path = await self.db_manager.project_path_for(chronicle_id, must_exist=must_exist)
-        directory = self.db_manager.snapshots_path_for(str(chronicle_id), project_path)
-        prefix = f"before-clean-{chronicle_id}-"
-        destination = directory / f"{prefix}{datetime.now():%Y%m%d-%H%M%S-%f}.db"
-        await self.db_manager.snapshot_project(chronicle_id, destination, must_exist=must_exist)
-
-        snapshots = sorted(directory.glob(f"{prefix}*.db"))
-        oldest, rest = snapshots[:1], snapshots[1:]
-        for old in rest[: max(len(rest) - (SNAPSHOTS_KEPT - len(oldest)), 0)]:
-            old.unlink()
-        return destination
+        return await self.snapshot_before(chronicle_id, "clean")

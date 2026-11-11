@@ -39,6 +39,12 @@ class ImportHandler(HandlerBase):
 
         await update_progress(50)
 
+        if not append and await self._has_lines(chronicle_id):
+            # Overwriting drops the lines there, so keep a copy to restore from. Outside the
+            # transaction: VACUUM INTO cannot run inside one.
+            snapshot = await self.snapshot_before(chronicle_id, "import")
+            logger.info(f"Saved the transcript before the import replaced it: {snapshot}")
+
         async with self.transaction(chronicle_id) as session:
             repo = SQLiteTranscriptRepository(session)
             if append:
@@ -68,6 +74,10 @@ class ImportHandler(HandlerBase):
             f"Transcript import finished for chronicle {chronicle_id}: "
             f"{len(lines)} lines, {final_speaker_count} speakers"
         )
+
+    async def _has_lines(self, chronicle_id: UUID) -> bool:
+        async with await self.project_session(chronicle_id) as session:
+            return bool(await SQLiteTranscriptRepository(session).get_lines())
 
     async def _end_of_transcript(self, chronicle_id: UUID) -> float:
         """Where an appended file starts on the chronicle's timeline."""

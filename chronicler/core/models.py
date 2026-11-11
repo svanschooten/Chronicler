@@ -175,6 +175,18 @@ class ServerInfo(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class Snapshot(BaseModel):
+    """
+    A copy of a chronicle's database made just before something destructive. `kind` is what
+    was about to happen: clean, import, transcribe, or restore (the state a restore replaced).
+    """
+
+    name: str
+    kind: str
+    created_at: datetime
+    size_bytes: int
+
+
 class Summary(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     number: int
