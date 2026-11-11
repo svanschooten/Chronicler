@@ -20,8 +20,9 @@ faster-whisper depends on it. It is not free otherwise, so it is declared as its
 pip install 'chronicler[normalization]'
 ```
 
-CI installs neither extra, so the tests that decode real audio skip there via
-`pytest.importorskip("av")` — the same treatment the faster-whisper tests get. A missing
+The main CI test job installs neither extra, so the tests that decode real audio skip
+there via `pytest.importorskip("av")`. The *Tests With Every Extra* job installs both and
+runs them (see [runtime-build.md](runtime-build.md)). A missing
 extra at runtime raises a `NormalizationError` naming the `pip install`, not an
 `ImportError`.
 
@@ -56,6 +57,11 @@ not LUFS. That is a deliberate compromise: PyAV exposes no way to read filter me
 the integrated loudness ffmpeg computes internally cannot be read back out. Rather than
 report a number that is not measured, or hand-implement BS.1770 K-weighting, the recorded
 figure is a real RMS measurement in a simpler unit.
+
+Both figures come from the one decode the normalisation already makes: "before" from the
+source frames as they are decoded, "after" from the frames the filter graph emits. The
+graph ends in the s16 mono format that is written, so "after" is exactly what re-reading
+the output would give, without decoding either file again.
 
 It answers the question the panel actually asks — "was this track quiet, and is it still?"
 — and it is comparable between tracks. Measured on a real under-gained tone:
