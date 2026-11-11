@@ -166,26 +166,19 @@ def _repo_holding(chronicle: Chronicle):
 
 
 @pytest.mark.asyncio
-async def test_changing_a_project_path_forgets_the_old_location(tmp_path):
-    chronicle = Chronicle(title="Moved", project_path=str(tmp_path / "old" / "project.db"))
-    db_manager = _db_manager(tmp_path)
-    service = ChronicleService(_repo_holding(chronicle), db_manager)
+async def test_an_update_cannot_move_a_chronicle(tmp_path):
+    """Ticket 076: where a chronicle's database lives is set when it is created or linked."""
+    chronicle = Chronicle(title="Linked", project_path=str(tmp_path / "old" / "project.db"))
+    repo = _repo_holding(chronicle)
+    service = ChronicleService(repo, _db_manager(tmp_path))
 
-    moved = chronicle.model_copy(update={"project_path": str(tmp_path / "new" / "project.db")})
-    await service.update_chronicle(moved)
+    moved = chronicle.model_copy(
+        update={"title": "Renamed", "project_path": str(tmp_path / "new" / "project.db")}
+    )
+    updated = await service.update_chronicle(moved)
 
-    db_manager.close_project.assert_awaited_once_with(str(chronicle.id))
-
-
-@pytest.mark.asyncio
-async def test_an_update_that_keeps_the_project_path_keeps_the_database_open(tmp_path):
-    chronicle = Chronicle(title="Same", project_path=str(tmp_path / "project.db"))
-    db_manager = _db_manager(tmp_path)
-    service = ChronicleService(_repo_holding(chronicle), db_manager)
-
-    await service.update_chronicle(chronicle.model_copy(update={"title": "Renamed"}))
-
-    db_manager.close_project.assert_not_awaited()
+    assert updated.title == "Renamed"
+    assert updated.project_path == chronicle.project_path
 
 
 class TestLinkPolicy:
