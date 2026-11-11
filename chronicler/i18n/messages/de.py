@@ -218,6 +218,22 @@ MESSAGES = {
         "import_transcript": "Transkript importieren",
         "clean": "Transkript bereinigen",
         "clean_queued": "Bereinigungsaufgabe eingereiht",
+        "restore": "Vorherige Version wiederherstellen",
+        "restore_title": "Eine vorherige Version wiederherstellen?",
+        "restore_message": (
+            "Ersetzt das aktuelle Transkript von '{title}' durch eine Kopie von vor einer "
+            "Bereinigung, einem Import oder einer erneuten Transkription. Die aktuelle Version "
+            "wird zuerst gesichert, das lässt sich also rückgängig machen."
+        ),
+        "restore_option": "{kind} - {time}",
+        "snapshot_kind": {
+            "clean": "Vor dem Bereinigen",
+            "import": "Vor einem Import",
+            "transcribe": "Vor erneutem Transkribieren",
+            "restore": "Vor einer Wiederherstellung",
+        },
+        "no_snapshots": "Es gibt noch keine frühere Version zum Wiederherstellen.",
+        "restored": "Vorherige Version wiederhergestellt",
         "clean_title": "Transkript bereinigen?",
         "clean_message": (
             "Beim Bereinigen von '{title}' werden Füllzeilen und Wiederholungen entfernt und "

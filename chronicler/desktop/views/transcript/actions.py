@@ -56,6 +56,7 @@ class ChronicleActions(ft.Row):
                 ft.Icons.DESCRIPTION, "actions.import_transcript", self.import_transcript_clicked
             ),
             self._action(ft.Icons.CLEANING_SERVICES, "actions.clean", self.clean_clicked),
+            self._action(ft.Icons.RESTORE, "actions.restore", self.restore_clicked),
             self._action(
                 ft.Icons.RECORD_VOICE_OVER,
                 "actions.identify_speakers",
@@ -95,6 +96,9 @@ class ChronicleActions(ft.Row):
 
     async def clean_clicked(self, e):
         await self._after(await self.operations.clean(self.chronicle))
+
+    async def restore_clicked(self, e):
+        await self._after(await self.operations.restore(self.chronicle))
 
     async def identify_speakers_clicked(self, e):
         await self._after(await self.operations.identify_speakers(self.chronicle))

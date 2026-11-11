@@ -212,6 +212,22 @@ MESSAGES = {
         "import_transcript": "Import transcript",
         "clean": "Clean transcript",
         "clean_queued": "Clean task queued",
+        "restore": "Restore previous version",
+        "restore_title": "Restore a previous version?",
+        "restore_message": (
+            "Replaces the current transcript of '{title}' with a copy saved before a clean, "
+            "an import or a re-transcription. The current version is saved first, so this "
+            "can be undone."
+        ),
+        "restore_option": "{kind} - {time}",
+        "snapshot_kind": {
+            "clean": "Before cleaning",
+            "import": "Before an import",
+            "transcribe": "Before re-transcribing",
+            "restore": "Before a restore",
+        },
+        "no_snapshots": "There is no earlier version to restore yet.",
+        "restored": "Previous version restored",
         "clean_title": "Clean transcript?",
         "clean_message": (
             "Cleaning '{title}' drops filler and repeated lines and merges consecutive turns. "

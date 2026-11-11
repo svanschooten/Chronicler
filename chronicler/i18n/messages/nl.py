@@ -211,6 +211,22 @@ MESSAGES = {
         "import_transcript": "Transcript importeren",
         "clean": "Transcript opschonen",
         "clean_queued": "Opschoontaak in de wachtrij",
+        "restore": "Vorige versie herstellen",
+        "restore_title": "Een vorige versie herstellen?",
+        "restore_message": (
+            "Vervangt het huidige transcript van '{title}' door een kopie van vóór een "
+            "opschoning, een import of een nieuwe transcriptie. De huidige versie wordt eerst "
+            "bewaard, dus dit kan ongedaan worden gemaakt."
+        ),
+        "restore_option": "{kind} - {time}",
+        "snapshot_kind": {
+            "clean": "Vóór opschonen",
+            "import": "Vóór een import",
+            "transcribe": "Vóór opnieuw transcriberen",
+            "restore": "Vóór een herstel",
+        },
+        "no_snapshots": "Er is nog geen eerdere versie om te herstellen.",
+        "restored": "Vorige versie hersteld",
         "clean_title": "Transcript opschonen?",
         "clean_message": (
             "Opschonen van '{title}' verwijdert opvulling en herhaalde regels en voegt "
