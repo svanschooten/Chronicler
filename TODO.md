@@ -587,8 +587,8 @@ every `ASGITransport`-based test in the sprint had missed:
 * [x] Define repository interfaces
 * [x] Separate services from storage
 * [x] Create local storage backend
-    * Transcript search is not part of it yet. `SQLiteTranscriptRepository.search` only
-      raises (ticket 029 removes it), and full-text search is ticket 063.
+    * Transcript search is `SQLiteTranscriptRepository.search`, over an FTS5 index in each
+      chronicle (ticket 063, docs/search.md).
 * [ ] `Container.register_factory`'s generics don't fit the interface-to-implementation
   registration pattern it's used for — mypy flags every
   `register_factory(AbstractRepo, ConcreteImpl)` call as `[type-abstract]`. Worked around
@@ -778,7 +778,7 @@ Future:
     * [x] Workspace search — chronicle title, description and tag names (`ILIKE`), with
       the user's own `%` and `_` escaped, and a chronicle with two matching tags listed
       once.
-    * [ ] Transcript search, within a chronicle and across the workspace (ticket 063)
+    * [x] Transcript search, within a chronicle and across the workspace (ticket 063)
     * `SearchService` was deleted in Sprint 11: no view used it, and both search boxes
       call the owning services directly.
 * [x] Search UI in Archive view
@@ -1140,7 +1140,7 @@ Future:
 * [x] **Edit text** — done in Sprint 11, per line rather than as one blob. The read view
   stays read-only on purpose; the edit toggle swaps in one row per line. See
   [docs/transcript-editing.md](docs/transcript-editing.md).
-* [ ] Search within Chronicle (ticket 063)
+* [x] Search within Chronicle (ticket 063)
 
 Future:
 

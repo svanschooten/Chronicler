@@ -21,7 +21,7 @@ No production caller:
 - `DatabaseManager.get_chronicle_sources_path`
 - `ChronicleActions.transcript_import_confirmed`, `edit_save_clicked`
 - `TagRepository` and `SQLiteTagRepository`: registered, never resolved
-- `TranscriptRepository.add_line`, `TranscriptRepository.search` (only raises)
+- `TranscriptRepository.add_line` (`search` is used since 063)
 - `KnownSpeakerRepository.search`, `AudioSourceRepository.delete`,
   `SQLiteSummaryRepository.get`
 - `SummaryDraft.chunk_summaries`, `RemoteServiceProxy._cls`

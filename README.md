@@ -298,6 +298,14 @@ Chronicle
 Export
 ```
 
+## Search
+
+The archive search box finds Chronicles by title, description and tags, and by what was
+said in them: under *Said in*, each Chronicle whose transcript has a line containing
+every word typed, with those lines. Inside a Chronicle, *Find in transcript* shows only
+the matching lines. Matching ignores case and accents, and the last word matches as you
+type it. See [docs/search.md](docs/search.md).
+
 ## Documentation
 
 The README provides a general overview.
