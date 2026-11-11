@@ -774,7 +774,7 @@ Future:
 ## Archive view
 
 * [x] Browse Chronicles
-* [~] Implement search in repositories and services
+* [x] Implement search in repositories and services
     * [x] Workspace search — chronicle title, description and tag names (`ILIKE`), with
       the user's own `%` and `_` escaped, and a chronicle with two matching tags listed
       once.
