@@ -282,7 +282,7 @@ async def test_thin_client_full_flow_via_remote_container(tmp_path):
 
             await worker_manager.process_tasks()
 
-            tasks = await task_service.list_tasks()
+            tasks = await task_service.list_tasks(include_finished=True)
             (updated_task,) = [t for t in tasks if t.id == task.id]
             assert updated_task.status.value == "DONE"
     finally:
