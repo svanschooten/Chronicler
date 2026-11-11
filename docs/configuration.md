@@ -105,37 +105,44 @@ Unset the variable first.
 The file is written with mode 600 on POSIX, because it can hold `api_key` and
 `llm.api_key`. An existing file is restricted before anything is written to it.
 
-## The two wizards
+## Desktop wizard and server setup
 
-There are two, and which one runs depends on whether the mode being started has a
-console to ask questions through.
+The desktop has a wizard; the server does not, because it often has no terminal either.
 
-| Mode | Wizard | Where |
-| ---- | ------ | ----- |
+| Mode | Setup | Where |
+| ---- | ----- | ----- |
 | desktop | `FletSetupWizard` | `desktop/views/wizard.py`, on screen |
-| `server` | `ConfigWizard` | `core/wizard.py`, on stdin |
+| `server` | `configure_server` | `core/wizard.py`, from flags or the environment |
 
-The split exists because the packaged desktop build is windowless and has no stdin at
-all — see [packaging.md](packaging.md). `__main__.main()` simply does not call
-`run_wizard` for the desktop; `desktop.main.start()` gates the Flet one on the same
-`validate_for_mode()` check, inside the Flet session so it can draw.
+The packaged desktop build is windowless and has no stdin at all - see
+[packaging.md](packaging.md) - so `__main__.main()` never prompts for it, and
+`desktop.main.start()` gates the Flet wizard on `validate_for_mode()` inside the Flet
+session so it can draw. Both write the same `Settings` fields. The Flet one covers only full
+stack and thin client, and asks for the language first, rebuilding every step from `t()`.
 
-Both write the same `Settings` fields, so a config produced by either is
-indistinguishable. The Flet one covers only full stack and thin client — the two modes a
-desktop window can actually run in — and asks for the language first, rebuilding every
-step from `t()` so the rest of the wizard is in the language just chosen.
+### Configuring the server
 
-### The console wizard
+```bash
+chronicler server --workspace /srv/chronicler --api-key "$KEY"
+```
 
-`ConfigWizard` runs when no config exists, or when `validate_for_mode()` says the
-existing one is incomplete for the mode being started. Each `WizardStep` reports
-`is_satisfied()` so an already-configured step is skipped.
+or, with the environment (what a container or a systemd unit would set):
 
-`RemoteServerStep` will not generate an API key, unlike `ApiKeyStep`. When setting up a
-new server, generating a fresh key is correct. When connecting to someone else's
-server, the key must match one the operator already configured — generating a random
-one there would silently guarantee every request 403s. `FletSetupWizard.show_server()`
-enforces the same rule by requiring both fields.
+```bash
+CHRONICLER_WORKSPACE_PATH=/srv/chronicler CHRONICLER_API_KEY=... chronicler server
+```
+
+`configure_server` runs when a flag is given or the configuration is incomplete for server
+mode. A flag wins over the saved value and is saved. A value that came from the environment
+is used but not written to the file (see `Settings.save`). What is still missing is handled
+by whether a terminal is attached:
+
+- **Workspace:** asked for, with the default offered, if stdin is a terminal. Otherwise the
+  server exits with a message naming `--workspace` and `CHRONICLER_WORKSPACE_PATH`.
+- **API key:** generated if there is none, and printed once. A key you passed is not echoed.
+
+An existing folder that cannot be written to is refused with the same kind of message. The
+language is no longer asked on the server; set `ui.locale` in the file if it should differ.
 
 ### The desktop wizard
 
