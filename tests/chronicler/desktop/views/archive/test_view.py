@@ -9,6 +9,7 @@ import pytest
 from chronicler.core.models import Chronicle
 from chronicler.desktop.views.archive import ArchiveView
 from chronicler.desktop.views.archive import view as archive_view
+from tests.chronicler.desktop.controls import text_values
 
 
 @pytest.fixture
@@ -95,7 +96,8 @@ async def test_load_chronicles_lists_everything_when_there_is_no_query(make_view
 
 
 @pytest.mark.asyncio
-async def test_search_changed_switches_to_searching(make_view):
+async def test_search_changed_switches_to_searching(make_view, monkeypatch):
+    monkeypatch.setattr(archive_view, "SEARCH_DEBOUNCE", 0)
     chronicle_service = AsyncMock()
     chronicle_service.search_chronicles.return_value = []
     view = make_view(chronicle_service=chronicle_service)
@@ -444,3 +446,51 @@ class TestTranscriptMatchesOnRefresh:
         await asyncio.gather(view.refresh(), view.refresh(), view.refresh())
 
         transcripts.search_transcripts.assert_awaited_once_with("budget")
+
+
+@pytest.mark.asyncio
+async def test_typing_on_waits_for_a_pause_before_querying(make_view, monkeypatch):
+    monkeypatch.setattr(archive_view, "SEARCH_DEBOUNCE", 0.05)
+    chronicle_service = AsyncMock()
+    chronicle_service.search_chronicles.return_value = []
+    view = make_view(chronicle_service=chronicle_service)
+    view.load_chronicles = ArchiveView.load_chronicles.__get__(view)
+    view.update = MagicMock()
+
+    await asyncio.gather(
+        *(view.search_changed(MagicMock(data=text)) for text in ("a", "ab", "abc"))
+    )
+
+    chronicle_service.search_chronicles.assert_awaited_once_with("abc")
+
+
+@pytest.mark.asyncio
+async def test_a_slow_answer_for_an_earlier_query_does_not_replace_the_later_one(make_view):
+    """Ticket 078: over a network the answer for "a" can arrive after the one for "abc"."""
+    release_first = asyncio.Event()
+
+    async def search(query):
+        if query == "a":
+            await release_first.wait()
+            return [Chronicle(title="Answer for a")]
+        return [Chronicle(title="Answer for abc")]
+
+    chronicle_service = AsyncMock()
+    chronicle_service.search_chronicles.side_effect = search
+    transcript_service = AsyncMock()
+    transcript_service.search_transcripts.return_value = []
+    view = make_view(chronicle_service=chronicle_service, transcript_service=transcript_service)
+    view.load_chronicles = ArchiveView.load_chronicles.__get__(view)
+    view.update = MagicMock()
+
+    view.query = "a"
+    earlier = asyncio.create_task(view.load_chronicles())
+    await asyncio.sleep(0)
+    view.query = "abc"
+    await view.load_chronicles()
+    release_first.set()
+    await earlier
+
+    shown = text_values(view.chronicle_list)
+    assert "Answer for abc" in shown
+    assert "Answer for a" not in shown
