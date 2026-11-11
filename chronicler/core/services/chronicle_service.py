@@ -77,14 +77,13 @@ class ChronicleService:
     async def get_chronicle(self, chronicle_id: UUID) -> Chronicle | None:
         return await self.repository.get_by_id(chronicle_id)
 
-    async def create_chronicle(
-        self, title: str, project_path: str | None = None, source_file: str | None = None
-    ) -> Chronicle:
-        """`project_path` links the chronicle to a database outside the workspace."""
-        if project_path is not None:
-            project_path = str(self.link_policy.confine(project_path))
-        chronicle = Chronicle(title=title, project_path=project_path, source_file=source_file)
-        return await self.repository.create(chronicle)
+    async def create_chronicle(self, title: str, source_file: str | None = None) -> Chronicle:
+        """
+        A new chronicle, its database in the workspace. A database elsewhere is only ever
+        linked, through `link_external_chronicle`, which checks the file first: naming a
+        path here let a caller have Chronicler's tables written into any SQLite file.
+        """
+        return await self.repository.create(Chronicle(title=title, source_file=source_file))
 
     async def link_external_chronicle(self, project_path: str) -> Chronicle:
         """
@@ -97,7 +96,9 @@ class ChronicleService:
         """
         path = self.link_policy.confine(project_path)
         await asyncio.to_thread(check_linkable_project, path)
-        chronicle = await self.create_chronicle(_title_for(path), project_path=str(path))
+        chronicle = await self.repository.create(
+            Chronicle(title=_title_for(path), project_path=str(path))
+        )
         try:
             return await self.hydrate_from_project(chronicle.id)
         except Exception as error:
