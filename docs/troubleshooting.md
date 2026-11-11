@@ -69,13 +69,20 @@ A project database was migrated by a build that ran Alembic concurrently. See
 [storage.md](storage.md#migrations-are-serialised-process-wide) for why, and for how to
 recover the affected `project.db`.
 
-## A chronicle fails to open with "Can't locate revision"
+## "This chronicle was made by a newer version of Chronicler"
 
 The chronicle's `project.db` was opened by a newer version of Chronicler, which upgraded
 it, and this version does not know that schema. It happens with shared chronicles: a
 synced folder, a zip from someone else, or a linked database. Update Chronicler to the
-version that last opened it. Nothing is lost; the file is intact. See
+version that last opened it. Nothing is lost, and the file is left unchanged. The same
+message with "workspace" means the workspace database itself was upgraded. See
 [storage.md](storage.md#opening-a-chronicle-upgrades-it).
+
+Older builds reported this as `Can't locate revision identified by '…'`.
+
+On a thin client, the server refuses the chronicle the same way, but the client shows a
+generic server error until service errors are mapped (ticket 046). The server's log has
+the message.
 
 ## Recording says the extra is missing after installing it
 

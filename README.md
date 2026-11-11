@@ -216,6 +216,10 @@ Because every Chronicle is self-contained, projects can be shared independently 
 > can corrupt its databases. Close Chronicler on one machine and let the sync finish before
 > opening it on another.
 
+> **Opening a Chronicle upgrades it.** A Chronicle that a newer version of Chronicler has
+> opened cannot be opened by an older one, which says so and asks you to update. Keep
+> everyone sharing Chronicles on the same release.
+
 ## Background processing
 
 Long-running operations are represented as persistent tasks.

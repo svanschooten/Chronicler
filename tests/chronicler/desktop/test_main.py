@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from chronicler.core.config import Mode, Settings
+from chronicler.core.database_manager import NewerSchemaError
 from chronicler.core.handshake import HandshakeError
 from chronicler.core.workspace_lock import (
     WorkspaceLockedError,
@@ -215,6 +216,25 @@ async def test_start_shows_an_unwritable_workspace_on_the_startup_screen(
     shown = text_values(page.add.call_args[0][0])
     assert any(str(tmp_path) in text and "Permission denied" in text for text in shown)
     assert any("permissions" in text for text in shown)
+
+
+@pytest.mark.asyncio
+async def test_start_shows_a_workspace_from_a_newer_chronicler_on_the_startup_screen(
+    page, monkeypatch, tmp_path
+):
+    settings = Settings(workspace_path=tmp_path, mode="desktop:full_stack")
+    app = stub_app(monkeypatch)
+    db_manager = AsyncMock()
+    db_manager.init_archive.side_effect = NewerSchemaError("archive")
+    monkeypatch.setattr(desktop_main, "get_settings", lambda: settings)
+    monkeypatch.setattr(desktop_main, "build_runtime", lambda s: runtime_for(s, db_manager))
+
+    await desktop_main.start(page)
+
+    app.return_value.main.assert_not_awaited()
+    shown = text_values(page.add.call_args[0][0])
+    assert any(str(tmp_path) in text and "newer version" in text for text in shown)
+    assert any("Update Chronicler" in text for text in shown)
 
 
 def test_show_startup_failure_names_the_reason(page):
