@@ -40,7 +40,7 @@ below and leave the code clean.
 
 ## Design notes
 
-Longer-form proposals that are not yet built live in [design/](design/).
+Proposals that are not yet built are tickets, in [tickets/](../tickets/README.md).
 
 ## Related documents in the repository root
 

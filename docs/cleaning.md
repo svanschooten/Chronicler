@@ -125,5 +125,4 @@ need to be: the repeat rule catches the loop while leaving a genuine, isolated
 "Thank you." in place. Precision and recall at the same time.
 
 The `you` artifact does not appear in that measurement because the prototype's own SQL
-export already filtered it before writing the file — see
-[the prototype salvage notes](design/prototype-salvage.md).
+export already filtered it before writing the file.
