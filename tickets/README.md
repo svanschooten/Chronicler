@@ -191,7 +191,7 @@ Stop a pattern from freezing the app, make opening chronicles cheap, settle what
 
 - [ ] [063-F1 Full-text transcript search](063-F1_full_text_search.md) · medium · L · after 031, 032, 020, 074
 
-- [ ] [044-T4 Optional extras never run in CI](044-T4_extras_ci_job.md) · medium · S · after 004
+- [x] [044-T4 Optional extras never run in CI](044-T4_extras_ci_job.md) · medium · S · after 004
 
 - [ ] [057-P6 Normalization decodes the file three times](057-P6_normalization_single_pass.md) · low · S · after 044
 
