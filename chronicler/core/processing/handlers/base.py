@@ -88,6 +88,16 @@ class HandlerBase:
             chronicle_id, must_exist=self.archive_sessions is not None
         )
 
+    async def snapshot_before(self, chronicle_id: UUID, kind: str) -> Path:
+        """
+        A copy of the chronicle's database to restore from, made before `kind` (clean,
+        import, transcribe) replaces its text. A failed snapshot fails the task, so nothing
+        is rewritten without a copy to go back to. See docs/storage.md.
+        """
+        return await self.db_manager.snapshot_before(
+            chronicle_id, kind, must_exist=self.archive_sessions is not None
+        )
+
     @staticmethod
     async def attach_speakers(
         repo: SQLiteTranscriptRepository, lines: list[TranscriptLine]
