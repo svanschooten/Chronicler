@@ -197,7 +197,7 @@ Stop a pattern from freezing the app, make opening chronicles cheap, settle what
 
 - [x] [076-L14 Remote callers can point a chronicle at any path on the server](076-L14_project_path_from_rpc_callers.md) · low · S
 
-- [ ] [053-L9 The upload cap does not limit what is received](053-L9_upload_size_cap.md) · low · S
+- [x] [053-L9 The upload cap does not limit what is received](053-L9_upload_size_cap.md) · low · S
 
 ### Wave 7: what users notice next
 

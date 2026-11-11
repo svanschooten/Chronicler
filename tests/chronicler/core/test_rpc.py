@@ -337,3 +337,100 @@ class TestTheRealServices:
             "TaskService": 8,
             "SystemService": 3,
         }
+
+
+async def _post_upload(app, chunks, declared_length=None):
+    """
+    Drives `/upload` at the ASGI level, so the test sees how much of the body the server
+    pulls. Returns the response status and how many body bytes were received.
+    """
+    boundary = b"chroniclerboundary"
+    head = (
+        b"--" + boundary + b"\r\n"
+        b'Content-Disposition: form-data; name="file"; filename="big.wav"\r\n'
+        b"Content-Type: audio/wav\r\n\r\n"
+    )
+    pieces = [head, *chunks, b"\r\n--" + boundary + b"--\r\n"]
+    headers = [
+        (b"x-api-key", b"test-key"),
+        (b"content-type", b"multipart/form-data; boundary=" + boundary),
+    ]
+    if declared_length is not None:
+        headers.append((b"content-length", str(declared_length).encode()))
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/upload",
+        "raw_path": b"/upload",
+        "root_path": "",
+        "query_string": b"",
+        "headers": headers,
+        "client": ("test", 1),
+        "server": ("test", 80),
+    }
+    pulled = 0
+
+    async def receive():
+        nonlocal pulled
+        if not pieces:
+            return {"type": "http.disconnect"}
+        body = pieces.pop(0)
+        pulled += len(body)
+        return {"type": "http.request", "body": body, "more_body": bool(pieces)}
+
+    statuses = []
+
+    async def send(message):
+        if message["type"] == "http.response.start":
+            statuses.append(message["status"])
+
+    await app(scope, receive, send)
+    return statuses[0], pulled
+
+
+class TestUploadCapWhileReceiving:
+    """Ticket 053: an oversized upload is refused without receiving the whole body."""
+
+    @pytest.mark.asyncio
+    async def test_a_declared_length_over_the_cap_is_refused_before_reading(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(RpcServer, "MAX_UPLOAD_SIZE", 1000)
+        monkeypatch.setattr(RpcServer, "MULTIPART_OVERHEAD", 0)
+        app, upload_dir = await _build_upload_app(tmp_path)
+
+        status, pulled = await _post_upload(app, [b"x" * 1000] * 100, declared_length=100_000)
+
+        assert status == 413
+        assert pulled == 0
+        assert list(upload_dir.iterdir()) == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("declared_length", [None, 10])
+    async def test_a_body_that_outgrows_its_declared_length_stops_at_the_cap(
+        self, tmp_path, monkeypatch, declared_length
+    ):
+        monkeypatch.setattr(RpcServer, "MAX_UPLOAD_SIZE", 1000)
+        monkeypatch.setattr(RpcServer, "MULTIPART_OVERHEAD", 0)
+        app, upload_dir = await _build_upload_app(tmp_path)
+
+        status, pulled = await _post_upload(
+            app, [b"x" * 1000] * 100, declared_length=declared_length
+        )
+
+        assert status == 413
+        assert pulled < 3000
+        assert list(upload_dir.iterdir()) == []
+
+    @pytest.mark.asyncio
+    async def test_a_file_under_the_cap_still_uploads(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(RpcServer, "MAX_UPLOAD_SIZE", 1000)
+        app, upload_dir = await _build_upload_app(tmp_path)
+
+        status, _ = await _post_upload(app, [b"x" * 500])
+
+        assert status == 200
+        assert [path.stat().st_size for path in upload_dir.iterdir()] == [500]

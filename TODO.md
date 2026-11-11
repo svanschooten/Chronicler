@@ -1244,7 +1244,7 @@ Future:
       invalid, unsafe combination, and unnecessary since auth is a header, not a cookie).
 * [ ] Add server storage management
 * [x] Confine the linked-chronicle paths a remote caller can name (ticket 076)
-* [ ] Enforce the upload cap before the body is received (ticket 053)
+* [x] Enforce the upload cap before the body is received (ticket 053)
 * [ ] Pass service errors to thin clients with their explanation (ticket 046)
 * [ ] Set up a server unattended, with flags instead of the console wizard (ticket 042)
 * TLS is left to a reverse proxy or a tunnel. See
