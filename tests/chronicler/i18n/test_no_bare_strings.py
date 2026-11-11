@@ -52,7 +52,9 @@ def _has_words(node: ast.expr) -> bool:
         return isinstance(node.value, str) and node.value not in ALLOWED
     if isinstance(node, ast.JoinedStr):
         return any(
-            isinstance(part, ast.Constant) and sum(c.isalpha() for c in part.value) >= 2
+            isinstance(part, ast.Constant)
+            and isinstance(part.value, str)
+            and sum(c.isalpha() for c in part.value) >= 2
             for part in node.values
         )
     return False
