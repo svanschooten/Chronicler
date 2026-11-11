@@ -532,7 +532,7 @@ every `ASGITransport`-based test in the sprint had missed:
     * [ ] Fix `.venv` cache reuse before re-enabling the macOS matrix entry
     * [x] Run the tests on Windows too (tickets 003, 005)
     * [x] Check that the runtime locks match `pyproject.toml`
-    * [ ] Run the optional extras in CI (ticket 044)
+    * [x] Run the optional extras in CI (ticket 044)
     * [ ] Run the tests before a release builds (ticket 081)
 
 ---
@@ -1507,7 +1507,7 @@ runtime release has been used.
   wrong directory the moment a test module moved.
 * [x] Tests run on Windows in CI, and hold up there (tickets 003, 005)
 * [x] A fixture for a second connection holding the write lock (ticket 002)
-* [ ] Optional extras in CI (ticket 044)
+* [x] Optional extras in CI (ticket 044)
 * [ ] Warning-free under coverage (ticket 080)
 * [ ] Two tests that pass for the wrong reason (ticket 071)
 * [ ] No tests exercise the desktop app against a real Flet page. Views are unit-tested by
