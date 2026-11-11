@@ -455,7 +455,9 @@ def _project_head() -> str:
 
     cfg = Config()
     cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
-    return ScriptDirectory.from_config(cfg).get_current_head()
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+    assert head is not None
+    return head
 
 
 def _stamped(path) -> str:
