@@ -13,6 +13,35 @@ BINARY_RETURNS = (bytes, bytearray)
 BINARY_MEDIA_TYPE = "application/octet-stream"
 
 
+def refusals() -> dict[str, tuple[type[Exception], int]]:
+    """
+    The service errors whose message is meant for the user, by class name, with the status
+    each is sent as. Everything else is a bug or holds something private, such as a path,
+    and reaches a thin client as a bare 500. Imported on first use: a thin client loads this
+    module and has no use for the services' own modules until it sees one of these.
+    """
+    from chronicler.core.formatting import NoRealTimestampsError
+    from chronicler.core.processing.regex_guard import PatternTimeoutError, UnsafePatternError
+
+    return {
+        "LookupError": (LookupError, 404),
+        "NoRealTimestampsError": (NoRealTimestampsError, 422),
+        "UnsafePatternError": (UnsafePatternError, 422),
+        "PatternTimeoutError": (PatternTimeoutError, 422),
+    }
+
+
+def refusal_for(error: Exception) -> tuple[str, int] | None:
+    """The class name and status `error` is sent as, or None if it is not one to explain."""
+    # KeyError and IndexError are LookupErrors too, but their text is a bare key.
+    if isinstance(error, KeyError | IndexError):
+        return None
+    for name, (cls, status_code) in refusals().items():
+        if isinstance(error, cls):
+            return name, status_code
+    return None
+
+
 def service(cls: type[T] | None = None, *, expose: Sequence[str] | None = None) -> Any:
     """
     Registers a class as an RPC service, publishing only the methods it names.
@@ -150,7 +179,7 @@ class RpcServer:
         app.include_router(router)
 
     def _add_route(self, router: Any, service_cls: type, method: Callable, name: str):
-        from fastapi import Body, Response
+        from fastapi import Body, HTTPException, Response
         from sqlalchemy.ext.asyncio import AsyncSession
 
         sig = inspect.signature(method)
@@ -181,6 +210,14 @@ class RpcServer:
                 instance = scope.resolve(service_cls)
                 bound_method = getattr(instance, name)
                 result = await bound_method(*args, **kwargs)
+            except Exception as error:
+                refusal = refusal_for(error)
+                if refusal is None:
+                    raise
+                error_name, status_code = refusal
+                raise HTTPException(
+                    status_code, detail={"error": error_name, "message": str(error)}
+                ) from error
             finally:
                 if scope.is_registered(AsyncSession):
                     await scope.resolve(AsyncSession).close()

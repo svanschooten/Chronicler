@@ -5,13 +5,29 @@ from typing import Any, TypeVar, get_type_hints
 import httpx
 from pydantic import TypeAdapter
 
-from chronicler.core.rpc import BINARY_RETURNS, exposed_methods
+from chronicler.core.rpc import BINARY_RETURNS, exposed_methods, refusals
 
 T = TypeVar("T")
 
 # The server builds a zip or PDF before sending its first byte, so reads and writes need
 # minutes, not httpx's 5-second default.
 RPC_TIMEOUT = httpx.Timeout(10, read=600, write=600)
+
+
+def _raise_refusal(response: httpx.Response) -> None:
+    """
+    Raises the service's own exception when the server refused with one it explains, so
+    `str(error)` and an `except` clause read the same as against a local service.
+    """
+    if response.status_code not in (404, 422):
+        return
+    try:
+        detail = response.json()["detail"]
+        known = refusals()[detail["error"]][0]
+        message = detail["message"]
+    except (ValueError, KeyError, TypeError):
+        return  # a 404 for a missing route, or a validation error: not one of ours
+    raise known(message)
 
 
 class RemoteServiceProxy:
@@ -60,6 +76,7 @@ class RemoteServiceProxy:
                 headers["X-API-Key"] = self._api_key
 
             response = await self._client.post(url, json=json_payload, headers=headers)
+            _raise_refusal(response)
             response.raise_for_status()
 
             return_type = param_hints.get("return")
