@@ -25,6 +25,8 @@ def _get_model(model_size: str, device: str, compute_type: str) -> Any:
 
     key = (model_size, device, compute_type)
     if key not in _model_cache:
+        # Only the most recently used model stays: trying several sizes must not keep them all.
+        _model_cache.clear()
         logger.info(f"Loading faster-whisper model '{model_size}' (downloads on first use)")
         _model_cache[key] = WhisperModel(model_size, device=device, compute_type=compute_type)
     return _model_cache[key]

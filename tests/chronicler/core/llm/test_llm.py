@@ -294,3 +294,43 @@ class TestSummarizeTranscript:
     async def test_an_empty_transcript_is_refused(self):
         with pytest.raises(ValueError):
             await summarize_transcript(self._Client(), [], SummarySettings(), context_window=8192)
+
+
+class TestLocalModelLifetime:
+    @pytest.fixture(autouse=True)
+    def _fresh(self, monkeypatch):
+        from chronicler.core.llm import client as client_module
+
+        monkeypatch.setattr(client_module, "_local_model", None)
+
+    @staticmethod
+    def _factory(monkeypatch):
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        factory = MagicMock()
+        monkeypatch.setitem(sys.modules, "llama_cpp", SimpleNamespace(Llama=factory))
+        return factory
+
+    def _load(self, **overrides):
+        from chronicler.core.llm.client import LlamaCppClient
+
+        values = {"provider": "llama_cpp", "model_path": "a.gguf", "context_window": 4096}
+        return LlamaCppClient(LlmSettings(**{**values, **overrides}))._load()
+
+    def test_two_clients_load_the_model_once(self, monkeypatch):
+        factory = self._factory(monkeypatch)
+        first = self._load()
+        second = self._load()
+
+        assert first is second
+        assert factory.call_count == 1
+
+    def test_another_model_or_context_size_replaces_it(self, monkeypatch):
+        factory = self._factory(monkeypatch)
+        self._load()
+        self._load(model_path="b.gguf")
+        self._load(model_path="b.gguf", context_window=8192)
+
+        assert factory.call_count == 3

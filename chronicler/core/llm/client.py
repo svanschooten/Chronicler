@@ -125,18 +125,28 @@ class OpenAiCompatibleClient:
         )
 
 
+_local_model: tuple[tuple[str, int], Any] | None = None
+"""The one loaded GGUF model, keyed by path and context size, shared by every client.
+
+Clients are built per task, so the model has to outlive them or each summary reloads it.
+Asking for a different model replaces it.
+"""
+
+
 class LlamaCppClient:
     """An in-process GGUF model, for running without any server at all."""
 
     def __init__(self, settings: LlmSettings):
         self.settings = settings
-        self._model: Any = None
 
     def _load(self) -> Any:
-        if self._model is not None:
-            return self._model
+        global _local_model
         if not self.settings.model_path:
             raise LlmNotConfiguredError("No model_path configured for the local model")
+
+        key = (self.settings.model_path, self.settings.context_window)
+        if _local_model is not None and _local_model[0] == key:
+            return _local_model[1]
 
         try:
             from llama_cpp import Llama
@@ -144,10 +154,12 @@ class LlamaCppClient:
             raise LlmError(extras.missing_message("llm", error)) from error
 
         logger.info(f"Loading local model {self.settings.model_path} (downloads on first use)")
-        self._model = Llama(
+        _local_model = None  # free the previous model before loading the next
+        model = Llama(
             model_path=self.settings.model_path, n_ctx=self.settings.context_window, verbose=False
         )
-        return self._model
+        _local_model = (key, model)
+        return model
 
     async def list_models(self) -> list[ModelInfo]:
         if not self.settings.model_path:
