@@ -45,6 +45,21 @@ async def test_listing_registers_files_found_on_disk(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_files_that_are_not_audio_are_not_listed(tmp_path):
+    db_manager, session, service, chronicle = await _service(tmp_path)
+    try:
+        for name in ["gm.wav", "Player.OPUS", "desktop.ini", ".DS_Store", ".hidden.wav", "notes"]:
+            _add_track(db_manager, chronicle.id, name)
+
+        sources = await service.list_audio_sources(chronicle.id)
+
+        assert [s.filename for s in sources] == ["Player.OPUS", "gm.wav"]
+    finally:
+        await session.close()
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
 async def test_listing_is_idempotent(tmp_path):
     db_manager, session, service, chronicle = await _service(tmp_path)
     try:

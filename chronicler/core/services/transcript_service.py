@@ -38,6 +38,8 @@ SEARCH_CONCURRENCY = 8
 # Lines a chronicle's own find returns at most.
 FIND_LIMIT = SEARCH_LIMIT
 NORMALIZED_SUFFIX = ".normalized.wav"
+AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "flac", "ogg", "opus", "webm", "aac"]
+"""What counts as an audio track: the picker offers these and ``sources/`` is filtered by them."""
 
 
 @service(
@@ -215,7 +217,10 @@ class TranscriptService:
         return sorted(
             path
             for path in await self._source_files(chronicle_id)
-            if path.is_file() and not path.name.endswith(NORMALIZED_SUFFIX)
+            if path.is_file()
+            and not path.name.startswith(".")
+            and path.suffix[1:].lower() in AUDIO_EXTENSIONS
+            and not path.name.endswith(NORMALIZED_SUFFIX)
         )
 
     async def export_srt(self, chronicle_id: UUID, include_speaker: bool = True) -> str:
