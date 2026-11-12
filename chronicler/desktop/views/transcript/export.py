@@ -1,7 +1,10 @@
 """The transcript view's Export menu and save flow."""
 
+import asyncio
 import logging
+import shutil
 from collections.abc import Callable
+from pathlib import Path
 
 import flet as ft
 
@@ -190,7 +193,20 @@ class TranscriptExporter:
 
         return await await_dialog(page, build)
 
-    async def _save(self, content: str | bytearray, file_name: str, extension: str) -> None:
+    async def _save(self, content: str | bytearray | Path, file_name: str, extension: str) -> None:
+        """
+        Writes the export where the user picks. A `Path` is a temporary file made for this
+        export, such as the zip: it is moved into place, and deleted if nothing was saved.
+        """
+        try:
+            await self._save_to_picked_place(content, file_name, extension)
+        finally:
+            if isinstance(content, Path):
+                content.unlink(missing_ok=True)
+
+    async def _save_to_picked_place(
+        self, content: str | bytearray | Path, file_name: str, extension: str
+    ) -> None:
         picker = self._file_picker()
         if picker is None:
             self.show_snackbar(t("export.no_picker"))
@@ -211,7 +227,9 @@ class TranscriptExporter:
             return
 
         try:
-            if isinstance(content, bytearray):
+            if isinstance(content, Path):
+                await asyncio.to_thread(shutil.move, content, destination)
+            elif isinstance(content, bytearray):
                 with open(destination, "wb") as handle:
                     handle.write(content)
             else:
