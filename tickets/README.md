@@ -177,7 +177,7 @@ lower priority, `S` simplification, `P` performance, `T` tests and CI, `D` docum
 
 - [ ] [047-L3 17 interface strings bypass translation](047-L3_finish_translation.md) · low · S
 
-- [ ] [048-L4 Any file in sources/ counts as an audio track](048-L4_audio_file_filter.md) · low · XS
+- [x] [048-L4 Any file in sources/ counts as an audio track](048-L4_audio_file_filter.md) · low · XS
 
 - [ ] [049-L5 "Open folder" on a thin client tries to open a server path](049-L5_open_folder_thin_client.md) · low · XS · after 025
 
