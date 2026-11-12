@@ -229,7 +229,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [ ] [037-P2 Zip exports hold everything in memory](037-P2_streamed_zip_export.md) · medium · M · after 028
 
-- [ ] [056-P5 The transcript editor builds every row up front](056-P5_editor_windowing.md) · low · M
+- [x] [056-P5 The transcript editor builds every row up front](056-P5_editor_windowing.md) · low · M
 
 ### Wave 8: docs
 
