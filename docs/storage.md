@@ -381,15 +381,17 @@ named correctly even if nothing reads the manifest.
 
 ### Off the event loop
 
-`export_zip` runs `format_bundle` through `asyncio.to_thread`. Compressing 200 MB of
-audio takes seconds, and the event loop it would otherwise block is the desktop UI's, or
-the server's for every client.
+`export_zip` runs `format_bundle` through `asyncio.to_thread`. Packing 200 MB of audio
+takes seconds, and the event loop it would otherwise block is the desktop UI's, or the
+server's for every client.
 
-`format_bundle` writes the zip straight into the `bytearray` it returns. Writing to a
-`BytesIO` and copying it out at the end was one step that held the GIL for long enough
-to stall the loop from the worker thread. Because that target cannot seek, each entry's
-sizes follow its data (a data descriptor) instead of sitting in its local header. Every
-common zip reader handles that.
+### Never held in memory
+
+`export_zip` returns a `Path` to a temporary zip, which the caller moves or deletes; see
+[deployment-and-rpc.md](deployment-and-rpc.md) for how it crosses to a thin client.
+`format_bundle` writes straight to that file, and stores audio uncompressed (`ZIP_STORED`):
+encoded audio gains almost nothing from DEFLATE and costs seconds. A failed build deletes
+its file.
 
 ### Why a manifest
 
