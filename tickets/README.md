@@ -223,7 +223,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [ ] [048-L4 Any file in sources/ counts as an audio track](048-L4_audio_file_filter.md) · low · XS
 
-- [ ] [050-L6 The summary recap is not budgeted](050-L6_recap_budget.md) · low · S
+- [x] [050-L6 The summary recap is not budgeted](050-L6_recap_budget.md) · low · S
 
 - [ ] [052-L8 Local models reload too often or are never released](052-L8_model_lifetimes.md) · low · S
 
