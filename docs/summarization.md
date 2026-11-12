@@ -135,6 +135,13 @@ Both were called `max_tokens` and both defaulted to 1024, so raising the summary
 looked like it would let the model write more and actually only changed the chunking
 arithmetic. The rename is the fix; there is no behaviour change.
 
+## Replies with no text, and reasoning
+
+A reasoning model that spends its whole `llm.max_tokens` thinking returns `null` content.
+That, or a reply that is only reasoning, fails with an error naming the finish reason; when
+it is `length`, raise `llm.max_tokens`. A leading `<think>...</think>` block is removed from
+every reply, so reasoning never reaches a chunk note or the saved summary.
+
 ## When the model list is empty
 
 `SystemService.list_models` returns a `ModelCheck`: the model ids and, when discovery
