@@ -1,6 +1,7 @@
 import inspect
 import secrets
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Any, TypeVar
 
 _services: list[type] = []
@@ -11,6 +12,8 @@ EXPOSED_ATTRIBUTE = "__rpc_exposed__"
 
 BINARY_RETURNS = (bytes, bytearray)
 BINARY_MEDIA_TYPE = "application/octet-stream"
+FILE_RETURN = Path
+"""A method returning a `Path` returns a temporary file: RPC streams it and deletes it."""
 
 
 def refusals() -> dict[str, tuple[type[Exception], int]]:
@@ -180,10 +183,13 @@ class RpcServer:
 
     def _add_route(self, router: Any, service_cls: type, method: Callable, name: str):
         from fastapi import Body, HTTPException, Response
+        from fastapi.responses import FileResponse
         from sqlalchemy.ext.asyncio import AsyncSession
+        from starlette.background import BackgroundTask
 
         sig = inspect.signature(method)
         returns_binary = method.__annotations__.get("return") in BINARY_RETURNS
+        returns_file = method.__annotations__.get("return") is FILE_RETURN
 
         new_params = []
         for param_name, param in sig.parameters.items():
@@ -224,13 +230,20 @@ class RpcServer:
 
             if returns_binary:
                 return Response(content=bytes(result), media_type=BINARY_MEDIA_TYPE)
+            if returns_file:
+                # Streamed from disk, then removed: the file was made for this one answer.
+                return FileResponse(
+                    result,
+                    media_type=BINARY_MEDIA_TYPE,
+                    background=BackgroundTask(lambda: Path(result).unlink(missing_ok=True)),
+                )
             return result
 
         wrapper.__signature__ = new_sig  # type: ignore
         wrapper.__name__ = name
         wrapper.__annotations__ = dict(method.__annotations__)
 
-        if returns_binary:
+        if returns_binary or returns_file:
             # A document is returned as it is, so the return annotation has to go with it:
             # left in place FastAPI builds a response model from it and refuses `bytearray`
             # outright. Every other route keeps its inferred model.

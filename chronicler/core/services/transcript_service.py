@@ -241,7 +241,7 @@ class TranscriptService:
         lines = await self.get_transcript(chronicle_id)
         return await asyncio.to_thread(format_pdf, lines, chronicle_title)
 
-    async def export_zip(self, chronicle_id: UUID, include_sources: bool = False) -> bytearray:
+    async def export_zip(self, chronicle_id: UUID, include_sources: bool = False) -> Path:
         """
         A portable copy of the chronicle: its own database, plus a manifest naming what
         the workspace database knows and optionally the audio it was built from.
@@ -250,6 +250,9 @@ class TranscriptService:
         hundred kilobytes, one with it is however many hours of recording. Left out, the
         sources are still listed in the manifest and their rows still exist, so they read
         as missing rather than as never having been there.
+
+        Returns a temporary file the caller owns and must move or delete: the archive is
+        never held in memory. Over RPC the server deletes its copy once it has been sent.
         """
         chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
         if chronicle is None:

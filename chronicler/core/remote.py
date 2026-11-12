@@ -1,11 +1,14 @@
 import inspect
+import os
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, TypeVar, get_type_hints
 
 import httpx
 from pydantic import TypeAdapter
 
-from chronicler.core.rpc import BINARY_RETURNS, exposed_methods, refusals
+from chronicler.core.rpc import BINARY_RETURNS, FILE_RETURN, exposed_methods, refusals
 
 T = TypeVar("T")
 
@@ -52,6 +55,25 @@ class RemoteServiceProxy:
         for name in exposed_methods(cls):
             setattr(self, name, self._make_remote_method(name, getattr(cls, name)))
 
+    async def _download(self, url: str, payload: dict, headers: dict) -> Path:
+        """Streams the answer into a temporary file, which the caller owns."""
+        async with self._client.stream("POST", url, json=payload, headers=headers) as response:
+            if not response.is_success:
+                await response.aread()
+                _raise_refusal(response)
+                response.raise_for_status()
+
+            handle, name = tempfile.mkstemp(prefix="chronicler-", suffix=".download")
+            path = Path(name)
+            try:
+                with os.fdopen(handle, "wb") as out:
+                    async for chunk in response.aiter_bytes():
+                        out.write(chunk)
+            except BaseException:
+                path.unlink(missing_ok=True)
+                raise
+        return path
+
     def _make_remote_method(self, name: str, method: Callable):
         sig = inspect.signature(method)
         param_hints = get_type_hints(method)
@@ -75,11 +97,14 @@ class RemoteServiceProxy:
             if self._api_key:
                 headers["X-API-Key"] = self._api_key
 
+            return_type = param_hints.get("return")
+
+            if return_type is FILE_RETURN:
+                return await self._download(url, json_payload, headers)
+
             response = await self._client.post(url, json=json_payload, headers=headers)
             _raise_refusal(response)
             response.raise_for_status()
-
-            return_type = param_hints.get("return")
 
             if return_type in BINARY_RETURNS:
                 return bytearray(response.content)
