@@ -117,3 +117,9 @@ full stack — correctly resolved the external path. The two disagreed.
 one function, which is why they are async: the answer depends on the chronicle row.
 `ChronicleService.add_audio_source` uses it too, so an import into a linked chronicle
 lands beside its database rather than in a workspace directory nothing reads.
+
+## Which files count
+
+Only files in `sources/` with an audio extension (`mp3`, `wav`, `m4a`, `flac`, `ogg`, `opus`,
+`webm`, `aac`, in any case) are tracks. Hidden files, `desktop.ini` and normalized copies are
+ignored, so tracks copied in by hand are picked up and stray files are not.
