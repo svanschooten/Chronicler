@@ -37,6 +37,11 @@ transcript → [chunk → bullet points] × n → recap
 A transcript short enough to fit in one request skips the chunking entirely and goes
 straight to a recap — one round trip instead of several.
 
+The recap prompt is budgeted like a chunk. When the chunk notes together are too long for
+one request, they are grouped in order and each group is condensed with the chunk prompt,
+repeating until they fit, and only then is the recap written. The condensing calls count in
+the token totals; `chunk_summaries` still holds the first-level notes.
+
 `chunk_transcript` splits on **speaker turns**, never mid-turn. A single turn longer than
 the budget becomes its own oversized chunk rather than being cut in half: losing speaker
 attribution mid-sentence costs more than the overrun.
