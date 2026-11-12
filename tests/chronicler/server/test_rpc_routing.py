@@ -364,18 +364,22 @@ async def test_handshake_rejects_a_wrong_api_key(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_document_exports_reach_a_thin_client(tmp_path):
+async def test_document_exports_reach_a_thin_client(tmp_path, monkeypatch):
     """
     HTML, PDF and the Chronicle archive were unreachable remotely: they return documents,
     JSON cannot carry bytes, and an unexposed method is not even installed on the proxy -
     so a thin client's Export menu raised AttributeError instead of exporting. Binary
     returns now travel as octet-stream. See docs/deployment-and-rpc.md.
     """
-    import io
+    import tempfile
     import zipfile
+    from pathlib import Path
 
     from chronicler.core.remote import RemoteContainer
 
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
     try:
         await db_manager.init_archive()
@@ -404,9 +408,13 @@ async def test_document_exports_reach_a_thin_client(tmp_path):
 
         assert "Alice" in html
         assert bytes(pdf).startswith(b"%PDF")
-        with zipfile.ZipFile(io.BytesIO(bytes(archive))) as bundle:
+        assert isinstance(archive, Path)
+        with zipfile.ZipFile(archive) as bundle:
             assert "Remote Exports/project.db" in bundle.namelist()
             assert bundle.read("Remote Exports/project.db").startswith(b"SQLite format 3")
+        # The server's copy is gone once sent; only the client's download is left.
+        assert list(scratch.iterdir()) == [archive]
+        archive.unlink()
     finally:
         await db_manager.close_all()
 

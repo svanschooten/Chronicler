@@ -1,10 +1,11 @@
 """Tests for the Chronicle archive (.zip) export - the bundle format and the service."""
 
-import io
 import json
+import tempfile
 import threading
 import zipfile
 from datetime import datetime
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -30,11 +31,40 @@ def _manifest(**overrides) -> BundleManifest:
     return base.model_copy(update=overrides)
 
 
-def _opened(archive: bytearray) -> zipfile.ZipFile:
-    return zipfile.ZipFile(io.BytesIO(bytes(archive)))
+@pytest.fixture(autouse=True)
+def _temp_files_land_in_tmp_path(tmp_path, monkeypatch):
+    """Exports are temporary files the caller deletes; keep them out of the real temp dir."""
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+
+
+def _opened(archive: Path) -> zipfile.ZipFile:
+    return zipfile.ZipFile(archive)
 
 
 class TestBundleFormat:
+    def test_audio_is_stored_and_everything_else_compressed(self, tmp_path):
+        project_db = tmp_path / "project.db"
+        project_db.write_bytes(b"db" * 5000)
+        alice = tmp_path / "alice.wav"
+        alice.write_bytes(b"RIFF" + b"\x00" * 5000)
+
+        archive = format_bundle(
+            project_db, _manifest(sources_included=True), root="C", sources=[alice]
+        )
+
+        with _opened(archive) as bundle:
+            kinds = {info.filename: info.compress_type for info in bundle.infolist()}
+        assert kinds["C/sources/alice.wav"] == zipfile.ZIP_STORED
+        assert kinds["C/project.db"] == zipfile.ZIP_DEFLATED
+
+    def test_a_failed_build_leaves_no_file_behind(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            format_bundle(tmp_path / "missing.db", _manifest(), root="C")
+
+        assert list((tmp_path / "scratch").iterdir()) == []
+
     def test_everything_sits_under_one_named_folder(self, tmp_path):
         project_db = tmp_path / "project.db"
         project_db.write_bytes(b"SQLite format 3\x00")
