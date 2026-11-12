@@ -130,6 +130,44 @@ class TestOpenAiCompatibleClient:
             await OpenAiCompatibleClient(settings(), stub_server(handler)).complete("x")
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("finish_reason", "match"),
+        [("length", "Raise llm.max_tokens"), ("stop", "finish reason: stop")],
+    )
+    async def test_a_null_reply_is_an_llm_error(self, finish_reason, match):
+        def handler(_request):
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": None}, "finish_reason": finish_reason}]},
+            )
+
+        with pytest.raises(LlmError, match=match):
+            await OpenAiCompatibleClient(settings(), stub_server(handler)).complete("x")
+
+    @pytest.mark.asyncio
+    async def test_a_leading_think_block_is_dropped(self):
+        def handler(_request):
+            content = "<think>\nhmm, the user wants\na recap</think>\n\nA recap."
+            return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+        result = await OpenAiCompatibleClient(settings(), stub_server(handler)).complete("x")
+
+        assert result.text == "A recap."
+
+    @pytest.mark.asyncio
+    async def test_a_reply_of_only_unfinished_reasoning_is_an_error(self):
+        def handler(_request):
+            body = {
+                "choices": [
+                    {"message": {"content": "<think>still going"}, "finish_reason": "length"}
+                ]
+            }
+            return httpx.Response(200, json=body)
+
+        with pytest.raises(LlmError, match="Raise llm.max_tokens"):
+            await OpenAiCompatibleClient(settings(), stub_server(handler)).complete("x")
+
+    @pytest.mark.asyncio
     async def test_a_missing_base_url_is_refused(self):
         client = OpenAiCompatibleClient(LlmSettings(provider="openai_compatible", model="m"))
 
