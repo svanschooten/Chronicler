@@ -256,6 +256,42 @@ class TestSummarizeTranscript:
         assert draft.chunk_summaries
 
     @pytest.mark.asyncio
+    async def test_notes_too_long_for_one_recap_are_condensed_first(self):
+        from chronicler.core.llm import Completion
+        from chronicler.core.processing.summarizer import budget_characters
+
+        settings = SummarySettings()
+        limit = budget_characters(settings, 2048)
+        slack = len(settings.recap_prompt) + len(settings.chunk_prompt) + 4
+
+        class StrictClient:
+            def __init__(self):
+                self.prompts = []
+
+            async def list_models(self):
+                return []
+
+            async def complete(self, prompt, system=None, model=None, **options):
+                if len(prompt) > limit + slack:
+                    raise LlmError("prompt is larger than the context window")
+                self.prompts.append(prompt)
+                # Notes are half a chunk, so the first set cannot fit one recap.
+                text = (
+                    "recap" if prompt.startswith(settings.recap_prompt) else "n" * (limit // 2 - 10)
+                )
+                return Completion(text=text, model="stub")
+
+        client = StrictClient()
+        lines = [line("x" * 200) for _ in range(limit // 100)]
+
+        draft = await summarize_transcript(client, lines, settings, context_window=2048)
+
+        assert draft.content == "recap"
+        assert client.prompts[-1].startswith(settings.recap_prompt)
+        condensing = [p for p in client.prompts[:-1] if p.startswith(settings.chunk_prompt)]
+        assert len(condensing) > draft.chunk_count
+
+    @pytest.mark.asyncio
     async def test_token_usage_is_accumulated(self):
         client = self._Client()
         lines = [line("x" * 200) for _ in range(10)]

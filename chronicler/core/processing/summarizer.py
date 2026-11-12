@@ -73,6 +73,20 @@ def budget_characters(settings: SummarySettings, context_window: int) -> int:
     return usable * CHARACTERS_PER_TOKEN
 
 
+def group_notes(notes: list[str], max_characters: int) -> list[list[str]]:
+    """Packs notes in order into groups whose joined text stays under `max_characters`."""
+    groups: list[list[str]] = []
+    length = 0
+    for note in notes:
+        if groups and length + len(note) + 1 <= max_characters:
+            groups[-1].append(note)
+            length += len(note) + 1
+        else:
+            groups.append([note])
+            length = len(note) + 1
+    return groups
+
+
 async def summarize_transcript(
     client: LlmClient,
     lines: list[TranscriptLine],
@@ -120,8 +134,30 @@ async def summarize_transcript(
         completion_tokens += completion.completion_tokens or 0
         used_model = completion.model
 
+    # The recap prompt must fit too: condense the notes in groups until they do. A pass that
+    # cannot group anything together (every note alone fills the budget) would never end.
+    notes = extracted
+    while len("\n".join(notes)) > max_characters:
+        groups = group_notes(notes, max_characters)
+        if len(groups) >= len(notes):
+            break
+        logger.info(f"Condensing {len(notes)} notes in {len(groups)} group(s)")
+        condensed = []
+        for group in groups:
+            if len(group) == 1:
+                condensed.append(group[0])
+                continue
+            completion = await client.complete(
+                f"{settings.chunk_prompt}\n\n" + "\n".join(group), system=system, model=model
+            )
+            condensed.append(completion.text)
+            prompt_tokens += completion.prompt_tokens or 0
+            completion_tokens += completion.completion_tokens or 0
+            used_model = completion.model
+        notes = condensed
+
     recap = await client.complete(
-        f"{settings.recap_prompt}\n\n" + "\n".join(extracted), system=system, model=model
+        f"{settings.recap_prompt}\n\n" + "\n".join(notes), system=system, model=model
     )
     prompt_tokens += recap.prompt_tokens or 0
     completion_tokens += recap.completion_tokens or 0
