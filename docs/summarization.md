@@ -135,6 +135,11 @@ Both were called `max_tokens` and both defaulted to 1024, so raising the summary
 looked like it would let the model write more and actually only changed the chunking
 arithmetic. The rename is the fix; there is no behaviour change.
 
+## Local model lifetime
+
+A local `.gguf` is loaded once and kept, keyed by path and context size, so consecutive
+summaries do not reload it. Choosing another model or context size replaces it.
+
 ## When the model list is empty
 
 `SystemService.list_models` returns a `ModelCheck`: the model ids and, when discovery
