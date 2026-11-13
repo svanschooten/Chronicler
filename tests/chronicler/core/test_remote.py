@@ -5,7 +5,7 @@ from httpx import ASGITransport, AsyncClient
 
 from chronicler.core.container import Container
 from chronicler.core.remote import RemoteContainer
-from chronicler.core.rpc import RpcServer, service
+from chronicler.core.rpc import RpcServer, TempFile, service
 
 
 @service(expose=["echo_id"])
@@ -100,3 +100,45 @@ async def test_binary_route_serves_octet_stream_rather_than_json():
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/octet-stream"
         assert response.content == b"%PDF-1.4\x00\x89\xff\xfe\x01"
+
+
+@service(expose=["archive"])
+class _DownloadService:
+    async def archive(self) -> TempFile:
+        raise NotImplementedError  # only the proxy is built; the stub server answers
+
+
+@pytest.mark.asyncio
+async def test_a_temp_file_download_is_streamed_to_disk(tmp_path, monkeypatch):
+    """The ticket's bar on a thin client: the download never sits in memory whole."""
+    import tempfile
+    import tracemalloc
+
+    import httpx
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    size = 32 * 1024 * 1024
+    block = b"\x01" * (1024 * 1024)
+
+    async def body():
+        for _ in range(size // len(block)):
+            yield block
+
+    def handler(_request):
+        return httpx.Response(200, content=body())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        proxy = RemoteContainer("http://test", client=client, api_key="key").resolve(
+            _DownloadService
+        )
+
+        tracemalloc.start()
+        try:
+            path = await proxy.archive()
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+
+    assert isinstance(path, TempFile)
+    assert path.stat().st_size == size
+    assert peak < size // 8

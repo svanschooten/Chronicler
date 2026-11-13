@@ -1,7 +1,11 @@
 """The transcript view's Export menu and save flow."""
 
+import asyncio
 import logging
+import os
+import shutil
 from collections.abc import Callable
+from pathlib import Path
 
 import flet as ft
 
@@ -14,6 +18,32 @@ from chronicler.desktop.widgets import amber_button
 from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
+
+
+def _new_file_mode() -> int:
+    """The mode a file this process creates gets: 0o666 less the umask."""
+    try:
+        with open("/proc/self/status", encoding="ascii") as status:
+            for line in status:
+                if line.startswith("Umask:"):
+                    return 0o666 & ~int(line.split()[1], 8)
+    except OSError:
+        pass
+    # Elsewhere the umask can only be read by setting it, so it is put straight back.
+    umask = os.umask(0o077)
+    os.umask(umask)
+    return 0o666 & ~umask
+
+
+def _move_into_place(temporary: Path, destination: str) -> None:
+    """
+    Moves an export made as a temporary file to where the user saved it. A temporary file
+    is readable only by its owner and a move keeps that, so the saved file gets the mode any
+    other new file would, as the in-memory exports do.
+    """
+    shutil.move(temporary, destination)
+    if os.name == "posix":
+        os.chmod(destination, _new_file_mode())
 
 
 class TranscriptExporter:
@@ -190,7 +220,20 @@ class TranscriptExporter:
 
         return await await_dialog(page, build)
 
-    async def _save(self, content: str | bytearray, file_name: str, extension: str) -> None:
+    async def _save(self, content: str | bytearray | Path, file_name: str, extension: str) -> None:
+        """
+        Writes the export where the user picks. A `Path` is a temporary file made for this
+        export, such as the zip: it is moved into place, and deleted if nothing was saved.
+        """
+        try:
+            await self._save_to_picked_place(content, file_name, extension)
+        finally:
+            if isinstance(content, Path):
+                content.unlink(missing_ok=True)
+
+    async def _save_to_picked_place(
+        self, content: str | bytearray | Path, file_name: str, extension: str
+    ) -> None:
         picker = self._file_picker()
         if picker is None:
             self.show_snackbar(t("export.no_picker"))
@@ -211,7 +254,9 @@ class TranscriptExporter:
             return
 
         try:
-            if isinstance(content, bytearray):
+            if isinstance(content, Path):
+                await asyncio.to_thread(_move_into_place, content, destination)
+            elif isinstance(content, bytearray):
                 with open(destination, "wb") as handle:
                     handle.write(content)
             else:

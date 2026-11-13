@@ -227,7 +227,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [x] [052-L8 Local models reload too often or are never released](052-L8_model_lifetimes.md) · low · S
 
-- [ ] [037-P2 Zip exports hold everything in memory](037-P2_streamed_zip_export.md) · medium · M · after 028
+- [x] [037-P2 Zip exports hold everything in memory](037-P2_streamed_zip_export.md) · medium · M · after 028
 
 - [ ] [056-P5 The transcript editor builds every row up front](056-P5_editor_windowing.md) · low · M
 

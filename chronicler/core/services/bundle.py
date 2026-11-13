@@ -1,6 +1,8 @@
 """Chronicle archive (.zip) packing - a portable copy of one chronicle's own storage."""
 
 import json
+import os
+import tempfile
 import zipfile
 from collections.abc import Sequence
 from datetime import datetime
@@ -10,10 +12,15 @@ from pydantic import BaseModel, Field
 
 from chronicler import __version__
 from chronicler.core.models import Chronicle
+from chronicler.core.rpc import TempFile
 
 MANIFEST_NAME = "chronicle.json"
 DATABASE_NAME = "project.db"
 SOURCES_DIR = "sources"
+
+UNCOMPRESSED_AUDIO = {".wav", ".aif", ".aiff"}
+"""Plain PCM, which still shrinks under DEFLATE. Other audio is already encoded and is
+stored as it is: compressing it gains almost nothing and costs seconds."""
 
 
 class BundleManifest(BaseModel):
@@ -54,49 +61,46 @@ class BundleManifest(BaseModel):
         )
 
 
-class _Archive:
-    """
-    Where the zip is written: straight into the bytearray that gets returned.
-
-    A BytesIO had to be copied out at the end. With audio that is hundreds of megabytes
-    copied in one step that holds the GIL, which stalls the event loop even though the
-    bundle is built on a worker thread. zipfile only needs `write` and `flush`; given
-    nothing to seek in, it writes each entry's sizes after its data instead of going back
-    to fill them in.
-    """
-
-    def __init__(self) -> None:
-        self.data = bytearray()
-
-    def write(self, chunk: bytes) -> int:
-        self.data += chunk
-        return len(chunk)
-
-    def flush(self) -> None:
-        pass
-
-
 def format_bundle(
     project_db: Path,
     manifest: BundleManifest,
     root: str,
     sources: Sequence[Path] = (),
-) -> bytearray:
+    directory: Path | None = None,
+) -> TempFile:
     """
-    Packs a chronicle into a zip, everything under one `root` folder so unpacking it
-    somewhere busy leaves one directory behind rather than loose files.
-    """
-    buffer = _Archive()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:  # type: ignore[call-overload]
-        bundle.writestr(
-            f"{root}/{MANIFEST_NAME}",
-            json.dumps(json.loads(manifest.model_dump_json()), indent=2) + "\n",
-        )
-        bundle.write(project_db, f"{root}/{DATABASE_NAME}")
-        for source in sources:
-            bundle.write(source, f"{root}/{SOURCES_DIR}/{source.name}")
+    Packs a chronicle into a zip file in `directory` and returns its path, which the caller
+    must move or delete.
 
-    return buffer.data
+    Everything sits under one `root` folder so unpacking it somewhere busy leaves one
+    directory behind rather than loose files. The zip is written to a file, never held in
+    memory: with audio it is hundreds of megabytes. `directory` defaults to the system's
+    temporary directory, which on some systems is memory too, so the service passes one on
+    the workspace's disk. Encoded audio is stored, not compressed; see UNCOMPRESSED_AUDIO.
+    """
+    handle, name = tempfile.mkstemp(prefix="chronicler-", suffix=".zip", dir=directory)
+    os.close(handle)
+    archive = TempFile(name)
+    try:
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+            bundle.writestr(
+                f"{root}/{MANIFEST_NAME}",
+                json.dumps(json.loads(manifest.model_dump_json()), indent=2) + "\n",
+            )
+            bundle.write(project_db, f"{root}/{DATABASE_NAME}")
+            for source in sources:
+                compression = (
+                    zipfile.ZIP_DEFLATED
+                    if source.suffix.lower() in UNCOMPRESSED_AUDIO
+                    else zipfile.ZIP_STORED
+                )
+                bundle.write(
+                    source, f"{root}/{SOURCES_DIR}/{source.name}", compress_type=compression
+                )
+    except BaseException:
+        archive.unlink(missing_ok=True)
+        raise
+    return archive
 
 
 def safe_folder_name(title: str, fallback: str = "chronicle") -> str:

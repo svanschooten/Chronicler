@@ -251,6 +251,21 @@ def check_linkable_project(path: Path) -> None:
         raise LinkRefusedError(path, "newer_version")
 
 
+EXPORTS_DIR = "exports"
+
+
+def _clear_files(directory: Path) -> None:
+    """Removes the files directly in `directory`, if it exists. Ones in use are skipped."""
+    if not directory.is_dir():
+        return
+    for path in directory.iterdir():
+        if path.is_file():
+            try:
+                path.unlink()
+            except OSError:
+                logger.warning(f"Could not remove leftover export {path}")
+
+
 class DatabaseManager:
     def __init__(self, workspace_path: Path, busy_timeout: float = 5.0):
         """
@@ -285,6 +300,7 @@ class DatabaseManager:
         self._workspace_lock.acquire()
         try:
             (self.workspace_path / "imports").mkdir(parents=True, exist_ok=True)
+            _clear_files(self.workspace_path / EXPORTS_DIR)
             async with self._migration_lock:
                 async with self.archive_engine.begin() as conn:
                     await conn.run_sync(_run_alembic_upgrade, "archive")
@@ -294,6 +310,16 @@ class DatabaseManager:
 
     def get_imports_path(self) -> Path:
         path = self.workspace_path / "imports"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def get_exports_path(self) -> Path:
+        """
+        Where an archive is built before it is handed over: on the workspace's disk, since a
+        system temporary directory can be memory. Each file there belongs to one export in
+        flight, so whatever is left when the workspace opens was abandoned and is removed.
+        """
+        path = self.workspace_path / EXPORTS_DIR
         path.mkdir(parents=True, exist_ok=True)
         return path
 

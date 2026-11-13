@@ -1,6 +1,7 @@
 """Tests for TranscriptExporter - the Export menu and save flow."""
 
 import asyncio
+import os
 from unittest.mock import AsyncMock, MagicMock
 
 import flet as ft
@@ -212,11 +213,20 @@ async def test_export_srt_cancelled_at_the_picker_writes_nothing(make_exporter, 
     assert list(tmp_path.iterdir()) == []
 
 
+def _exported(tmp_path, content: bytes):
+    """The temporary file export_zip hands over: a Path the exporter must move or delete."""
+    scratch = tmp_path / "scratch"
+    scratch.mkdir(exist_ok=True)
+    path = scratch / "export.zip"
+    path.write_bytes(content)
+    return path
+
+
 class TestZipExport:
     @pytest.mark.asyncio
     async def test_it_asks_about_audio_and_leaves_it_out_by_default(self, make_exporter, tmp_path):
         transcript_service = AsyncMock()
-        transcript_service.export_zip.return_value = bytearray(b"PK\x03\x04")
+        transcript_service.export_zip.return_value = _exported(tmp_path, b"PK\x03\x04")
         page = MagicMock(spec=ft.Page)
         exporter, picker = make_exporter(transcript_service=transcript_service, page=page)
         destination = tmp_path / "chronicle.zip"
@@ -233,9 +243,59 @@ class TestZipExport:
         assert picker.save_file.await_args.kwargs["allowed_extensions"] == ["zip"]
 
     @pytest.mark.asyncio
+    async def test_the_temporary_file_is_moved_not_copied(self, make_exporter, tmp_path):
+        transcript_service = AsyncMock()
+        exported = _exported(tmp_path, b"PK")
+        transcript_service.export_zip.return_value = exported
+        exporter, picker = make_exporter(transcript_service=transcript_service)
+        exporter._page = lambda: None
+        destination = tmp_path / "chronicle.zip"
+        picker.save_file.return_value = str(destination)
+
+        await exporter.export_zip_clicked(_event())
+
+        assert destination.read_bytes() == b"PK"
+        assert not exported.exists()
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(os.name != "posix", reason="file modes are POSIX")
+    async def test_the_saved_file_is_not_left_private(self, make_exporter, tmp_path):
+        """A temporary file is owner-only and a move keeps that; the saved export must not."""
+        transcript_service = AsyncMock()
+        exported = _exported(tmp_path, b"PK")
+        exported.chmod(0o600)
+        transcript_service.export_zip.return_value = exported
+        exporter, picker = make_exporter(transcript_service=transcript_service)
+        exporter._page = lambda: None
+        destination = tmp_path / "chronicle.zip"
+        picker.save_file.return_value = str(destination)
+        umask = os.umask(0o022)
+        try:
+            await exporter.export_zip_clicked(_event())
+        finally:
+            os.umask(umask)
+
+        assert destination.stat().st_mode & 0o777 == 0o644
+
+    @pytest.mark.asyncio
+    async def test_a_cancelled_save_dialog_deletes_the_temporary_file(
+        self, make_exporter, tmp_path
+    ):
+        transcript_service = AsyncMock()
+        exported = _exported(tmp_path, b"PK")
+        transcript_service.export_zip.return_value = exported
+        exporter, picker = make_exporter(transcript_service=transcript_service)
+        exporter._page = lambda: None
+        picker.save_file.return_value = None
+
+        await exporter.export_zip_clicked(_event())
+
+        assert not exported.exists()
+
+    @pytest.mark.asyncio
     async def test_ticking_the_box_includes_the_audio(self, make_exporter, tmp_path):
         transcript_service = AsyncMock()
-        transcript_service.export_zip.return_value = bytearray(b"PK")
+        transcript_service.export_zip.return_value = _exported(tmp_path, b"PK")
         page = MagicMock(spec=ft.Page)
         exporter, picker = make_exporter(transcript_service=transcript_service, page=page)
         picker.save_file.return_value = str(tmp_path / "chronicle.zip")
@@ -283,7 +343,7 @@ class TestZipExport:
     async def test_without_a_page_it_exports_without_the_audio(self, make_exporter, tmp_path):
         """A dialog is a preference, not a gate - a page-less exporter still works."""
         transcript_service = AsyncMock()
-        transcript_service.export_zip.return_value = bytearray(b"PK")
+        transcript_service.export_zip.return_value = _exported(tmp_path, b"PK")
         exporter, picker = make_exporter(transcript_service=transcript_service)
         exporter._page = lambda: None
         picker.save_file.return_value = str(tmp_path / "chronicle.zip")

@@ -282,6 +282,9 @@ Workspace/
 ├── imports/               Shared staging area for picked/uploaded files
 │                          (scratch — a worker may consume or overwrite these)
 │
+├── exports/               Zip archives being built, deleted once handed over
+│                          (anything left over is removed when the workspace opens)
+│
 └── chronicles/
     ├── <chronicle-uuid>/
     │   ├── project.db     This Chronicle's own database

@@ -381,15 +381,24 @@ named correctly even if nothing reads the manifest.
 
 ### Off the event loop
 
-`export_zip` runs `format_bundle` through `asyncio.to_thread`. Compressing 200 MB of
-audio takes seconds, and the event loop it would otherwise block is the desktop UI's, or
-the server's for every client.
+`export_zip` runs `format_bundle` through `asyncio.to_thread`. Packing 200 MB of audio
+takes seconds, and the event loop it would otherwise block is the desktop UI's, or the
+server's for every client.
 
-`format_bundle` writes the zip straight into the `bytearray` it returns. Writing to a
-`BytesIO` and copying it out at the end was one step that held the GIL for long enough
-to stall the loop from the worker thread. Because that target cannot seek, each entry's
-sizes follow its data (a data descriptor) instead of sitting in its local header. Every
-common zip reader handles that.
+### Never held in memory
+
+`export_zip` returns a `TempFile`, a temporary zip the caller moves or deletes; see
+[deployment-and-rpc.md](deployment-and-rpc.md) for how it crosses to a thin client.
+`format_bundle` writes straight to that file. Encoded audio is stored uncompressed
+(`ZIP_STORED`): it gains almost nothing from DEFLATE and costs seconds. Plain PCM (`wav`,
+`aif`, `aiff`) still shrinks, so it is compressed like the database. A failed build deletes
+its file.
+
+The zip is built in the workspace's `exports/` folder, not the system temporary directory:
+that is memory on many Linux systems, which would undo the point. A file there belongs to
+one export in flight, so whatever is left when the workspace next opens was abandoned by a
+crash and is removed. The desktop gives the saved file the mode any new file gets, since a
+temporary file is readable only by its owner and a move keeps that.
 
 ### Why a manifest
 
