@@ -117,3 +117,22 @@ full stack — correctly resolved the external path. The two disagreed.
 one function, which is why they are async: the answer depends on the chronicle row.
 `ChronicleService.add_audio_source` uses it too, so an import into a linked chronicle
 lands beside its database rather than in a workspace directory nothing reads.
+
+## Which files count
+
+`chronicler/core/audio_files.py` is the one list: `mp3`, `wav`, `m4a`, `m4b`, `mp4`, `flac`,
+`ogg`, `opus`, `webm`, `aac`, `aif`, `aiff` and `wma`, in any case. `mp4` and `webm` are
+video containers, usually a recorded call; transcription reads their sound track.
+
+* **Listing.** Only files in `sources/` with one of those extensions are tracks. Hidden
+  files, `desktop.ini` and normalized copies are ignored, so tracks copied in by hand are
+  picked up and stray files are not.
+* **Importing.** The file picker offers only those extensions, and
+  `ChronicleService.add_audio_source` refuses anything else with `UnsupportedAudioError`,
+  deleting the staged file. Without that, a thin client or a renamed file could put a file
+  in `sources/` that is never listed and never exported. The desktop import checks the name
+  before it stages the file or creates a chronicle, so a refusal leaves nothing behind.
+* **Rows from before the rule.** Listing used to register every file. A row for a file that
+  is not audio is dropped the next time the tracks are listed, unless it was transcribed:
+  its lines name it, so it stays. Whether any row reads as missing depends on whether its
+  file is still there, not on its extension.

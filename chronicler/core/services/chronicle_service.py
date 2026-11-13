@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from uuid import UUID
 
+from chronicler.core.audio_files import UnsupportedAudioError, require_audio_track
 from chronicler.core.database_manager import (
     DatabaseManager,
     LinkRefusedError,
@@ -225,6 +226,9 @@ class ChronicleService:
         not the original one) into the chronicle's durable sources/ directory under its
         *original* name, so a later "which track is this?" listing (see
         TranscriptService.list_audio_sources) is actually readable.
+
+        Refuses a file that is not audio with ``UnsupportedAudioError``: it would sit in
+        sources/ and never be listed. See docs/audio-sources.md.
         """
         sources_dir = self.db_manager.ensure_sources_path_for(
             str(chronicle_id), await self.db_manager.project_path_for(chronicle_id)
@@ -233,6 +237,12 @@ class ChronicleService:
             file_path, self.db_manager.get_imports_path(), "the imports directory"
         )
         name = safe_display_name(original_name or resolved_source.name, resolved_source.name)
+        try:
+            require_audio_track(name)
+        except UnsupportedAudioError:
+            # Nothing else will take the staged file, and it would never be listed as a track.
+            resolved_source.unlink(missing_ok=True)
+            raise
         stem, suffix = Path(name).stem, Path(name).suffix
         dest = sources_dir / name
         counter = 1

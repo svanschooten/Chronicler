@@ -8,9 +8,17 @@ from uuid import UUID
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chronicler.core.audio_files import is_audio_track
 from chronicler.core.database_manager import DatabaseManager, NewerSchemaError
 from chronicler.core.formatting import format_timestamp
-from chronicler.core.models import AudioSource, Chronicle, Summary, TranscriptLine, TranscriptMatch
+from chronicler.core.models import (
+    AudioSource,
+    Chronicle,
+    SourceState,
+    Summary,
+    TranscriptLine,
+    TranscriptMatch,
+)
 from chronicler.core.processing.fingerprint import fingerprint_file
 from chronicler.core.repositories import ChronicleRepository, KnownSpeakerRepository
 from chronicler.core.rpc import service
@@ -215,7 +223,9 @@ class TranscriptService:
         return sorted(
             path
             for path in await self._source_files(chronicle_id)
-            if path.is_file() and not path.name.endswith(NORMALIZED_SUFFIX)
+            if path.is_file()
+            and is_audio_track(path.name)
+            and not path.name.endswith(NORMALIZED_SUFFIX)
         )
 
     async def export_srt(self, chronicle_id: UUID, include_speaker: bool = True) -> str:
@@ -300,18 +310,32 @@ class TranscriptService:
         return str(self.db_manager.workspace_path / "chronicles" / str(chronicle_id))
 
     async def list_audio_sources(self, chronicle_id: UUID) -> list[AudioSource]:
-        """This chronicle's tracks, reconciling what is on disk with the recorded state."""
+        """
+        This chronicle's tracks, reconciling what is on disk with the recorded state.
+
+        Only audio files are tracks. A row for any other file, registered before that rule,
+        is dropped unless it was transcribed: then its lines name it, so it stays, and reads
+        as missing only when the file itself is gone.
+        """
+        files = await self._source_files(chronicle_id)
+        present = {path.name for path in files if path.is_file()}
         async with self.db_manager.transaction(chronicle_id) as session:
             repo = SQLiteAudioSourceRepository(session)
-            present = set()
             for path in await self._on_disk(chronicle_id):
-                present.add(path.name)
                 await repo.register(
                     path.name,
                     content_hash=fingerprint_file(path),
                     size_bytes=path.stat().st_size,
                 )
-            sources = await repo.list_sources()
+            sources = []
+            for source in await repo.list_sources():
+                if (
+                    not is_audio_track(source.filename)
+                    and source.transcription_state != SourceState.DONE
+                ):
+                    await repo.delete(source.filename)
+                    continue
+                sources.append(source)
 
         for source in sources:
             source.missing = source.filename not in present

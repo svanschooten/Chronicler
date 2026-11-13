@@ -221,7 +221,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [x] [079-L17 Some model replies crash the summary or end up in it](079-L17_llm_reply_shapes.md) · low · XS
 
-- [ ] [048-L4 Any file in sources/ counts as an audio track](048-L4_audio_file_filter.md) · low · XS
+- [x] [048-L4 Any file in sources/ counts as an audio track](048-L4_audio_file_filter.md) · low · XS
 
 - [x] [050-L6 The summary recap is not budgeted](050-L6_recap_budget.md) · low · S
 

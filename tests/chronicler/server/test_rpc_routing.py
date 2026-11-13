@@ -591,3 +591,10 @@ def test_a_subtitle_refusal_is_explained_as_unprocessable():
     from chronicler.core.rpc import refusal_for
 
     assert refusal_for(NoRealTimestampsError("no timings")) == ("NoRealTimestampsError", 422)
+
+
+def test_a_file_that_is_not_audio_is_explained_as_unprocessable():
+    from chronicler.core.audio_files import UnsupportedAudioError
+    from chronicler.core.rpc import refusal_for
+
+    assert refusal_for(UnsupportedAudioError("x")) == ("UnsupportedAudioError", 422)
