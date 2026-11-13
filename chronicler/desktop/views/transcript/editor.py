@@ -34,6 +34,50 @@ def describe_transcript_error(error: BaseException) -> str:
     return t("transcript.error", error=error)
 
 
+class LinePager(ft.Row):
+    """First / previous / "Lines 101-200 of 1,686" / next / last, for the editor's window."""
+
+    def __init__(self, colors: ThemeColors, on_click: Callable[..., Awaitable[None]]):
+        self.on_click = on_click
+        self.first_button = self._button(ft.Icons.FIRST_PAGE, "transcript.first_lines")
+        self.previous_button = self._button(ft.Icons.CHEVRON_LEFT, "transcript.previous_lines")
+        self.next_button = self._button(ft.Icons.CHEVRON_RIGHT, "transcript.next_lines")
+        self.last_button = self._button(ft.Icons.LAST_PAGE, "transcript.last_lines")
+        self.label = ft.Text(size=12, color=colors.muted)
+        super().__init__(
+            visible=False,
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[
+                self.first_button,
+                self.previous_button,
+                self.label,
+                self.next_button,
+                self.last_button,
+            ],
+        )
+
+    def _button(self, icon: ft.IconData, tooltip_key: str) -> ft.IconButton:
+        return ft.IconButton(
+            icon=icon,
+            icon_size=18,
+            tooltip=t(tooltip_key),
+            on_click=self.on_click,
+            data=tooltip_key,
+        )
+
+    def show(self, start: int, shown: int, total: int) -> None:
+        """Only a transcript longer than one window gets a pager."""
+        self.visible = total > WINDOW_SIZE
+        self.label.value = t(
+            "transcript.line_window",
+            first=format_count(start + 1),
+            last=format_count(start + shown),
+            total=format_count(total),
+        )
+        self.first_button.disabled = self.previous_button.disabled = start == 0
+        self.next_button.disabled = self.last_button.disabled = start + WINDOW_SIZE >= total
+
+
 class TranscriptEditor(ft.Column):
     def __init__(
         self,
@@ -55,34 +99,16 @@ class TranscriptEditor(ft.Column):
         self.window_start = 0
 
         self.line_list = ft.ListView(spacing=6, expand=True)
-        self.first_button = self._pager_button(ft.Icons.FIRST_PAGE, "transcript.first_lines")
-        self.previous_button = self._pager_button(
-            ft.Icons.CHEVRON_LEFT, "transcript.previous_lines"
-        )
-        self.next_button = self._pager_button(ft.Icons.CHEVRON_RIGHT, "transcript.next_lines")
-        self.last_button = self._pager_button(ft.Icons.LAST_PAGE, "transcript.last_lines")
-        self.window_label = ft.Text(size=12, color=self.colors.muted)
-        self.pager = ft.Row(
-            visible=False,
-            alignment=ft.MainAxisAlignment.CENTER,
-            controls=[
-                self.first_button,
-                self.previous_button,
-                self.window_label,
-                self.next_button,
-                self.last_button,
-            ],
-        )
+        # The same pager twice: above the list, and as the list's last item, so the end
+        # of a window leads straight on to the next without scrolling back up.
+        self.pager = LinePager(colors, self.pager_clicked)
+        self.bottom_pager = LinePager(colors, self.pager_clicked)
+        self.first_button = self.pager.first_button
+        self.previous_button = self.pager.previous_button
+        self.next_button = self.pager.next_button
+        self.last_button = self.pager.last_button
+        self.window_label = self.pager.label
         super().__init__(expand=True, controls=[self.pager, self.line_list])
-
-    def _pager_button(self, icon: ft.IconData, tooltip_key: str) -> ft.IconButton:
-        return ft.IconButton(
-            icon=icon,
-            icon_size=18,
-            tooltip=t(tooltip_key),
-            on_click=self.pager_clicked,
-            data=tooltip_key,
-        )
 
     async def load(self) -> None:
         """
@@ -127,18 +153,14 @@ class TranscriptEditor(ft.Column):
         self.window_start = start
 
         shown = self.ordered[start : start + WINDOW_SIZE]
-        self.line_list.controls = [self._row(line) for line in shown]
-
         total = len(self.ordered)
-        self.pager.visible = total > WINDOW_SIZE
-        self.window_label.value = t(
-            "transcript.line_window",
-            first=format_count(start + 1),
-            last=format_count(start + len(shown)),
-            total=format_count(total),
-        )
-        self.first_button.disabled = self.previous_button.disabled = start == 0
-        self.next_button.disabled = self.last_button.disabled = start + WINDOW_SIZE >= total
+        for pager in (self.pager, self.bottom_pager):
+            pager.show(start, len(shown), total)
+
+        rows: list[ft.Control] = [self._row(line) for line in shown]
+        if self.bottom_pager.visible:
+            rows.append(self.bottom_pager)
+        self.line_list.controls = rows
 
         self._refresh()
         if moved:
@@ -152,7 +174,7 @@ class TranscriptEditor(ft.Column):
             pass
 
     def _show_message(self, message: str) -> None:
-        self.pager.visible = False
+        self.pager.visible = self.bottom_pager.visible = False
         self.line_list.controls = [ft.Text(message, size=12, color=self.colors.muted)]
         self._refresh()
 

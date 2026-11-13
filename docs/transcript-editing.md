@@ -86,7 +86,9 @@ side alone, before any of it was sent to the client and laid out.
 
 The editor shows `WINDOW_SIZE` (100) rows at a time. Above the list, a pager steps a
 window forward or back, or jumps to the first or last one, and says which lines are on
-screen ("Lines 101-200 of 1,686"). A transcript that fits in one window gets no pager.
+screen ("Lines 101-200 of 1,686"). The same pager ends the list, so reaching the last line
+of a window leads straight on to the next without scrolling back up. A transcript that
+fits in one window gets no pager.
 Deleting a line reloads the same window rather than going back to the first; if the
 window no longer exists, because its only line was deleted, it falls back to the last one.
 Moving to another window scrolls back to its top.

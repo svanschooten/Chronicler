@@ -8,7 +8,7 @@ import pytest
 
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.desktop.theme import theme_colors
-from chronicler.desktop.views.transcript.editor import WINDOW_SIZE, TranscriptEditor
+from chronicler.desktop.views.transcript.editor import WINDOW_SIZE, LinePager, TranscriptEditor
 from chronicler.i18n import set_locale
 
 
@@ -112,8 +112,13 @@ def _long(count):
     return [_line(f"Line {i}", start=float(i)) for i in range(count)]
 
 
+def _rows(editor) -> list:
+    """The line rows, without the pager that ends a window of a long transcript."""
+    return [c for c in editor.line_list.controls if not isinstance(c, LinePager)]
+
+
 def _texts(editor) -> list[str]:
-    return [_fields(row)["text"].value for row in editor.line_list.controls]
+    return [_fields(row)["text"].value for row in _rows(editor)]
 
 
 async def _press(editor, button):
@@ -136,7 +141,7 @@ class TestWindow:
 
         await editor.load()
 
-        assert len(editor.line_list.controls) == WINDOW_SIZE
+        assert len(_rows(editor)) == WINDOW_SIZE
         assert _texts(editor)[0] == "Line 0"
         assert editor.pager.visible is True
         assert "1-100" in editor.window_label.value
@@ -175,6 +180,48 @@ class TestWindow:
 
         await _press(editor, editor.first_button)
         assert _texts(editor)[0] == "Line 0"
+
+    @pytest.mark.asyncio
+    async def test_a_long_transcript_ends_each_window_with_a_pager(self, make_editor):
+        """Reaching the end of a window should not mean scrolling back up to move on."""
+        editor, _ = make_editor(_long(250))
+
+        await editor.load()
+
+        assert editor.line_list.controls[-1] is editor.bottom_pager
+        assert editor.bottom_pager.visible is True
+        assert editor.bottom_pager.label.value == editor.window_label.value
+
+    @pytest.mark.asyncio
+    async def test_a_short_transcript_has_no_pager_at_the_end(self, make_editor):
+        editor, _ = make_editor(_long(WINDOW_SIZE))
+
+        await editor.load()
+
+        assert editor.bottom_pager not in editor.line_list.controls
+
+    @pytest.mark.asyncio
+    async def test_the_pager_at_the_end_moves_the_window_too(self, make_editor):
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+        editor.line_list.scroll_to = AsyncMock()
+
+        await _press(editor, editor.bottom_pager.next_button)
+
+        assert _texts(editor)[0] == f"Line {WINDOW_SIZE}"
+        assert editor.bottom_pager.label.value == editor.window_label.value
+        editor.line_list.scroll_to.assert_awaited_once_with(offset=0)
+
+    @pytest.mark.asyncio
+    async def test_both_pagers_disable_the_same_buttons(self, make_editor):
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+
+        await _press(editor, editor.bottom_pager.last_button)
+
+        for pager in (editor.pager, editor.bottom_pager):
+            assert pager.next_button.disabled and pager.last_button.disabled
+            assert not pager.previous_button.disabled
 
     @pytest.mark.asyncio
     async def test_buttons_that_lead_nowhere_are_disabled(self, make_editor):
