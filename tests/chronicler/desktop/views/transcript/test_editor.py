@@ -8,7 +8,7 @@ import pytest
 
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.desktop.theme import theme_colors
-from chronicler.desktop.views.transcript.editor import TranscriptEditor
+from chronicler.desktop.views.transcript.editor import WINDOW_SIZE, TranscriptEditor
 
 
 def _line(text="Some words", speaker="Nyx", start=0.0):
@@ -75,10 +75,21 @@ class TestLoading:
         editor, service = make_editor(speakers=["Alice", "Nyx", "Vale"])
 
         await editor.load()
+        field = _fields(_row(editor))["speaker"]
+        field.on_focus(MagicMock(control=field))
 
-        options = [option.key for option in _fields(_row(editor))["speaker"].options]
+        options = [option.key for option in field.options]
         assert options == ["Alice", "Nyx", "Vale"]
         service.speaker_suggestions.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_the_speaker_field_holds_only_its_own_name_until_focused(self, make_editor):
+        """Every row carrying every name is what made a long transcript slow to open."""
+        editor, _ = make_editor([_line(speaker="Vale")], speakers=["Alice", "Nyx", "Vale"])
+
+        await editor.load()
+
+        assert [option.key for option in _fields(_row(editor))["speaker"].options] == ["Vale"]
 
     @pytest.mark.asyncio
     async def test_the_speaker_field_accepts_a_new_name(self, make_editor):
@@ -99,12 +110,127 @@ class TestLoading:
 
     @pytest.mark.asyncio
     async def test_rows_are_scrollable_so_a_long_transcript_stays_usable(self, make_editor):
-        editor, _ = make_editor([_line(f"Line {i}", start=float(i)) for i in range(200)])
+        editor, _ = make_editor([_line(f"Line {i}", start=float(i)) for i in range(50)])
 
         await editor.load()
 
         assert isinstance(editor.line_list, ft.ListView)
-        assert len(editor.line_list.controls) == 200
+        assert len(editor.line_list.controls) == 50
+
+
+def _long(count):
+    return [_line(f"Line {i}", start=float(i)) for i in range(count)]
+
+
+def _texts(editor) -> list[str]:
+    return [_fields(row)["text"].value for row in editor.line_list.controls]
+
+
+async def _press(editor, button):
+    await editor.pager_clicked(MagicMock(control=button))
+
+
+class TestWindow:
+    @pytest.mark.asyncio
+    async def test_a_short_transcript_shows_every_line_and_no_pager(self, make_editor):
+        editor, _ = make_editor(_long(WINDOW_SIZE))
+
+        await editor.load()
+
+        assert len(editor.line_list.controls) == WINDOW_SIZE
+        assert editor.pager.visible is False
+
+    @pytest.mark.asyncio
+    async def test_a_long_transcript_builds_only_the_first_window(self, make_editor):
+        editor, _ = make_editor(_long(1686))
+
+        await editor.load()
+
+        assert len(editor.line_list.controls) == WINDOW_SIZE
+        assert _texts(editor)[0] == "Line 0"
+        assert editor.pager.visible is True
+        assert "1-100" in editor.window_label.value
+        assert "1,686" in editor.window_label.value
+
+    @pytest.mark.asyncio
+    async def test_next_and_previous_move_one_window(self, make_editor):
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+
+        await _press(editor, editor.next_button)
+        assert _texts(editor)[0] == f"Line {WINDOW_SIZE}"
+
+        await _press(editor, editor.previous_button)
+        assert _texts(editor)[0] == "Line 0"
+
+    @pytest.mark.asyncio
+    async def test_last_shows_the_remainder_and_first_goes_back(self, make_editor):
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+
+        await _press(editor, editor.last_button)
+        assert _texts(editor) == [f"Line {i}" for i in range(200, 250)]
+        assert "201-250" in editor.window_label.value
+
+        await _press(editor, editor.first_button)
+        assert _texts(editor)[0] == "Line 0"
+
+    @pytest.mark.asyncio
+    async def test_buttons_that_lead_nowhere_are_disabled(self, make_editor):
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+
+        assert editor.first_button.disabled and editor.previous_button.disabled
+        assert not editor.next_button.disabled
+
+        await _press(editor, editor.last_button)
+
+        assert editor.next_button.disabled and editor.last_button.disabled
+        assert not editor.previous_button.disabled
+
+    @pytest.mark.asyncio
+    async def test_a_line_on_a_later_window_still_saves(self, make_editor):
+        editor, service = make_editor(_long(250))
+        await editor.load()
+        await _press(editor, editor.next_button)
+        field = _fields(_row(editor))["text"]
+        field.value = "Corrected"
+
+        await editor.text_blurred(MagicMock(control=field))
+
+        assert service.update_line.await_args.kwargs["text"] == "Corrected"
+
+    @pytest.mark.asyncio
+    async def test_deleting_keeps_the_window_that_was_showing(self, make_editor, attach_page):
+        lines = _long(250)
+        editor, service = make_editor(lines)
+        attach_page(TranscriptEditor)
+        await editor.load()
+        await _press(editor, editor.next_button)
+        button = _fields(_row(editor))["delete"]
+        service.get_transcript.return_value = lines[:100] + lines[101:]
+
+        with patch(
+            "chronicler.desktop.views.transcript.editor.confirm",
+            new=AsyncMock(return_value=True),
+        ):
+            await editor.delete_clicked(MagicMock(control=button))
+
+        assert _texts(editor)[0] == "Line 101"
+
+    @pytest.mark.asyncio
+    async def test_a_window_past_the_end_falls_back_to_the_last(self, make_editor):
+        """Deleting the only line on the last window must not leave an empty page."""
+        lines = _long(101)
+        editor, service = make_editor(lines)
+        await editor.load()
+        await _press(editor, editor.last_button)
+        service.get_transcript.return_value = lines[:100]
+
+        await editor.load()
+
+        assert _texts(editor)[0] == "Line 0"
+        assert editor.pager.visible is False
 
 
 class TestEditingText:
@@ -190,6 +316,19 @@ class TestReassigningASpeaker:
         await editor.speaker_changed(MagicMock(control=_fields(_row(editor))["speaker"]))
 
         service.update_line.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_new_name_is_offered_on_the_other_rows(self, make_editor):
+        editor, _ = make_editor([_line(speaker="Nyx"), _line(speaker="Nyx", start=1.0)])
+        await editor.load()
+        first = _fields(_row(editor, 0))["speaker"]
+        first.value = "Morrow"
+
+        await editor.speaker_changed(MagicMock(control=first))
+        second = _fields(_row(editor, 1))["speaker"]
+        second.on_focus(MagicMock(control=second))
+
+        assert "Morrow" in [option.key for option in second.options]
 
     @pytest.mark.asyncio
     async def test_clearing_the_speaker_saves_nothing(self, make_editor):
