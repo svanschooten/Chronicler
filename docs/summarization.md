@@ -147,6 +147,16 @@ load and generation. `asyncio.to_thread` cannot stop a generation, so a summary 
 mid-way leaves its thread running; the next one waits for it instead of sharing the model
 under it.
 
+## Replies with no text, and reasoning
+
+A reasoning model that spends its whole `llm.max_tokens` thinking returns `null` content.
+That, or a reply that is only reasoning, fails with an error naming the finish reason; when
+it is `length`, raise `llm.max_tokens`. Reasoning before the answer is removed from every
+reply, so it never reaches a chunk note or the saved summary. That covers a reply that
+starts with `<think>...</think>`, and one that only holds the closing tag because the chat
+template already opened the block (Qwen3 and DeepSeek-R1 served by llama.cpp or Ollama). A
+`<think>` later in the text is part of the answer and stays.
+
 ## When the model list is empty
 
 `SystemService.list_models` returns a `ModelCheck`: the model ids and, when discovery

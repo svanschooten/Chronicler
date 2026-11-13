@@ -49,6 +49,43 @@ class LlmClient(Protocol):
     ) -> Completion: ...
 
 
+_OPEN_THINK = "<think>"
+_CLOSE_THINK = "</think>"
+
+
+def strip_reasoning(content: str) -> str:
+    """``content`` without the reasoning a model put before its answer.
+
+    Two shapes are common. The model writes ``<think>...</think>`` itself, or the chat
+    template already opened the block, so the reply starts mid-reasoning and only the
+    closing tag shows (Qwen3 and DeepSeek-R1 served by llama.cpp or Ollama). A block that
+    never closes is all reasoning, so nothing is left. A ``<think>`` later in the text is
+    part of the answer and stays.
+    """
+    text = content.lstrip()
+    end = text.find(_CLOSE_THINK)
+    if text.startswith(_OPEN_THINK):
+        return "" if end < 0 else text[end + len(_CLOSE_THINK) :]
+    if end >= 0 and _OPEN_THINK not in text[:end]:
+        return text[end + len(_CLOSE_THINK) :]
+    return text
+
+
+def reply_text(content: Any, finish_reason: str | None) -> str:
+    """The usable text of a model reply, without the reasoning before it.
+
+    Raises ``LlmError`` when nothing usable is left: reasoning models return null content, or
+    only reasoning, when they spend their whole token budget thinking.
+    """
+    text = strip_reasoning(content).strip() if isinstance(content, str) else ""
+    if not text:
+        hint = " Raise llm.max_tokens." if finish_reason == "length" else ""
+        raise LlmError(
+            f"The model returned no text (finish reason: {finish_reason or 'unknown'}).{hint}"
+        )
+    return text
+
+
 class OpenAiCompatibleClient:
     """
     Any server speaking the OpenAI chat-completions API.
@@ -113,13 +150,15 @@ class OpenAiCompatibleClient:
         payload = await self._request("POST", "/chat/completions", json=body)
 
         try:
-            text = payload["choices"][0]["message"]["content"]
+            choice = payload["choices"][0]
+            content = choice["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:
             raise LlmError(f"Unexpected response shape from the model: {payload}") from error
+        text = reply_text(content, choice.get("finish_reason"))
 
         usage = payload.get("usage") or {}
         return Completion(
-            text=text.strip(),
+            text=text,
             model=payload.get("model") or body["model"] or "unknown",
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
@@ -209,9 +248,15 @@ class LlamaCppClient:
         except Exception as error:
             raise LlmError(f"Local model failed: {error}") from error
 
+        try:
+            choice = payload["choices"][0]
+            text = reply_text(choice["message"]["content"], choice.get("finish_reason"))
+        except (KeyError, IndexError, TypeError) as error:
+            raise LlmError(f"Unexpected response from the local model: {payload}") from error
+
         usage = payload.get("usage") or {}
         return Completion(
-            text=payload["choices"][0]["message"]["content"].strip(),
+            text=text,
             model=model or self.settings.model_path or "local",
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
