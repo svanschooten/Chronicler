@@ -175,6 +175,65 @@ class TestOpenAiCompatibleClient:
             await client.complete("x")
 
 
+class TestReasoningReplies:
+    @pytest.mark.parametrize(
+        ("content", "expected"),
+        [
+            ("<think>\nhmm</think>\n\nA recap.", "A recap."),
+            # The chat template opened the block, so only the closing tag is in the reply.
+            ("the user wants a recap\n</think>\n\nA recap.", "A recap."),
+            ("A recap that mentions <think> tags.", "A recap that mentions <think> tags."),
+            ("A recap. <think>aside</think> More.", "A recap. <think>aside</think> More."),
+        ],
+    )
+    def test_reasoning_before_the_answer_is_removed(self, content, expected):
+        from chronicler.core.llm.client import reply_text
+
+        assert reply_text(content, "stop") == expected
+
+    @pytest.mark.asyncio
+    async def test_the_local_model_gets_the_same_treatment(self, monkeypatch):
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from chronicler.core.llm.client import LlamaCppClient
+
+        model = MagicMock()
+        monkeypatch.setitem(
+            sys.modules, "llama_cpp", SimpleNamespace(Llama=MagicMock(return_value=model))
+        )
+        client = LlamaCppClient(LlmSettings(provider="llama_cpp", model_path="a.gguf"))
+
+        model.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": "reasoning</think>A recap."}}]
+        }
+        assert (await client.complete("x")).text == "A recap."
+
+        model.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": None}, "finish_reason": "length"}]
+        }
+        with pytest.raises(LlmError, match="Raise llm.max_tokens"):
+            await client.complete("x")
+
+    @pytest.mark.asyncio
+    async def test_a_summary_from_a_reasoning_model_holds_no_reasoning(self):
+        def handler(_request):
+            content = "<think>\nwhat matters here</think>\n\n- a point"
+            return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+        client = OpenAiCompatibleClient(settings(), stub_server(handler))
+        lines = [line("x" * 200) for _ in range(20)]
+
+        draft = await summarize_transcript(
+            client, lines, SummarySettings(chunk_token_budget=64), context_window=256
+        )
+
+        assert draft.chunk_count > 1
+        assert draft.content == "- a point"
+        assert all(note == "- a point" for note in draft.chunk_summaries)
+
+
 class TestDiscoverModels:
     @pytest.mark.asyncio
     async def test_an_unconfigured_provider_lists_nothing(self):

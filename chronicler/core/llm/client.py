@@ -1,7 +1,6 @@
 """Talking to a language model, wherever it runs."""
 
 import logging
-import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -49,16 +48,35 @@ class LlmClient(Protocol):
     ) -> Completion: ...
 
 
-_THINK_BLOCK = re.compile(r"\A\s*<think>.*?(?:</think>|\Z)", re.DOTALL)
+_OPEN_THINK = "<think>"
+_CLOSE_THINK = "</think>"
+
+
+def strip_reasoning(content: str) -> str:
+    """``content`` without the reasoning a model put before its answer.
+
+    Two shapes are common. The model writes ``<think>...</think>`` itself, or the chat
+    template already opened the block, so the reply starts mid-reasoning and only the
+    closing tag shows (Qwen3 and DeepSeek-R1 served by llama.cpp or Ollama). A block that
+    never closes is all reasoning, so nothing is left. A ``<think>`` later in the text is
+    part of the answer and stays.
+    """
+    text = content.lstrip()
+    end = text.find(_CLOSE_THINK)
+    if text.startswith(_OPEN_THINK):
+        return "" if end < 0 else text[end + len(_CLOSE_THINK) :]
+    if end >= 0 and _OPEN_THINK not in text[:end]:
+        return text[end + len(_CLOSE_THINK) :]
+    return text
 
 
 def reply_text(content: Any, finish_reason: str | None) -> str:
-    """The usable text of a model reply, without a leading reasoning block.
+    """The usable text of a model reply, without the reasoning before it.
 
     Raises ``LlmError`` when nothing usable is left: reasoning models return null content, or
     only reasoning, when they spend their whole token budget thinking.
     """
-    text = _THINK_BLOCK.sub("", content, count=1).strip() if isinstance(content, str) else ""
+    text = strip_reasoning(content).strip() if isinstance(content, str) else ""
     if not text:
         hint = " Raise llm.max_tokens." if finish_reason == "length" else ""
         raise LlmError(

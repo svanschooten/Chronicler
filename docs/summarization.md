@@ -139,8 +139,11 @@ arithmetic. The rename is the fix; there is no behaviour change.
 
 A reasoning model that spends its whole `llm.max_tokens` thinking returns `null` content.
 That, or a reply that is only reasoning, fails with an error naming the finish reason; when
-it is `length`, raise `llm.max_tokens`. A leading `<think>...</think>` block is removed from
-every reply, so reasoning never reaches a chunk note or the saved summary.
+it is `length`, raise `llm.max_tokens`. Reasoning before the answer is removed from every
+reply, so it never reaches a chunk note or the saved summary. That covers a reply that
+starts with `<think>...</think>`, and one that only holds the closing tag because the chat
+template already opened the block (Qwen3 and DeepSeek-R1 served by llama.cpp or Ollama). A
+`<think>` later in the text is part of the answer and stays.
 
 ## When the model list is empty
 
