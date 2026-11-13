@@ -89,6 +89,11 @@ window forward or back, or jumps to the first or last one, and says which lines 
 screen ("Lines 101-200 of 1,686"). The same pager ends the list, so reaching the last line
 of a window leads straight on to the next without scrolling back up. A transcript that
 fits in one window gets no pager.
+
+When the timings are real, the label also gives the window's time span ("Lines 101-200
+of 1,686 · 00:04:10-00:08:19"). The reader shows times, not line numbers, so a time is
+what you know a passage by when you come from reading it. Timings that are only line
+indices (an import without timestamps) get no span, since it would read as a time.
 Deleting a line reloads the same window rather than going back to the first; if the
 window no longer exists, because its only line was deleted, it falls back to the last one.
 Moving to another window scrolls back to its top.

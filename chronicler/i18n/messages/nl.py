@@ -194,6 +194,7 @@ MESSAGES = {
         "done": "Bewerken afronden",
         "delete_line": "Deze regel verwijderen",
         "line_window": "Regels {first}-{last} van {total}",
+        "line_window_timed": "Regels {first}-{last} van {total} · {start}-{end}",
         "first_lines": "Eerste regels",
         "previous_lines": "Vorige regels",
         "next_lines": "Volgende regels",

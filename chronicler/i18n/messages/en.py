@@ -193,6 +193,7 @@ MESSAGES = {
         "done": "Finish editing",
         "delete_line": "Delete this line",
         "line_window": "Lines {first}-{last} of {total}",
+        "line_window_timed": "Lines {first}-{last} of {total} · {start}-{end}",
         "first_lines": "First lines",
         "previous_lines": "Previous lines",
         "next_lines": "Next lines",

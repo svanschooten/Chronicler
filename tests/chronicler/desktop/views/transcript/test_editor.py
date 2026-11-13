@@ -182,6 +182,45 @@ class TestWindow:
         assert _texts(editor)[0] == "Line 0"
 
     @pytest.mark.asyncio
+    async def test_the_label_gives_the_window_time_span(self, make_editor):
+        """The reader shows times, so a time is how a passage found there is known."""
+        lines = [
+            TranscriptLine(
+                speaker_name="Nyx",
+                text=f"Line {i}",
+                start_time=i * 2.5,
+                end_time=i * 2.5 + 2.0,
+                synthetic_timing=False,
+            )
+            for i in range(250)
+        ]
+        editor, _ = make_editor(lines)
+        await editor.load()
+
+        await _press(editor, editor.next_button)
+
+        assert "00:04:10-00:08:19" in editor.window_label.value
+        assert "101-200" in editor.window_label.value
+
+    @pytest.mark.asyncio
+    async def test_line_indices_are_not_shown_as_a_time_span(self, make_editor):
+        lines = [
+            TranscriptLine(
+                speaker_name="Nyx",
+                text=f"Line {i}",
+                start_time=float(i),
+                end_time=float(i + 1),
+                synthetic_timing=True,
+            )
+            for i in range(250)
+        ]
+        editor, _ = make_editor(lines)
+
+        await editor.load()
+
+        assert ":" not in editor.window_label.value
+
+    @pytest.mark.asyncio
     async def test_a_long_transcript_ends_each_window_with_a_pager(self, make_editor):
         """Reaching the end of a window should not mean scrolling back up to move on."""
         editor, _ = make_editor(_long(250))

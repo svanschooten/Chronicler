@@ -198,6 +198,7 @@ MESSAGES = {
         "done": "Bearbeitung beenden",
         "delete_line": "Diese Zeile loeschen",
         "line_window": "Zeilen {first}-{last} von {total}",
+        "line_window_timed": "Zeilen {first}-{last} von {total} · {start}-{end}",
         "first_lines": "Erste Zeilen",
         "previous_lines": "Vorherige Zeilen",
         "next_lines": "Nächste Zeilen",

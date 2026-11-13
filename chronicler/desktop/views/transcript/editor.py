@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 import flet as ft
 
 from chronicler.core.database_manager import NewerSchemaError
-from chronicler.core.formatting import format_timestamp
+from chronicler.core.formatting import format_timestamp, looks_synthetic
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.dialogs import confirm
@@ -65,15 +65,29 @@ class LinePager(ft.Row):
             data=tooltip_key,
         )
 
-    def show(self, start: int, shown: int, total: int) -> None:
-        """Only a transcript longer than one window gets a pager."""
+    def show(self, start: int, shown: list[TranscriptLine], total: int, timed: bool) -> None:
+        """
+        Only a transcript longer than one window gets a pager.
+
+        The label gives the window's time span as well as its line numbers when the
+        timings are real: the reader shows times, not line numbers, so a time is what
+        someone coming from the reader knows the passage by.
+        """
         self.visible = total > WINDOW_SIZE
-        self.label.value = t(
-            "transcript.line_window",
-            first=format_count(start + 1),
-            last=format_count(start + shown),
-            total=format_count(total),
-        )
+        counts = {
+            "first": format_count(start + 1),
+            "last": format_count(start + len(shown)),
+            "total": format_count(total),
+        }
+        if timed and shown:
+            self.label.value = t(
+                "transcript.line_window_timed",
+                **counts,
+                start=format_timestamp(shown[0].start_time),
+                end=format_timestamp(shown[-1].end_time),
+            )
+        else:
+            self.label.value = t("transcript.line_window", **counts)
         self.first_button.disabled = self.previous_button.disabled = start == 0
         self.next_button.disabled = self.last_button.disabled = start + WINDOW_SIZE >= total
 
@@ -97,6 +111,8 @@ class TranscriptEditor(ft.Column):
         self.ordered: list[TranscriptLine] = []
         self.speakers: list[str] = []
         self.window_start = 0
+        # False when the timings are line indices, which say nothing as a time span.
+        self.timed = False
 
         self.line_list = ft.ListView(spacing=6, expand=True)
         # The same pager twice: above the list, and as the list's last item, so the end
@@ -125,6 +141,7 @@ class TranscriptEditor(ft.Column):
 
         self.lines = {str(line.id): line for line in lines}
         self.ordered = list(lines)
+        self.timed = not looks_synthetic(self.ordered)
         self.speakers = list(speakers)
         if not lines:
             self._show_message(t("transcript.empty"))
@@ -155,7 +172,7 @@ class TranscriptEditor(ft.Column):
         shown = self.ordered[start : start + WINDOW_SIZE]
         total = len(self.ordered)
         for pager in (self.pager, self.bottom_pager):
-            pager.show(start, len(shown), total)
+            pager.show(start, shown, total, self.timed)
 
         rows: list[ft.Control] = [self._row(line) for line in shown]
         if self.bottom_pager.visible:
