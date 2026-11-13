@@ -48,12 +48,46 @@ async def test_listing_registers_files_found_on_disk(tmp_path):
 async def test_files_that_are_not_audio_are_not_listed(tmp_path):
     db_manager, session, service, chronicle = await _service(tmp_path)
     try:
-        for name in ["gm.wav", "Player.OPUS", "desktop.ini", ".DS_Store", ".hidden.wav", "notes"]:
+        names = ["gm.wav", "Player.OPUS", "call.MP4", "desktop.ini", ".DS_Store", ".hidden.wav"]
+        for name in [*names, "notes"]:
             _add_track(db_manager, chronicle.id, name)
 
         sources = await service.list_audio_sources(chronicle.id)
 
-        assert [s.filename for s in sources] == ["Player.OPUS", "gm.wav"]
+        assert [s.filename for s in sources] == ["Player.OPUS", "call.MP4", "gm.wav"]
+    finally:
+        await session.close()
+        await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_rows_registered_before_the_audio_rule_are_tidied(tmp_path):
+    """
+    Listing used to register every file. A stray row would otherwise linger as a missing
+    track; one that was transcribed stays, since its lines name it.
+    """
+    from chronicler.core.sqlite import SQLiteAudioSourceRepository
+
+    db_manager, session, service, chronicle = await _service(tmp_path)
+    try:
+        for name in ["gm.wav", "desktop.ini", "call.3gp"]:
+            _add_track(db_manager, chronicle.id, name)
+        async with db_manager.transaction(chronicle.id) as project:
+            repo = SQLiteAudioSourceRepository(project)
+            for name in ["desktop.ini", "call.3gp"]:
+                await repo.register(name, content_hash="h", size_bytes=5)
+            await repo.mark_transcribed("call.3gp", "h", "en", "base")
+
+        sources = await service.list_audio_sources(chronicle.id)
+
+        assert [(s.filename, s.missing) for s in sources] == [
+            ("call.3gp", False),
+            ("gm.wav", False),
+        ]
+        assert [s.filename for s in await service.list_audio_sources(chronicle.id)] == [
+            "call.3gp",
+            "gm.wav",
+        ]
     finally:
         await session.close()
         await db_manager.close_all()

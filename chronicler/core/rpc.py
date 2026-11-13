@@ -20,12 +20,14 @@ def refusals() -> dict[str, tuple[type[Exception], int]]:
     and reaches a thin client as a bare 500. Imported on first use: a thin client loads this
     module and has no use for the services' own modules until it sees one of these.
     """
+    from chronicler.core.audio_files import UnsupportedAudioError
     from chronicler.core.formatting import NoRealTimestampsError
     from chronicler.core.processing.regex_guard import PatternTimeoutError, UnsafePatternError
 
     return {
         "LookupError": (LookupError, 404),
         "NoRealTimestampsError": (NoRealTimestampsError, 422),
+        "UnsupportedAudioError": (UnsupportedAudioError, 422),
         "UnsafePatternError": (UnsafePatternError, 422),
         "PatternTimeoutError": (PatternTimeoutError, 422),
     }

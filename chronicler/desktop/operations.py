@@ -12,10 +12,11 @@ from collections.abc import Awaitable, Callable
 
 import flet as ft
 
+from chronicler.core.audio_files import AUDIO_EXTENSIONS
 from chronicler.core.models import Chronicle
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
-from chronicler.core.services.transcript_service import AUDIO_EXTENSIONS, TranscriptService
+from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.dialogs import Choice, ask_choice, confirm
 from chronicler.desktop.forms import EditChronicleForm, TranscriptImportForm
 from chronicler.desktop.imports import ImportCoordinator

@@ -90,6 +90,23 @@ async def test_import_audio_without_a_chronicle_creates_one_named_after_the_file
 
 
 @pytest.mark.asyncio
+async def test_a_file_that_is_not_audio_is_refused_before_anything_is_made(
+    make_coordinator, imports_dir, picked_file
+):
+    from chronicler.core.audio_files import UnsupportedAudioError
+
+    chronicle_service = AsyncMock()
+    coordinator = make_coordinator(chronicle_service=chronicle_service)
+
+    with pytest.raises(UnsupportedAudioError):
+        await coordinator.import_audio(None, str(picked_file("notes.txt")))
+
+    chronicle_service.create_chronicle.assert_not_awaited()
+    chronicle_service.add_audio_source.assert_not_awaited()
+    assert list(imports_dir.iterdir()) == []
+
+
+@pytest.mark.asyncio
 async def test_import_transcript_without_a_chronicle_creates_one_and_queues(
     make_coordinator, imports_dir, picked_file
 ):

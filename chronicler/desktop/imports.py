@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from uuid import UUID
 
+from chronicler.core.audio_files import require_audio_track
 from chronicler.core.database_manager import LinkRefusedError
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
@@ -48,6 +49,8 @@ class ImportCoordinator:
         carries an id).
         """
         original_name = os.path.basename(file_path)
+        # Before staging or creating anything: a refused file must not leave an empty chronicle.
+        require_audio_track(original_name)
         staged_path = await self.stage_file(file_path)
 
         if chronicle_id is not None:
