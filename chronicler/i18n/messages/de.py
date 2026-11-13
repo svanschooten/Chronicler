@@ -17,6 +17,7 @@ MESSAGES = {
         "close": "Schließen",
         "unknown": "Unbekannt",
         "ok": "OK",
+        "thousands_separator": ".",
     },
     "settings": {
         "title": "Einstellungen",
@@ -197,6 +198,7 @@ MESSAGES = {
         "done": "Bearbeitung beenden",
         "delete_line": "Diese Zeile loeschen",
         "line_window": "Zeilen {first}-{last} von {total}",
+        "line_window_timed": "Zeilen {first}-{last} von {total} · {start}-{end}",
         "first_lines": "Erste Zeilen",
         "previous_lines": "Vorherige Zeilen",
         "next_lines": "Nächste Zeilen",
@@ -209,6 +211,7 @@ MESSAGES = {
             "Das kann nicht rueckgaengig gemacht werden."
         ),
         "save_failed": "Aenderung konnte nicht gespeichert werden: {error}",
+        "line_save_failed": "Die Zeile bei {time} konnte nicht gespeichert werden: {error}",
         "title": "Transkript",
         "loading": "Transkript wird geladen...",
         "empty": "Transkript ist leer oder wird noch verarbeitet.",

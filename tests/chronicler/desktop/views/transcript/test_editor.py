@@ -8,7 +8,8 @@ import pytest
 
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.desktop.theme import theme_colors
-from chronicler.desktop.views.transcript.editor import WINDOW_SIZE, TranscriptEditor
+from chronicler.desktop.views.transcript.editor import WINDOW_SIZE, LinePager, TranscriptEditor
+from chronicler.i18n import set_locale
 
 
 def _line(text="Some words", speaker="Nyx", start=0.0):
@@ -111,8 +112,13 @@ def _long(count):
     return [_line(f"Line {i}", start=float(i)) for i in range(count)]
 
 
+def _rows(editor) -> list:
+    """The line rows, without the pager that ends a window of a long transcript."""
+    return [c for c in editor.line_list.controls if not isinstance(c, LinePager)]
+
+
 def _texts(editor) -> list[str]:
-    return [_fields(row)["text"].value for row in editor.line_list.controls]
+    return [_fields(row)["text"].value for row in _rows(editor)]
 
 
 async def _press(editor, button):
@@ -135,11 +141,22 @@ class TestWindow:
 
         await editor.load()
 
-        assert len(editor.line_list.controls) == WINDOW_SIZE
+        assert len(_rows(editor)) == WINDOW_SIZE
         assert _texts(editor)[0] == "Line 0"
         assert editor.pager.visible is True
         assert "1-100" in editor.window_label.value
         assert "1,686" in editor.window_label.value
+
+    @pytest.mark.asyncio
+    async def test_the_line_count_is_written_the_local_way(self, make_editor):
+        editor, _ = make_editor(_long(1686))
+        set_locale("de")
+        try:
+            await editor.load()
+        finally:
+            set_locale("en")
+
+        assert "1.686" in editor.window_label.value
 
     @pytest.mark.asyncio
     async def test_next_and_previous_move_one_window(self, make_editor):
@@ -163,6 +180,87 @@ class TestWindow:
 
         await _press(editor, editor.first_button)
         assert _texts(editor)[0] == "Line 0"
+
+    @pytest.mark.asyncio
+    async def test_the_label_gives_the_window_time_span(self, make_editor):
+        """The reader shows times, so a time is how a passage found there is known."""
+        lines = [
+            TranscriptLine(
+                speaker_name="Nyx",
+                text=f"Line {i}",
+                start_time=i * 2.5,
+                end_time=i * 2.5 + 2.0,
+                synthetic_timing=False,
+            )
+            for i in range(250)
+        ]
+        editor, _ = make_editor(lines)
+        await editor.load()
+
+        await _press(editor, editor.next_button)
+
+        assert "00:04:10-00:08:19" in editor.window_label.value
+        assert "101-200" in editor.window_label.value
+
+    @pytest.mark.asyncio
+    async def test_line_indices_are_not_shown_as_a_time_span(self, make_editor):
+        lines = [
+            TranscriptLine(
+                speaker_name="Nyx",
+                text=f"Line {i}",
+                start_time=float(i),
+                end_time=float(i + 1),
+                synthetic_timing=True,
+            )
+            for i in range(250)
+        ]
+        editor, _ = make_editor(lines)
+
+        await editor.load()
+
+        assert ":" not in editor.window_label.value
+
+    @pytest.mark.asyncio
+    async def test_a_long_transcript_ends_each_window_with_a_pager(self, make_editor):
+        """Reaching the end of a window should not mean scrolling back up to move on."""
+        editor, _ = make_editor(_long(250))
+
+        await editor.load()
+
+        assert editor.line_list.controls[-1] is editor.bottom_pager
+        assert editor.bottom_pager.visible is True
+        assert editor.bottom_pager.label.value == editor.window_label.value
+
+    @pytest.mark.asyncio
+    async def test_a_short_transcript_has_no_pager_at_the_end(self, make_editor):
+        editor, _ = make_editor(_long(WINDOW_SIZE))
+
+        await editor.load()
+
+        assert editor.bottom_pager not in editor.line_list.controls
+
+    @pytest.mark.asyncio
+    async def test_the_pager_at_the_end_moves_the_window_too(self, make_editor):
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+        editor.line_list.scroll_to = AsyncMock()
+
+        await _press(editor, editor.bottom_pager.next_button)
+
+        assert _texts(editor)[0] == f"Line {WINDOW_SIZE}"
+        assert editor.bottom_pager.label.value == editor.window_label.value
+        editor.line_list.scroll_to.assert_awaited_once_with(offset=0)
+
+    @pytest.mark.asyncio
+    async def test_both_pagers_disable_the_same_buttons(self, make_editor):
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+
+        await _press(editor, editor.bottom_pager.last_button)
+
+        for pager in (editor.pager, editor.bottom_pager):
+            assert pager.next_button.disabled and pager.last_button.disabled
+            assert not pager.previous_button.disabled
 
     @pytest.mark.asyncio
     async def test_buttons_that_lead_nowhere_are_disabled(self, make_editor):
@@ -221,6 +319,86 @@ class TestWindow:
         assert _texts(editor)[0] == "Line 0"
         assert editor.pager.visible is False
 
+    @pytest.mark.asyncio
+    async def test_moving_to_another_window_scrolls_to_its_top(self, make_editor):
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+        editor.line_list.scroll_to = AsyncMock()
+
+        await _press(editor, editor.next_button)
+
+        editor.line_list.scroll_to.assert_awaited_once_with(offset=0)
+
+    @pytest.mark.asyncio
+    async def test_reloading_the_same_window_keeps_the_scroll_position(self, make_editor):
+        """A delete reloads the window; jumping to its top would lose your place."""
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+        await _press(editor, editor.next_button)
+        editor.line_list.scroll_to = AsyncMock()
+
+        await editor.load()
+
+        editor.line_list.scroll_to.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_line_to_show_opens_a_window_starting_at_it(self, make_editor):
+        """A ListView cannot scroll to a row, so the found line goes at the top."""
+        lines = _long(1686)
+        editor, _ = make_editor(lines)
+
+        await editor.load(show_line=lines[1234].id)
+
+        assert _texts(editor)[0] == "Line 1234"
+        assert "1,235-1,334" in editor.window_label.value
+
+    @pytest.mark.asyncio
+    async def test_a_line_near_the_end_still_starts_the_window(self, make_editor):
+        lines = _long(1686)
+        editor, _ = make_editor(lines)
+
+        await editor.load(show_line=lines[1680].id)
+
+        assert _texts(editor) == [f"Line {i}" for i in range(1680, 1686)]
+        assert editor.next_button.disabled
+
+    @pytest.mark.asyncio
+    async def test_paging_from_a_found_line_moves_a_whole_window(self, make_editor):
+        lines = _long(1686)
+        editor, _ = make_editor(lines)
+        await editor.load(show_line=lines[1234].id)
+
+        await _press(editor, editor.previous_button)
+        assert _texts(editor)[0] == "Line 1134"
+
+        await _press(editor, editor.last_button)
+        assert _texts(editor)[0] == "Line 1600"
+
+    @pytest.mark.asyncio
+    async def test_a_line_to_show_that_is_gone_keeps_the_window(self, make_editor):
+        """The match may have been deleted or cleaned away since the find ran."""
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+        await _press(editor, editor.next_button)
+
+        await editor.load(show_line=_line().id)
+
+        assert _texts(editor)[0] == f"Line {WINDOW_SIZE}"
+
+    @pytest.mark.asyncio
+    async def test_editing_again_reopens_the_window_left_last_time(self, make_editor):
+        """
+        The view keeps one editor, and leaving edit mode to read a passage and coming
+        back should not mean paging all the way there again.
+        """
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+        await _press(editor, editor.next_button)
+
+        await editor.load()
+
+        assert _texts(editor)[0] == f"Line {WINDOW_SIZE}"
+
 
 class TestEditingText:
     @pytest.mark.asyncio
@@ -272,6 +450,62 @@ class TestEditingText:
         assert field.value == "Original"
 
     @pytest.mark.asyncio
+    async def test_paging_back_during_a_save_shows_the_new_text(self, make_editor):
+        """
+        Paging away blurs the field and starts the save; paging straight back rebuilds
+        the row. Built from the old text, it would save the old text over the new one.
+        """
+        editor, service = make_editor(_long(WINDOW_SIZE + 1))
+        await editor.load()
+        release = asyncio.Event()
+
+        async def slow_save(*args, **kwargs):
+            await release.wait()
+
+        service.update_line.side_effect = slow_save
+        field = _fields(_row(editor))["text"]
+        field.value = "Corrected"
+
+        saving = asyncio.create_task(editor.text_blurred(MagicMock(control=field)))
+        await asyncio.sleep(0)
+        await _press(editor, editor.next_button)
+        await _press(editor, editor.previous_button)
+        rebuilt = _fields(_row(editor))["text"]
+        release.set()
+        await saving
+
+        assert rebuilt.value == "Corrected"
+        await editor.text_blurred(MagicMock(control=rebuilt))
+        assert service.update_line.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_a_failed_save_says_which_line_it_was(self, make_editor):
+        """Paging away starts the save, so the row may be gone by the time it fails."""
+        editor, service = make_editor([_line("Original", start=3725.0)])
+        service.update_line.side_effect = RuntimeError("database is locked")
+        await editor.load()
+        field = _fields(_row(editor))["text"]
+        field.value = "Attempted"
+
+        await editor.text_blurred(MagicMock(control=field))
+
+        assert "01:02:05" in editor.show_snackbar.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_a_failed_save_puts_the_old_text_back_on_the_line(self, make_editor):
+        editor, service = make_editor(_long(WINDOW_SIZE + 1))
+        service.update_line.side_effect = RuntimeError("database is locked")
+        await editor.load()
+        field = _fields(_row(editor))["text"]
+        field.value = "Attempted"
+
+        await editor.text_blurred(MagicMock(control=field))
+        await _press(editor, editor.next_button)
+        await _press(editor, editor.previous_button)
+
+        assert _fields(_row(editor))["text"].value == "Line 0"
+
+    @pytest.mark.asyncio
     async def test_editing_does_not_reload_the_whole_list(self, make_editor):
         """Reloading on every blur would throw away the caret and the scroll position."""
         editor, service = make_editor([_line("One")])
@@ -305,6 +539,21 @@ class TestReassigningASpeaker:
         await editor.speaker_changed(MagicMock(control=_fields(_row(editor))["speaker"]))
 
         service.update_line.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_failed_speaker_save_puts_the_old_speaker_back(self, make_editor):
+        editor, service = make_editor([_line(speaker="Nyx")])
+        service.update_line.side_effect = RuntimeError("database is locked")
+        await editor.load()
+        field = _fields(_row(editor))["speaker"]
+        field.value = "Vale"
+
+        await editor.speaker_changed(MagicMock(control=field))
+
+        assert field.value == "Nyx"
+        assert editor.lines[_fields(_row(editor))["speaker"].data.split(":")[1]].speaker_name == (
+            "Nyx"
+        )
 
     @pytest.mark.asyncio
     async def test_a_new_name_is_offered_on_the_next_window(self, make_editor):

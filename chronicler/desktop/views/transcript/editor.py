@@ -8,18 +8,19 @@ edit touches exactly the line it was typed into. See docs/transcript-editing.md.
 """
 
 import logging
+import uuid
 from collections.abc import Awaitable, Callable
 
 import flet as ft
 
 from chronicler.core.database_manager import NewerSchemaError
-from chronicler.core.formatting import format_timestamp
+from chronicler.core.formatting import format_timestamp, looks_synthetic
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.dialogs import confirm
 from chronicler.desktop.theme import ThemeColors
 from chronicler.desktop.widgets import chosen_value, searchable_dropdown
-from chronicler.i18n import t
+from chronicler.i18n import format_count, t
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,64 @@ def describe_transcript_error(error: BaseException) -> str:
     if isinstance(error, NewerSchemaError):
         return t("transcript.newer_version")
     return t("transcript.error", error=error)
+
+
+class LinePager(ft.Row):
+    """First / previous / "Lines 101-200 of 1,686" / next / last, for the editor's window."""
+
+    def __init__(self, colors: ThemeColors, on_click: Callable[..., Awaitable[None]]):
+        self.on_click = on_click
+        self.first_button = self._button(ft.Icons.FIRST_PAGE, "transcript.first_lines")
+        self.previous_button = self._button(ft.Icons.CHEVRON_LEFT, "transcript.previous_lines")
+        self.next_button = self._button(ft.Icons.CHEVRON_RIGHT, "transcript.next_lines")
+        self.last_button = self._button(ft.Icons.LAST_PAGE, "transcript.last_lines")
+        self.label = ft.Text(size=12, color=colors.muted)
+        super().__init__(
+            visible=False,
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[
+                self.first_button,
+                self.previous_button,
+                self.label,
+                self.next_button,
+                self.last_button,
+            ],
+        )
+
+    def _button(self, icon: ft.IconData, tooltip_key: str) -> ft.IconButton:
+        return ft.IconButton(
+            icon=icon,
+            icon_size=18,
+            tooltip=t(tooltip_key),
+            on_click=self.on_click,
+            data=tooltip_key,
+        )
+
+    def show(self, start: int, shown: list[TranscriptLine], total: int, timed: bool) -> None:
+        """
+        Only a transcript longer than one window gets a pager.
+
+        The label gives the window's time span as well as its line numbers when the
+        timings are real: the reader shows times, not line numbers, so a time is what
+        someone coming from the reader knows the passage by.
+        """
+        self.visible = total > WINDOW_SIZE
+        counts = {
+            "first": format_count(start + 1),
+            "last": format_count(start + len(shown)),
+            "total": format_count(total),
+        }
+        if timed and shown:
+            self.label.value = t(
+                "transcript.line_window_timed",
+                **counts,
+                start=format_timestamp(shown[0].start_time),
+                end=format_timestamp(shown[-1].end_time),
+            )
+        else:
+            self.label.value = t("transcript.line_window", **counts)
+        self.first_button.disabled = self.previous_button.disabled = start == 0
+        self.next_button.disabled = self.last_button.disabled = start + WINDOW_SIZE >= total
 
 
 class TranscriptEditor(ft.Column):
@@ -53,41 +112,31 @@ class TranscriptEditor(ft.Column):
         self.ordered: list[TranscriptLine] = []
         self.speakers: list[str] = []
         self.window_start = 0
+        # False when the timings are line indices, which say nothing as a time span.
+        self.timed = False
 
         self.line_list = ft.ListView(spacing=6, expand=True)
-        self.first_button = self._pager_button(ft.Icons.FIRST_PAGE, "transcript.first_lines")
-        self.previous_button = self._pager_button(
-            ft.Icons.CHEVRON_LEFT, "transcript.previous_lines"
-        )
-        self.next_button = self._pager_button(ft.Icons.CHEVRON_RIGHT, "transcript.next_lines")
-        self.last_button = self._pager_button(ft.Icons.LAST_PAGE, "transcript.last_lines")
-        self.window_label = ft.Text(size=12, color=self.colors.muted)
-        self.pager = ft.Row(
-            visible=False,
-            alignment=ft.MainAxisAlignment.CENTER,
-            controls=[
-                self.first_button,
-                self.previous_button,
-                self.window_label,
-                self.next_button,
-                self.last_button,
-            ],
-        )
+        # The same pager twice: above the list, and as the list's last item, so the end
+        # of a window leads straight on to the next without scrolling back up.
+        self.pager = LinePager(colors, self.pager_clicked)
+        self.bottom_pager = LinePager(colors, self.pager_clicked)
+        self.first_button = self.pager.first_button
+        self.previous_button = self.pager.previous_button
+        self.next_button = self.pager.next_button
+        self.last_button = self.pager.last_button
+        self.window_label = self.pager.label
         super().__init__(expand=True, controls=[self.pager, self.line_list])
 
-    def _pager_button(self, icon: ft.IconData, tooltip_key: str) -> ft.IconButton:
-        return ft.IconButton(
-            icon=icon,
-            icon_size=18,
-            tooltip=t(tooltip_key),
-            on_click=self.pager_clicked,
-            data=tooltip_key,
-        )
-
-    async def load(self) -> None:
+    async def load(self, show_line: uuid.UUID | None = None) -> None:
         """
         Loads the lines and shows the window that was showing, so deleting a line on the
         fifth window does not throw the user back to the first.
+
+        `show_line` opens a window that starts at that line instead: the view passes the
+        first match of the reader's find, so editing goes straight to what was found. The
+        window starts at the line rather than at its usual boundary because a ListView
+        cannot be scrolled to one of its rows, so the top is the one place it is sure to
+        be seen.
         """
         try:
             lines = await self.transcript_service.get_transcript(self.chronicle.id)
@@ -99,12 +148,16 @@ class TranscriptEditor(ft.Column):
 
         self.lines = {str(line.id): line for line in lines}
         self.ordered = list(lines)
+        self.timed = not looks_synthetic(self.ordered)
         self.speakers = list(speakers)
         if not lines:
             self._show_message(t("transcript.empty"))
             return
 
-        await self._show_window(self.window_start)
+        start = self.window_start
+        if show_line is not None:
+            start = next((i for i, line in enumerate(self.ordered) if line.id == show_line), start)
+        await self._show_window(start)
 
     async def pager_clicked(self, e) -> None:
         last = self._last_window_start()
@@ -122,23 +175,24 @@ class TranscriptEditor(ft.Column):
         return (len(self.ordered) - 1) // WINDOW_SIZE * WINDOW_SIZE
 
     async def _show_window(self, start: int) -> None:
-        start = max(0, min(start, self._last_window_start()))
+        """
+        A window can start anywhere, not only on a multiple of `WINDOW_SIZE`, so one
+        opened on a found line keeps it at the top. Only a start past the end, left by
+        deleting the last window's only line, falls back to the last whole window.
+        """
+        start = self._last_window_start() if start >= len(self.ordered) else max(0, start)
         moved = start != self.window_start
         self.window_start = start
 
         shown = self.ordered[start : start + WINDOW_SIZE]
-        self.line_list.controls = [self._row(line) for line in shown]
-
         total = len(self.ordered)
-        self.pager.visible = total > WINDOW_SIZE
-        self.window_label.value = t(
-            "transcript.line_window",
-            first=f"{start + 1:,}",
-            last=f"{start + len(shown):,}",
-            total=f"{total:,}",
-        )
-        self.first_button.disabled = self.previous_button.disabled = start == 0
-        self.next_button.disabled = self.last_button.disabled = start + WINDOW_SIZE >= total
+        for pager in (self.pager, self.bottom_pager):
+            pager.show(start, shown, total, self.timed)
+
+        rows: list[ft.Control] = [self._row(line) for line in shown]
+        if self.bottom_pager.visible:
+            rows.append(self.bottom_pager)
+        self.line_list.controls = rows
 
         self._refresh()
         if moved:
@@ -152,7 +206,7 @@ class TranscriptEditor(ft.Column):
             pass
 
     def _show_message(self, message: str) -> None:
-        self.pager.visible = False
+        self.pager.visible = self.bottom_pager.visible = False
         self.line_list.controls = [ft.Text(message, size=12, color=self.colors.muted)]
         self._refresh()
 
@@ -213,7 +267,14 @@ class TranscriptEditor(ft.Column):
         return self.lines.get(self._line_id(control))
 
     async def text_blurred(self, e) -> None:
-        """A blur fires whether or not anything was typed, so unchanged text is ignored."""
+        """
+        A blur fires whether or not anything was typed, so unchanged text is ignored.
+
+        The line takes the typed text before the save is awaited, not after. Paging away
+        is what blurs the field, so paging straight back can rebuild the row while the
+        save is still running; built from the old text, that row would save the old text
+        over the correction the next time it is blurred.
+        """
         control = e.control
         line = self._line_for(control)
         if line is None:
@@ -223,11 +284,12 @@ class TranscriptEditor(ft.Column):
         if typed == line.text:
             return
 
-        if not await self._save(line, text=typed):
-            control.value = line.text
-            self._repaint(control)
-            return
+        previous = line.text
         line.text = typed
+        if not await self._save(line, text=typed):
+            line.text = previous
+            control.value = previous
+            self._repaint(control)
 
     async def speaker_changed(self, e) -> None:
         control = e.control
@@ -239,20 +301,33 @@ class TranscriptEditor(ft.Column):
         if not chosen or chosen == line.speaker_name:
             return
 
+        # Set before the save is awaited, for the same reason as in `text_blurred`.
+        previous = line.speaker_name
+        line.speaker_name = chosen
         if not await self._save(line, speaker_name=chosen):
-            control.value = line.speaker_name
+            line.speaker_name = previous
+            control.value = previous
             self._repaint(control)
             return
-        line.speaker_name = chosen
         if chosen not in self.speakers:
             self.speakers.append(chosen)
 
     async def _save(self, line: TranscriptLine, **changes) -> bool:
+        """
+        The failure names the line by its time: paging away is what starts a save, so by
+        the time it fails the row may no longer be on screen.
+        """
         try:
             await self.transcript_service.update_line(self.chronicle.id, line.id, **changes)
         except Exception as error:
             logger.exception("Could not save a transcript line")
-            self.show_snackbar(t("transcript.save_failed", error=error))
+            self.show_snackbar(
+                t(
+                    "transcript.line_save_failed",
+                    time=format_timestamp(line.start_time),
+                    error=error,
+                )
+            )
             return False
         return True
 
