@@ -184,7 +184,6 @@ class TranscriptEditor(ft.Column):
                     width=150,
                     data=f"speaker:{key}",
                     on_select=self.speaker_changed,
-                    options_on_focus=True,
                 ),
                 ft.TextField(
                     data=f"text:{key}",

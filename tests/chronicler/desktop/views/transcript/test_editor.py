@@ -75,21 +75,10 @@ class TestLoading:
         editor, service = make_editor(speakers=["Alice", "Nyx", "Vale"])
 
         await editor.load()
-        field = _fields(_row(editor))["speaker"]
-        field.on_focus(MagicMock(control=field))
 
-        options = [option.key for option in field.options]
+        options = [option.key for option in _fields(_row(editor))["speaker"].options]
         assert options == ["Alice", "Nyx", "Vale"]
         service.speaker_suggestions.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_the_speaker_field_holds_only_its_own_name_until_focused(self, make_editor):
-        """Every row carrying every name is what made a long transcript slow to open."""
-        editor, _ = make_editor([_line(speaker="Vale")], speakers=["Alice", "Nyx", "Vale"])
-
-        await editor.load()
-
-        assert [option.key for option in _fields(_row(editor))["speaker"].options] == ["Vale"]
 
     @pytest.mark.asyncio
     async def test_the_speaker_field_accepts_a_new_name(self, make_editor):
@@ -318,17 +307,17 @@ class TestReassigningASpeaker:
         service.update_line.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_a_new_name_is_offered_on_the_other_rows(self, make_editor):
-        editor, _ = make_editor([_line(speaker="Nyx"), _line(speaker="Nyx", start=1.0)])
+    async def test_a_new_name_is_offered_on_the_next_window(self, make_editor):
+        editor, _ = make_editor(_long(WINDOW_SIZE + 1))
         await editor.load()
         first = _fields(_row(editor, 0))["speaker"]
         first.value = "Morrow"
 
         await editor.speaker_changed(MagicMock(control=first))
-        second = _fields(_row(editor, 1))["speaker"]
-        second.on_focus(MagicMock(control=second))
+        await _press(editor, editor.next_button)
 
-        assert "Morrow" in [option.key for option in second.options]
+        options = [option.key for option in _fields(_row(editor))["speaker"].options]
+        assert "Morrow" in options
 
     @pytest.mark.asyncio
     async def test_clearing_the_speaker_saves_nothing(self, make_editor):
