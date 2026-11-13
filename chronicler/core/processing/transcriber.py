@@ -24,10 +24,15 @@ def _get_model(model_size: str, device: str, compute_type: str) -> Any:
         raise TranscriptionError(extras.missing_message("transcription", error)) from error
 
     key = (model_size, device, compute_type)
-    if key not in _model_cache:
+    model = _model_cache.get(key)
+    if model is None:
+        # Only the most recently used model stays: trying several sizes must not keep them all.
+        # Returned from the local, not looked up again: another load may clear the cache.
+        _model_cache.clear()
         logger.info(f"Loading faster-whisper model '{model_size}' (downloads on first use)")
-        _model_cache[key] = WhisperModel(model_size, device=device, compute_type=compute_type)
-    return _model_cache[key]
+        model = WhisperModel(model_size, device=device, compute_type=compute_type)
+        _model_cache[key] = model
+    return model
 
 
 def transcribe_audio(

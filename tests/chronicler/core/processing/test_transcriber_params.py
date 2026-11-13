@@ -156,3 +156,17 @@ class TestLanguageChoices:
         assert "en" in choices
         assert "nl" in choices
         assert len(choices) > 5
+
+
+def test_only_the_latest_model_stays_loaded(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    factory = MagicMock()
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=factory))
+    first = transcriber._get_model("base", "cpu", "int8")
+    assert transcriber._get_model("base", "cpu", "int8") is first
+    transcriber._get_model("small", "cpu", "int8")
+
+    assert factory.call_count == 2
+    assert list(transcriber._model_cache) == [("small", "cpu", "int8")]

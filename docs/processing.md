@@ -111,7 +111,7 @@ back.
 `WhisperModel` is constructed only inside `_get_model()`, called only from
 `transcribe_audio()`, called only when a `TRANSCRIBE` task actually runs. Nothing at
 import or startup time touches it, so the model downloads on first real transcription
-rather than on every app launch. Loaded models are cached by size so a second task does
+rather than on every app launch. Only the most recently used model stays loaded, so a second task does
 not reload.
 
 `faster_whisper` is imported lazily inside the function. Importing `transcriber.py`

@@ -1,6 +1,7 @@
 """Talking to a language model, wherever it runs."""
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -164,18 +165,44 @@ class OpenAiCompatibleClient:
         )
 
 
+_local_model: tuple[tuple[str, int], Any] | None = None
+"""The one loaded GGUF model, keyed by path and context size, shared by every client.
+
+Clients are built per task, so the model has to outlive them or each summary reloads it.
+Asking for a different model replaces it.
+"""
+
+_local_model_lock = threading.Lock()
+"""Held while the shared model loads or generates. llama.cpp is not thread-safe, and
+`asyncio.to_thread` cannot stop a generation: a task stopped mid-summary leaves its thread
+running, and the next summary must wait for it rather than share the model."""
+
+
+def release_local_model(settings: LlmSettings) -> None:
+    """
+    Drops the shared GGUF model unless `settings` still use it, so switching to a gateway
+    or to no provider frees its memory. A generation already running keeps its own
+    reference and finishes; the model is freed once it does.
+    """
+    global _local_model
+    if settings.provider != "llama_cpp":
+        _local_model = None
+
+
 class LlamaCppClient:
     """An in-process GGUF model, for running without any server at all."""
 
     def __init__(self, settings: LlmSettings):
         self.settings = settings
-        self._model: Any = None
 
     def _load(self) -> Any:
-        if self._model is not None:
-            return self._model
+        global _local_model
         if not self.settings.model_path:
             raise LlmNotConfiguredError("No model_path configured for the local model")
+
+        key = (self.settings.model_path, self.settings.context_window)
+        if _local_model is not None and _local_model[0] == key:
+            return _local_model[1]
 
         try:
             from llama_cpp import Llama
@@ -183,10 +210,12 @@ class LlamaCppClient:
             raise LlmError(extras.missing_message("llm", error)) from error
 
         logger.info(f"Loading local model {self.settings.model_path} (downloads on first use)")
-        self._model = Llama(
+        _local_model = None  # free the previous model before loading the next
+        model = Llama(
             model_path=self.settings.model_path, n_ctx=self.settings.context_window, verbose=False
         )
-        return self._model
+        _local_model = (key, model)
+        return model
 
     async def list_models(self) -> list[ModelInfo]:
         if not self.settings.model_path:
@@ -205,11 +234,12 @@ class LlamaCppClient:
         messages.append({"role": "user", "content": prompt})
 
         def run() -> Any:
-            return self._load().create_chat_completion(
-                messages=messages,
-                temperature=options.get("temperature", self.settings.temperature),
-                max_tokens=options.get("max_tokens", self.settings.max_tokens),
-            )
+            with _local_model_lock:
+                return self._load().create_chat_completion(
+                    messages=messages,
+                    temperature=options.get("temperature", self.settings.temperature),
+                    max_tokens=options.get("max_tokens", self.settings.max_tokens),
+                )
 
         try:
             payload = await asyncio.to_thread(run)
@@ -235,6 +265,7 @@ class LlamaCppClient:
 
 def build_client(settings: LlmSettings, http_client: httpx.AsyncClient | None = None) -> LlmClient:
     """The client for the configured provider."""
+    release_local_model(settings)
     if settings.provider == "openai_compatible":
         return OpenAiCompatibleClient(settings, http_client)
     if settings.provider == "llama_cpp":
