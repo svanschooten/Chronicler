@@ -138,7 +138,14 @@ arithmetic. The rename is the fix; there is no behaviour change.
 ## Local model lifetime
 
 A local `.gguf` is loaded once and kept, keyed by path and context size, so consecutive
-summaries do not reload it. Choosing another model or context size replaces it.
+summaries do not reload it. Choosing another model or context size replaces it, and
+switching to a gateway or to no provider drops it: `build_client` and `discover_models`
+release it whenever the settings they are given no longer use it.
+
+All clients share that one model, and llama.cpp is not thread-safe, so a lock covers each
+load and generation. `asyncio.to_thread` cannot stop a generation, so a summary stopped
+mid-way leaves its thread running; the next one waits for it instead of sharing the model
+under it.
 
 ## When the model list is empty
 

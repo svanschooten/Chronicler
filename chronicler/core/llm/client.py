@@ -1,6 +1,7 @@
 """Talking to a language model, wherever it runs."""
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -132,6 +133,22 @@ Clients are built per task, so the model has to outlive them or each summary rel
 Asking for a different model replaces it.
 """
 
+_local_model_lock = threading.Lock()
+"""Held while the shared model loads or generates. llama.cpp is not thread-safe, and
+`asyncio.to_thread` cannot stop a generation: a task stopped mid-summary leaves its thread
+running, and the next summary must wait for it rather than share the model."""
+
+
+def release_local_model(settings: LlmSettings) -> None:
+    """
+    Drops the shared GGUF model unless `settings` still use it, so switching to a gateway
+    or to no provider frees its memory. A generation already running keeps its own
+    reference and finishes; the model is freed once it does.
+    """
+    global _local_model
+    if settings.provider != "llama_cpp":
+        _local_model = None
+
 
 class LlamaCppClient:
     """An in-process GGUF model, for running without any server at all."""
@@ -178,11 +195,12 @@ class LlamaCppClient:
         messages.append({"role": "user", "content": prompt})
 
         def run() -> Any:
-            return self._load().create_chat_completion(
-                messages=messages,
-                temperature=options.get("temperature", self.settings.temperature),
-                max_tokens=options.get("max_tokens", self.settings.max_tokens),
-            )
+            with _local_model_lock:
+                return self._load().create_chat_completion(
+                    messages=messages,
+                    temperature=options.get("temperature", self.settings.temperature),
+                    max_tokens=options.get("max_tokens", self.settings.max_tokens),
+                )
 
         try:
             payload = await asyncio.to_thread(run)
@@ -202,6 +220,7 @@ class LlamaCppClient:
 
 def build_client(settings: LlmSettings, http_client: httpx.AsyncClient | None = None) -> LlmClient:
     """The client for the configured provider."""
+    release_local_model(settings)
     if settings.provider == "openai_compatible":
         return OpenAiCompatibleClient(settings, http_client)
     if settings.provider == "llama_cpp":

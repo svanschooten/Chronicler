@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 import pytest
 
@@ -334,3 +336,55 @@ class TestLocalModelLifetime:
         self._load(model_path="b.gguf", context_window=8192)
 
         assert factory.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_generations_never_overlap(self, monkeypatch):
+        """llama.cpp is not thread-safe, and every client now shares one model."""
+        import threading
+        import time
+
+        from chronicler.core.llm.client import LlamaCppClient
+
+        state = {"running": 0, "most": 0}
+        guard = threading.Lock()
+
+        def generate(**_kwargs):
+            with guard:
+                state["running"] += 1
+                state["most"] = max(state["most"], state["running"])
+            time.sleep(0.05)
+            with guard:
+                state["running"] -= 1
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+        factory = self._factory(monkeypatch)
+        factory.return_value.create_chat_completion.side_effect = generate
+        values = {"provider": "llama_cpp", "model_path": "a.gguf"}
+        clients = [LlamaCppClient(LlmSettings(**values)) for _ in range(3)]
+
+        await asyncio.gather(*(client.complete("x") for client in clients))
+
+        assert state["most"] == 1
+        assert factory.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_switching_away_from_the_local_model_frees_it(self, monkeypatch):
+        from chronicler.core.llm import client as client_module
+
+        self._factory(monkeypatch)
+        self._load()
+        build_client(settings())
+        assert client_module._local_model is None
+
+        self._load()
+        await discover_models(LlmSettings())
+        assert client_module._local_model is None
+
+    def test_using_the_local_model_keeps_it(self, monkeypatch):
+        from chronicler.core.llm import client as client_module
+
+        self._factory(monkeypatch)
+        self._load()
+        build_client(LlmSettings(provider="llama_cpp", model_path="a.gguf", context_window=4096))
+
+        assert client_module._local_model is not None
