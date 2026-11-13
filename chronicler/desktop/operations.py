@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 
 import flet as ft
 
+from chronicler.core.audio_files import AUDIO_EXTENSIONS
 from chronicler.core.models import Chronicle
 from chronicler.core.services.chronicle_service import ChronicleService
 from chronicler.core.services.task_service import TaskService
@@ -24,7 +25,6 @@ from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
 
-AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "flac", "ogg"]
 TRANSCRIPT_EXTENSIONS = ["txt"]
 PROJECT_EXTENSIONS = ["db"]
 

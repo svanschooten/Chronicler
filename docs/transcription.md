@@ -40,6 +40,9 @@ Models are cached by `(model_size, device, compute_type)`, not by size alone. Sw
 device or precision has to build a new model; keying on size alone would silently hand
 back a CPU model after the user selected CUDA.
 
+Only the most recently used model stays loaded: loading a different one drops the previous,
+so trying several sizes does not keep them all in memory.
+
 ## What a run recorded
 
 The effective language and model are written onto the source record

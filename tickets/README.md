@@ -219,13 +219,13 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [x] [078-L16 Archive search can show results for an earlier query](078-L16_archive_search_out_of_order.md) · low · XS
 
-- [ ] [079-L17 Some model replies crash the summary or end up in it](079-L17_llm_reply_shapes.md) · low · XS
+- [x] [079-L17 Some model replies crash the summary or end up in it](079-L17_llm_reply_shapes.md) · low · XS
 
-- [ ] [048-L4 Any file in sources/ counts as an audio track](048-L4_audio_file_filter.md) · low · XS
+- [x] [048-L4 Any file in sources/ counts as an audio track](048-L4_audio_file_filter.md) · low · XS
 
-- [ ] [050-L6 The summary recap is not budgeted](050-L6_recap_budget.md) · low · S
+- [x] [050-L6 The summary recap is not budgeted](050-L6_recap_budget.md) · low · S
 
-- [ ] [052-L8 Local models reload too often or are never released](052-L8_model_lifetimes.md) · low · S
+- [x] [052-L8 Local models reload too often or are never released](052-L8_model_lifetimes.md) · low · S
 
 - [x] [037-P2 Zip exports hold everything in memory](037-P2_streamed_zip_export.md) · medium · M · after 028
 

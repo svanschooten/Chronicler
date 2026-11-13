@@ -89,8 +89,8 @@ whether it is talking to a local instance or a remote one.
 ## Refusals keep their message
 
 A service refuses some things in words meant for the user: an unknown chronicle, a transcript
-with no real timestamps for subtitles, a rejected regex. `rpc.refusals()` lists those
-classes. The route wrapper sends one as a 404 (`LookupError`) or 422, with
+with no real timestamps for subtitles, a rejected regex, a file that is not audio.
+`rpc.refusals()` lists those classes. The route wrapper sends one as a 404 (`LookupError`) or 422, with
 `{"detail": {"error": "<class name>", "message": "..."}}`, and `RemoteServiceProxy` raises
 the same exception class with the same message, so `str(error)` and an `except` clause read
 as they do against a local service.

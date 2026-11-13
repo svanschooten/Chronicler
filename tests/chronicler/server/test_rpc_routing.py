@@ -650,3 +650,9 @@ async def test_only_a_temp_file_is_streamed_and_deleted(tmp_path):
         assert not handed_over.exists()
     finally:
         await db_manager.close_all()
+
+def test_a_file_that_is_not_audio_is_explained_as_unprocessable():
+    from chronicler.core.audio_files import UnsupportedAudioError
+    from chronicler.core.rpc import refusal_for
+
+    assert refusal_for(UnsupportedAudioError("x")) == ("UnsupportedAudioError", 422)

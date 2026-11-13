@@ -3,7 +3,7 @@
 import logging
 
 from chronicler.core.config_sections import LlmSettings
-from chronicler.core.llm.client import LlmError, build_client
+from chronicler.core.llm.client import LlmError, build_client, release_local_model
 from chronicler.core.models import ModelCheck
 
 logger = logging.getLogger(__name__)
@@ -15,6 +15,7 @@ async def discover_models(settings: LlmSettings) -> ModelCheck:
     explicitly configured model is offered, with the reason attached.
     """
     if not settings.is_configured:
+        release_local_model(settings)
         return ModelCheck()
 
     try:

@@ -37,6 +37,17 @@ transcript → [chunk → bullet points] × n → recap
 A transcript short enough to fit in one request skips the chunking entirely and goes
 straight to a recap — one round trip instead of several.
 
+Every request is budgeted against its own prompt: `budget_characters` takes the prompt the
+text goes with. A chunk must fit beside both the chunk prompt and the recap prompt, because
+a transcript that fits in one chunk goes out with the recap prompt instead.
+
+When the chunk notes together are too long for one recap, they are grouped in order and
+each group is merged with `condense_prompt`, repeating until they fit, and only then is the
+recap written. Each pass leaves fewer notes, so this ends. If no two notes fit one
+condensing request, it fails with an error naming `llm.context_window` before the recap is
+paid for, instead of sending a request that would overflow. The condensing calls count in
+the token totals; `chunk_summaries` still holds the first-level notes.
+
 `chunk_transcript` splits on **speaker turns**, never mid-turn. A single turn longer than
 the budget becomes its own oversized chunk rather than being cut in half: losing speaker
 attribution mid-sentence costs more than the overrun.
@@ -58,11 +69,13 @@ Deleting one is explicit and confirmed.
 
 ## Prompts
 
-Three templates, all in `SummarySettings` and all overridable per task:
+Four templates, all in `SummarySettings`. The first three are also overridable per task:
 
 * `system_prompt` — the standing instruction, plus a language request when one is set
 * `chunk_prompt` — what to extract from one section
 * `recap_prompt` — how to turn the notes into prose
+* `condense_prompt` — how to merge notes when there are too many for one recap. Only very
+  long transcripts use it
 
 Defaults live in settings and are editable in the settings panel. A per-task override
 applies to that run only and is stored with the summary, so a summary always records the
@@ -134,6 +147,28 @@ own button behave identically and neither can queue a task that cannot run.
 Both were called `max_tokens` and both defaulted to 1024, so raising the summary one
 looked like it would let the model write more and actually only changed the chunking
 arithmetic. The rename is the fix; there is no behaviour change.
+
+## Local model lifetime
+
+A local `.gguf` is loaded once and kept, keyed by path and context size, so consecutive
+summaries do not reload it. Choosing another model or context size replaces it, and
+switching to a gateway or to no provider drops it: `build_client` and `discover_models`
+release it whenever the settings they are given no longer use it.
+
+All clients share that one model, and llama.cpp is not thread-safe, so a lock covers each
+load and generation. `asyncio.to_thread` cannot stop a generation, so a summary stopped
+mid-way leaves its thread running; the next one waits for it instead of sharing the model
+under it.
+
+## Replies with no text, and reasoning
+
+A reasoning model that spends its whole `llm.max_tokens` thinking returns `null` content.
+That, or a reply that is only reasoning, fails with an error naming the finish reason; when
+it is `length`, raise `llm.max_tokens`. Reasoning before the answer is removed from every
+reply, so it never reaches a chunk note or the saved summary. That covers a reply that
+starts with `<think>...</think>`, and one that only holds the closing tag because the chat
+template already opened the block (Qwen3 and DeepSeek-R1 served by llama.cpp or Ollama). A
+`<think>` later in the text is part of the answer and stays.
 
 ## When the model list is empty
 

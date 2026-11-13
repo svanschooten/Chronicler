@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 import pytest
 
@@ -130,11 +132,108 @@ class TestOpenAiCompatibleClient:
             await OpenAiCompatibleClient(settings(), stub_server(handler)).complete("x")
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("finish_reason", "match"),
+        [("length", "Raise llm.max_tokens"), ("stop", "finish reason: stop")],
+    )
+    async def test_a_null_reply_is_an_llm_error(self, finish_reason, match):
+        def handler(_request):
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": None}, "finish_reason": finish_reason}]},
+            )
+
+        with pytest.raises(LlmError, match=match):
+            await OpenAiCompatibleClient(settings(), stub_server(handler)).complete("x")
+
+    @pytest.mark.asyncio
+    async def test_a_leading_think_block_is_dropped(self):
+        def handler(_request):
+            content = "<think>\nhmm, the user wants\na recap</think>\n\nA recap."
+            return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+        result = await OpenAiCompatibleClient(settings(), stub_server(handler)).complete("x")
+
+        assert result.text == "A recap."
+
+    @pytest.mark.asyncio
+    async def test_a_reply_of_only_unfinished_reasoning_is_an_error(self):
+        def handler(_request):
+            body = {
+                "choices": [
+                    {"message": {"content": "<think>still going"}, "finish_reason": "length"}
+                ]
+            }
+            return httpx.Response(200, json=body)
+
+        with pytest.raises(LlmError, match="Raise llm.max_tokens"):
+            await OpenAiCompatibleClient(settings(), stub_server(handler)).complete("x")
+
+    @pytest.mark.asyncio
     async def test_a_missing_base_url_is_refused(self):
         client = OpenAiCompatibleClient(LlmSettings(provider="openai_compatible", model="m"))
 
         with pytest.raises(LlmNotConfiguredError):
             await client.complete("x")
+
+
+class TestReasoningReplies:
+    @pytest.mark.parametrize(
+        ("content", "expected"),
+        [
+            ("<think>\nhmm</think>\n\nA recap.", "A recap."),
+            # The chat template opened the block, so only the closing tag is in the reply.
+            ("the user wants a recap\n</think>\n\nA recap.", "A recap."),
+            ("A recap that mentions <think> tags.", "A recap that mentions <think> tags."),
+            ("A recap. <think>aside</think> More.", "A recap. <think>aside</think> More."),
+        ],
+    )
+    def test_reasoning_before_the_answer_is_removed(self, content, expected):
+        from chronicler.core.llm.client import reply_text
+
+        assert reply_text(content, "stop") == expected
+
+    @pytest.mark.asyncio
+    async def test_the_local_model_gets_the_same_treatment(self, monkeypatch):
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from chronicler.core.llm.client import LlamaCppClient
+
+        model = MagicMock()
+        monkeypatch.setitem(
+            sys.modules, "llama_cpp", SimpleNamespace(Llama=MagicMock(return_value=model))
+        )
+        client = LlamaCppClient(LlmSettings(provider="llama_cpp", model_path="a.gguf"))
+
+        model.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": "reasoning</think>A recap."}}]
+        }
+        assert (await client.complete("x")).text == "A recap."
+
+        model.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": None}, "finish_reason": "length"}]
+        }
+        with pytest.raises(LlmError, match="Raise llm.max_tokens"):
+            await client.complete("x")
+
+    @pytest.mark.asyncio
+    async def test_a_summary_from_a_reasoning_model_holds_no_reasoning(self):
+        def handler(_request):
+            content = "<think>\nwhat matters here</think>\n\n- a point"
+            return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+        client = OpenAiCompatibleClient(settings(), stub_server(handler))
+        lines = [line("x" * 200) for _ in range(20)]
+
+        draft = await summarize_transcript(
+            client, lines, SummarySettings(chunk_token_budget=64), context_window=256
+        )
+
+        assert draft.chunk_count > 1
+        assert draft.content == "- a point"
+        assert all(note == "- a point" for note in draft.chunk_summaries)
 
 
 class TestDiscoverModels:
@@ -255,6 +354,82 @@ class TestSummarizeTranscript:
         assert len(client.prompts) == draft.chunk_count + 1
         assert draft.chunk_summaries
 
+    class _WindowedClient:
+        """
+        Refuses a request that does not fit the context window, the way a server does: the
+        prompt and system prompt, at four characters a token, plus room for the answer.
+        Chunk and condensing prompts get notes of `note_length`, the recap gets "recap".
+        """
+
+        def __init__(self, settings, context_window, note_length):
+            self.settings = settings
+            self.context_window = context_window
+            self.note_length = note_length
+            self.prompts = []
+
+        async def list_models(self):
+            return []
+
+        async def complete(self, prompt, system=None, model=None, **options):
+            from chronicler.core.llm import Completion
+
+            tokens = (len(prompt) + len(system or "")) // 4 + self.settings.chunk_token_budget
+            if tokens > self.context_window:
+                raise LlmError(f"{tokens} tokens do not fit {self.context_window}")
+            self.prompts.append(prompt)
+            if prompt.startswith(self.settings.recap_prompt):
+                return Completion(text="recap", model="stub")
+            return Completion(text="n" * self.note_length, model="stub")
+
+    @pytest.mark.asyncio
+    async def test_notes_too_long_for_one_recap_are_condensed_first(self):
+        from chronicler.core.processing.summarizer import budget_characters
+
+        settings = SummarySettings()
+        condense_budget = budget_characters(settings, 2048, settings.condense_prompt)
+        # Three notes fit one condensing request, so every pass makes progress, but the
+        # first set of notes is far too long for one recap.
+        client = self._WindowedClient(settings, 2048, note_length=condense_budget // 3)
+        lines = [line("x" * 200) for _ in range(60)]
+
+        draft = await summarize_transcript(client, lines, settings, context_window=2048)
+
+        assert draft.content == "recap"
+        assert client.prompts[-1].startswith(settings.recap_prompt)
+        condensing = [p for p in client.prompts if p.startswith(settings.condense_prompt)]
+        assert condensing
+        assert len(draft.chunk_summaries) == draft.chunk_count
+
+    @pytest.mark.asyncio
+    async def test_a_long_recap_prompt_is_budgeted(self):
+        """
+        Chunks were sized for the chunk prompt only, so a transcript that fit one chunk went
+        out with a longer recap prompt and overflowed.
+        """
+        settings = SummarySettings(recap_prompt="Write a recap. " + "Be thorough. " * 230)
+        client = self._WindowedClient(settings, 4096, note_length=40)
+        lines = [line("x" * 200) for _ in range(50)]
+
+        draft = await summarize_transcript(client, lines, settings, context_window=4096)
+
+        assert draft.content == "recap"
+        assert draft.chunk_count > 1
+
+    @pytest.mark.asyncio
+    async def test_notes_that_cannot_be_condensed_are_refused_before_the_recap(self):
+        from chronicler.core.processing.summarizer import budget_characters
+
+        settings = SummarySettings()
+        condense_budget = budget_characters(settings, 2048, settings.condense_prompt)
+        # No two notes fit one condensing request, so no pass could make progress.
+        client = self._WindowedClient(settings, 2048, note_length=condense_budget // 2 + 10)
+        lines = [line("x" * 200) for _ in range(60)]
+
+        with pytest.raises(LlmError, match="Raise llm.context_window"):
+            await summarize_transcript(client, lines, settings, context_window=2048)
+
+        assert not any(p.startswith(settings.recap_prompt) for p in client.prompts)
+
     @pytest.mark.asyncio
     async def test_token_usage_is_accumulated(self):
         client = self._Client()
@@ -294,3 +469,95 @@ class TestSummarizeTranscript:
     async def test_an_empty_transcript_is_refused(self):
         with pytest.raises(ValueError):
             await summarize_transcript(self._Client(), [], SummarySettings(), context_window=8192)
+
+
+class TestLocalModelLifetime:
+    @pytest.fixture(autouse=True)
+    def _fresh(self, monkeypatch):
+        from chronicler.core.llm import client as client_module
+
+        monkeypatch.setattr(client_module, "_local_model", None)
+
+    @staticmethod
+    def _factory(monkeypatch):
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        factory = MagicMock()
+        monkeypatch.setitem(sys.modules, "llama_cpp", SimpleNamespace(Llama=factory))
+        return factory
+
+    def _load(self, **overrides):
+        from chronicler.core.llm.client import LlamaCppClient
+
+        values = {"provider": "llama_cpp", "model_path": "a.gguf", "context_window": 4096}
+        return LlamaCppClient(LlmSettings(**{**values, **overrides}))._load()
+
+    def test_two_clients_load_the_model_once(self, monkeypatch):
+        factory = self._factory(monkeypatch)
+        first = self._load()
+        second = self._load()
+
+        assert first is second
+        assert factory.call_count == 1
+
+    def test_another_model_or_context_size_replaces_it(self, monkeypatch):
+        factory = self._factory(monkeypatch)
+        self._load()
+        self._load(model_path="b.gguf")
+        self._load(model_path="b.gguf", context_window=8192)
+
+        assert factory.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_generations_never_overlap(self, monkeypatch):
+        """llama.cpp is not thread-safe, and every client now shares one model."""
+        import threading
+        import time
+
+        from chronicler.core.llm.client import LlamaCppClient
+
+        state = {"running": 0, "most": 0}
+        guard = threading.Lock()
+
+        def generate(**_kwargs):
+            with guard:
+                state["running"] += 1
+                state["most"] = max(state["most"], state["running"])
+            time.sleep(0.05)
+            with guard:
+                state["running"] -= 1
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+        factory = self._factory(monkeypatch)
+        factory.return_value.create_chat_completion.side_effect = generate
+        values = {"provider": "llama_cpp", "model_path": "a.gguf"}
+        clients = [LlamaCppClient(LlmSettings(**values)) for _ in range(3)]
+
+        await asyncio.gather(*(client.complete("x") for client in clients))
+
+        assert state["most"] == 1
+        assert factory.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_switching_away_from_the_local_model_frees_it(self, monkeypatch):
+        from chronicler.core.llm import client as client_module
+
+        self._factory(monkeypatch)
+        self._load()
+        build_client(settings())
+        assert client_module._local_model is None
+
+        self._load()
+        await discover_models(LlmSettings())
+        assert client_module._local_model is None
+
+    def test_using_the_local_model_keeps_it(self, monkeypatch):
+        from chronicler.core.llm import client as client_module
+
+        self._factory(monkeypatch)
+        self._load()
+        build_client(LlmSettings(provider="llama_cpp", model_path="a.gguf", context_window=4096))
+
+        assert client_module._local_model is not None

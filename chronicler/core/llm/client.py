@@ -1,6 +1,7 @@
 """Talking to a language model, wherever it runs."""
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -46,6 +47,43 @@ class LlmClient(Protocol):
     async def complete(
         self, prompt: str, system: str | None = None, model: str | None = None, **options: Any
     ) -> Completion: ...
+
+
+_OPEN_THINK = "<think>"
+_CLOSE_THINK = "</think>"
+
+
+def strip_reasoning(content: str) -> str:
+    """``content`` without the reasoning a model put before its answer.
+
+    Two shapes are common. The model writes ``<think>...</think>`` itself, or the chat
+    template already opened the block, so the reply starts mid-reasoning and only the
+    closing tag shows (Qwen3 and DeepSeek-R1 served by llama.cpp or Ollama). A block that
+    never closes is all reasoning, so nothing is left. A ``<think>`` later in the text is
+    part of the answer and stays.
+    """
+    text = content.lstrip()
+    end = text.find(_CLOSE_THINK)
+    if text.startswith(_OPEN_THINK):
+        return "" if end < 0 else text[end + len(_CLOSE_THINK) :]
+    if end >= 0 and _OPEN_THINK not in text[:end]:
+        return text[end + len(_CLOSE_THINK) :]
+    return text
+
+
+def reply_text(content: Any, finish_reason: str | None) -> str:
+    """The usable text of a model reply, without the reasoning before it.
+
+    Raises ``LlmError`` when nothing usable is left: reasoning models return null content, or
+    only reasoning, when they spend their whole token budget thinking.
+    """
+    text = strip_reasoning(content).strip() if isinstance(content, str) else ""
+    if not text:
+        hint = " Raise llm.max_tokens." if finish_reason == "length" else ""
+        raise LlmError(
+            f"The model returned no text (finish reason: {finish_reason or 'unknown'}).{hint}"
+        )
+    return text
 
 
 class OpenAiCompatibleClient:
@@ -112,17 +150,43 @@ class OpenAiCompatibleClient:
         payload = await self._request("POST", "/chat/completions", json=body)
 
         try:
-            text = payload["choices"][0]["message"]["content"]
+            choice = payload["choices"][0]
+            content = choice["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:
             raise LlmError(f"Unexpected response shape from the model: {payload}") from error
+        text = reply_text(content, choice.get("finish_reason"))
 
         usage = payload.get("usage") or {}
         return Completion(
-            text=text.strip(),
+            text=text,
             model=payload.get("model") or body["model"] or "unknown",
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
         )
+
+
+_local_model: tuple[tuple[str, int], Any] | None = None
+"""The one loaded GGUF model, keyed by path and context size, shared by every client.
+
+Clients are built per task, so the model has to outlive them or each summary reloads it.
+Asking for a different model replaces it.
+"""
+
+_local_model_lock = threading.Lock()
+"""Held while the shared model loads or generates. llama.cpp is not thread-safe, and
+`asyncio.to_thread` cannot stop a generation: a task stopped mid-summary leaves its thread
+running, and the next summary must wait for it rather than share the model."""
+
+
+def release_local_model(settings: LlmSettings) -> None:
+    """
+    Drops the shared GGUF model unless `settings` still use it, so switching to a gateway
+    or to no provider frees its memory. A generation already running keeps its own
+    reference and finishes; the model is freed once it does.
+    """
+    global _local_model
+    if settings.provider != "llama_cpp":
+        _local_model = None
 
 
 class LlamaCppClient:
@@ -130,13 +194,15 @@ class LlamaCppClient:
 
     def __init__(self, settings: LlmSettings):
         self.settings = settings
-        self._model: Any = None
 
     def _load(self) -> Any:
-        if self._model is not None:
-            return self._model
+        global _local_model
         if not self.settings.model_path:
             raise LlmNotConfiguredError("No model_path configured for the local model")
+
+        key = (self.settings.model_path, self.settings.context_window)
+        if _local_model is not None and _local_model[0] == key:
+            return _local_model[1]
 
         try:
             from llama_cpp import Llama
@@ -144,10 +210,12 @@ class LlamaCppClient:
             raise LlmError(extras.missing_message("llm", error)) from error
 
         logger.info(f"Loading local model {self.settings.model_path} (downloads on first use)")
-        self._model = Llama(
+        _local_model = None  # free the previous model before loading the next
+        model = Llama(
             model_path=self.settings.model_path, n_ctx=self.settings.context_window, verbose=False
         )
-        return self._model
+        _local_model = (key, model)
+        return model
 
     async def list_models(self) -> list[ModelInfo]:
         if not self.settings.model_path:
@@ -166,11 +234,12 @@ class LlamaCppClient:
         messages.append({"role": "user", "content": prompt})
 
         def run() -> Any:
-            return self._load().create_chat_completion(
-                messages=messages,
-                temperature=options.get("temperature", self.settings.temperature),
-                max_tokens=options.get("max_tokens", self.settings.max_tokens),
-            )
+            with _local_model_lock:
+                return self._load().create_chat_completion(
+                    messages=messages,
+                    temperature=options.get("temperature", self.settings.temperature),
+                    max_tokens=options.get("max_tokens", self.settings.max_tokens),
+                )
 
         try:
             payload = await asyncio.to_thread(run)
@@ -179,9 +248,15 @@ class LlamaCppClient:
         except Exception as error:
             raise LlmError(f"Local model failed: {error}") from error
 
+        try:
+            choice = payload["choices"][0]
+            text = reply_text(choice["message"]["content"], choice.get("finish_reason"))
+        except (KeyError, IndexError, TypeError) as error:
+            raise LlmError(f"Unexpected response from the local model: {payload}") from error
+
         usage = payload.get("usage") or {}
         return Completion(
-            text=payload["choices"][0]["message"]["content"].strip(),
+            text=text,
             model=model or self.settings.model_path or "local",
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
@@ -190,6 +265,7 @@ class LlamaCppClient:
 
 def build_client(settings: LlmSettings, http_client: httpx.AsyncClient | None = None) -> LlmClient:
     """The client for the configured provider."""
+    release_local_model(settings)
     if settings.provider == "openai_compatible":
         return OpenAiCompatibleClient(settings, http_client)
     if settings.provider == "llama_cpp":
