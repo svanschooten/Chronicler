@@ -233,6 +233,20 @@ class TestWindow:
         assert _texts(editor)[0] == "Line 0"
         assert editor.pager.visible is False
 
+    @pytest.mark.asyncio
+    async def test_editing_again_reopens_the_window_left_last_time(self, make_editor):
+        """
+        The view keeps one editor, and leaving edit mode to read a passage and coming
+        back should not mean paging all the way there again.
+        """
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+        await _press(editor, editor.next_button)
+
+        await editor.load()
+
+        assert _texts(editor)[0] == f"Line {WINDOW_SIZE}"
+
 
 class TestEditingText:
     @pytest.mark.asyncio

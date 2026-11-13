@@ -91,6 +91,10 @@ Deleting a line reloads the same window rather than going back to the first; if 
 window no longer exists, because its only line was deleted, it falls back to the last one.
 Moving to another window scrolls back to its top.
 
+The view keeps one editor for as long as the chronicle is open, so finishing editing and
+starting again reopens the window you left, not the first one. Leaving edit mode to read
+a passage should not mean paging back to where you were.
+
 A text field saves on blur, and moving the window blurs it, so an edit is not lost by
 paging away. The save goes to the line itself, not to the row, so it does not matter that
 the row is gone by then.
