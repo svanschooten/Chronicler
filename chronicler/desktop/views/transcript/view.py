@@ -343,6 +343,9 @@ class TranscriptView(ft.Column):
         block, which is what makes it readable, and that is exactly what cannot be edited
         line by line. See docs/transcript-editing.md.
         """
+        if self.editing:
+            # Before the editor leaves the screen: its fields send no blur once removed.
+            await self.editor.save_unsaved()
         self.editing = not self.editing
         self.edit_toggle.icon = ft.Icons.DONE if self.editing else ft.Icons.EDIT
         self.edit_toggle.tooltip = t("transcript.done") if self.editing else t("transcript.edit")
@@ -353,7 +356,10 @@ class TranscriptView(ft.Column):
         _repaint(self.edit_toggle, self.timestamps_checkbox, self.find_field, self.transcript_body)
 
         if self.editing:
-            await self.editor.load()
+            # With a find showing, editing opens on its first match rather than on
+            # whatever window was left last time.
+            first_match = self.found_lines[0].id if self.found_lines else None
+            await self.editor.load(show_line=first_match)
         else:
             await self.load_transcript()
 

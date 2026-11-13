@@ -16,6 +16,7 @@ MESSAGES = {
         "close": "Sluiten",
         "unknown": "Onbekend",
         "ok": "OK",
+        "thousands_separator": ".",
     },
     "settings": {
         "title": "Instellingen",
@@ -192,6 +193,12 @@ MESSAGES = {
         "edit": "Transcript bewerken",
         "done": "Bewerken afronden",
         "delete_line": "Deze regel verwijderen",
+        "line_window": "Regels {first}-{last} van {total}",
+        "line_window_timed": "Regels {first}-{last} van {total} · {start}-{end}",
+        "first_lines": "Eerste regels",
+        "previous_lines": "Vorige regels",
+        "next_lines": "Volgende regels",
+        "last_lines": "Laatste regels",
         "fullscreen": "Volledig scherm",
         "fullscreen_exit": "Volledig scherm verlaten",
         "delete_line_title": "Deze regel verwijderen?",
@@ -199,6 +206,7 @@ MESSAGES = {
             'Dit verwijdert "{excerpt}" uit het transcript. Dit kan niet worden teruggedraaid.'
         ),
         "save_failed": "Kan de wijziging niet opslaan: {error}",
+        "line_save_failed": "Kan de regel op {time} niet opslaan: {error}",
         "title": "Transcript",
         "loading": "Transcript laden...",
         "empty": "Transcript is leeg of wordt nog verwerkt.",

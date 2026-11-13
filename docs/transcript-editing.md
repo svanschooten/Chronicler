@@ -78,6 +78,67 @@ text visible after a failed write is the worse option: it looks saved.
 Editing one line does **not** reload the list. Reloading would throw away the caret
 position and the scroll position on every keystroke-and-tab.
 
+## A window of rows, not all of them
+
+The example transcript has 1,686 lines. Building a row for each, with every speaker as an
+option in every row's dropdown, came to 18,546 controls and about 0.4-0.6 s on the Python
+side alone, before any of it was sent to the client and laid out.
+
+The editor shows `WINDOW_SIZE` (100) rows at a time. Above the list, a pager steps a
+window forward or back, or jumps to the first or last one, and says which lines are on
+screen ("Lines 101-200 of 1,686"). The same pager ends the list, so reaching the last line
+of a window leads straight on to the next without scrolling back up. A transcript that
+fits in one window gets no pager.
+
+When the timings are real, the label also gives the window's time span ("Lines 101-200
+of 1,686 · 00:04:10-00:08:19"). The reader shows times, not line numbers, so a time is
+what you know a passage by when you come from reading it. Timings that are only line
+indices (an import without timestamps) get no span, since it would read as a time.
+Deleting a line reloads the same window rather than going back to the first; if the
+window no longer exists, because its only line was deleted, it falls back to the last one.
+Moving to another window scrolls back to its top.
+
+The view keeps one editor for as long as the chronicle is open, so finishing editing and
+starting again, with no find showing, reopens the window you left, not the first one.
+Leaving edit mode to read a passage should not mean paging back to where you were.
+
+A text field saves on blur, but an edit does not rely on the blur when the rows are
+replaced. The Flet client sends no blur for a focused field that is taken off the screen,
+so paging, the reload after a delete, and finishing editing first save any text the
+window holds that its line does not. A field its blur already saved matches its line by
+then, so nothing is saved twice. The save goes to the line itself, not to the row, so it
+does not matter that the row is gone by then.
+
+The line takes the new text when the save starts, not when it ends, so paging straight
+back during a save rebuilds the row with the correction rather than with the old text. A
+failed save is undone only once the field's last running save ends: the line and the
+row on screen, which may be a rebuilt one, then get what the database is known to hold,
+the last text that saved or what the line held before. A failure that a later edit has
+already saved over is reported but takes nothing back.
+
+The reader's find does the searching, and edit mode picks it up: with a find showing,
+switching to edit mode opens a window that starts at the first match. It starts at that
+line rather than at the usual boundary (line 1,201 for a match on line 1,235) because a
+`ListView` cannot be scrolled to one of its rows, so the top of the window is the one
+place the line is sure to be seen. Paging from there moves a whole window at a time, and
+"last" still goes to the last whole window. A match that has since been deleted leaves
+the window where it was.
+
+With 100 rows that is about 1,100 controls. Measured in the desktop client on the example,
+under software rendering on a virtual display, edit mode shows its rows about 0.45 s after
+the click, and moving to the next window takes about 0.3 s.
+
+### Every row still carries every speaker
+
+Building each speaker dropdown's options only when it gets focus was tried and dropped.
+Clicking the arrow of an editable `Dropdown` in Flet 0.86 opens the menu without focusing
+the field, so `on_focus` never fires and the menu offers only the one name the row
+started with. The control has no event for the menu opening that could be used instead.
+The window already keeps the count small, so the rows keep their full option lists.
+
+A name typed into one row is added to the editor's list, so rows built after that, on
+another window or after a delete, offer it too.
+
 ## Speakers
 
 The speaker dropdown offers every name in the workspace, not just this chronicle's — same
