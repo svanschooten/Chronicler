@@ -342,6 +342,50 @@ class TestWindow:
         editor.line_list.scroll_to.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_a_line_to_show_opens_a_window_starting_at_it(self, make_editor):
+        """A ListView cannot scroll to a row, so the found line goes at the top."""
+        lines = _long(1686)
+        editor, _ = make_editor(lines)
+
+        await editor.load(show_line=lines[1234].id)
+
+        assert _texts(editor)[0] == "Line 1234"
+        assert "1,235-1,334" in editor.window_label.value
+
+    @pytest.mark.asyncio
+    async def test_a_line_near_the_end_still_starts_the_window(self, make_editor):
+        lines = _long(1686)
+        editor, _ = make_editor(lines)
+
+        await editor.load(show_line=lines[1680].id)
+
+        assert _texts(editor) == [f"Line {i}" for i in range(1680, 1686)]
+        assert editor.next_button.disabled
+
+    @pytest.mark.asyncio
+    async def test_paging_from_a_found_line_moves_a_whole_window(self, make_editor):
+        lines = _long(1686)
+        editor, _ = make_editor(lines)
+        await editor.load(show_line=lines[1234].id)
+
+        await _press(editor, editor.previous_button)
+        assert _texts(editor)[0] == "Line 1134"
+
+        await _press(editor, editor.last_button)
+        assert _texts(editor)[0] == "Line 1600"
+
+    @pytest.mark.asyncio
+    async def test_a_line_to_show_that_is_gone_keeps_the_window(self, make_editor):
+        """The match may have been deleted or cleaned away since the find ran."""
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+        await _press(editor, editor.next_button)
+
+        await editor.load(show_line=_line().id)
+
+        assert _texts(editor)[0] == f"Line {WINDOW_SIZE}"
+
+    @pytest.mark.asyncio
     async def test_editing_again_reopens_the_window_left_last_time(self, make_editor):
         """
         The view keeps one editor, and leaving edit mode to read a passage and coming

@@ -353,7 +353,10 @@ class TranscriptView(ft.Column):
         _repaint(self.edit_toggle, self.timestamps_checkbox, self.find_field, self.transcript_body)
 
         if self.editing:
-            await self.editor.load()
+            # With a find showing, editing opens on its first match rather than on
+            # whatever window was left last time.
+            first_match = self.found_lines[0].id if self.found_lines else None
+            await self.editor.load(show_line=first_match)
         else:
             await self.load_transcript()
 

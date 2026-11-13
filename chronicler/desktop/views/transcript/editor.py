@@ -8,6 +8,7 @@ edit touches exactly the line it was typed into. See docs/transcript-editing.md.
 """
 
 import logging
+import uuid
 from collections.abc import Awaitable, Callable
 
 import flet as ft
@@ -126,10 +127,16 @@ class TranscriptEditor(ft.Column):
         self.window_label = self.pager.label
         super().__init__(expand=True, controls=[self.pager, self.line_list])
 
-    async def load(self) -> None:
+    async def load(self, show_line: uuid.UUID | None = None) -> None:
         """
         Loads the lines and shows the window that was showing, so deleting a line on the
         fifth window does not throw the user back to the first.
+
+        `show_line` opens a window that starts at that line instead: the view passes the
+        first match of the reader's find, so editing goes straight to what was found. The
+        window starts at the line rather than at its usual boundary because a ListView
+        cannot be scrolled to one of its rows, so the top is the one place it is sure to
+        be seen.
         """
         try:
             lines = await self.transcript_service.get_transcript(self.chronicle.id)
@@ -147,7 +154,10 @@ class TranscriptEditor(ft.Column):
             self._show_message(t("transcript.empty"))
             return
 
-        await self._show_window(self.window_start)
+        start = self.window_start
+        if show_line is not None:
+            start = next((i for i, line in enumerate(self.ordered) if line.id == show_line), start)
+        await self._show_window(start)
 
     async def pager_clicked(self, e) -> None:
         last = self._last_window_start()
@@ -165,7 +175,12 @@ class TranscriptEditor(ft.Column):
         return (len(self.ordered) - 1) // WINDOW_SIZE * WINDOW_SIZE
 
     async def _show_window(self, start: int) -> None:
-        start = max(0, min(start, self._last_window_start()))
+        """
+        A window can start anywhere, not only on a multiple of `WINDOW_SIZE`, so one
+        opened on a found line keeps it at the top. Only a start past the end, left by
+        deleting the last window's only line, falls back to the last whole window.
+        """
+        start = self._last_window_start() if start >= len(self.ordered) else max(0, start)
         moved = start != self.window_start
         self.window_start = start
 
