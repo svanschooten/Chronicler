@@ -103,7 +103,7 @@ A window and not a search-and-jump: the reader's find already does the searching
 window is what you want when going through a transcript in order.
 
 With 100 rows that is about 1,100 controls. Measured in the desktop client on the example,
-under software rendering on a virtual display, edit mode shows its rows about 0.35 s after
+under software rendering on a virtual display, edit mode shows its rows about 0.45 s after
 the click, and moving to the next window takes about 0.3 s.
 
 ### Every row still carries every speaker
