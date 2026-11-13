@@ -213,7 +213,14 @@ class TranscriptEditor(ft.Column):
         return self.lines.get(self._line_id(control))
 
     async def text_blurred(self, e) -> None:
-        """A blur fires whether or not anything was typed, so unchanged text is ignored."""
+        """
+        A blur fires whether or not anything was typed, so unchanged text is ignored.
+
+        The line takes the typed text before the save is awaited, not after. Paging away
+        is what blurs the field, so paging straight back can rebuild the row while the
+        save is still running; built from the old text, that row would save the old text
+        over the correction the next time it is blurred.
+        """
         control = e.control
         line = self._line_for(control)
         if line is None:
@@ -223,11 +230,12 @@ class TranscriptEditor(ft.Column):
         if typed == line.text:
             return
 
-        if not await self._save(line, text=typed):
-            control.value = line.text
-            self._repaint(control)
-            return
+        previous = line.text
         line.text = typed
+        if not await self._save(line, text=typed):
+            line.text = previous
+            control.value = previous
+            self._repaint(control)
 
     async def speaker_changed(self, e) -> None:
         control = e.control
@@ -239,11 +247,14 @@ class TranscriptEditor(ft.Column):
         if not chosen or chosen == line.speaker_name:
             return
 
+        # Set before the save is awaited, for the same reason as in `text_blurred`.
+        previous = line.speaker_name
+        line.speaker_name = chosen
         if not await self._save(line, speaker_name=chosen):
-            control.value = line.speaker_name
+            line.speaker_name = previous
+            control.value = previous
             self._repaint(control)
             return
-        line.speaker_name = chosen
         if chosen not in self.speakers:
             self.speakers.append(chosen)
 

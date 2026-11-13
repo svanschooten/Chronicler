@@ -272,6 +272,49 @@ class TestEditingText:
         assert field.value == "Original"
 
     @pytest.mark.asyncio
+    async def test_paging_back_during_a_save_shows_the_new_text(self, make_editor):
+        """
+        Paging away blurs the field and starts the save; paging straight back rebuilds
+        the row. Built from the old text, it would save the old text over the new one.
+        """
+        editor, service = make_editor(_long(WINDOW_SIZE + 1))
+        await editor.load()
+        release = asyncio.Event()
+
+        async def slow_save(*args, **kwargs):
+            await release.wait()
+
+        service.update_line.side_effect = slow_save
+        field = _fields(_row(editor))["text"]
+        field.value = "Corrected"
+
+        saving = asyncio.create_task(editor.text_blurred(MagicMock(control=field)))
+        await asyncio.sleep(0)
+        await _press(editor, editor.next_button)
+        await _press(editor, editor.previous_button)
+        rebuilt = _fields(_row(editor))["text"]
+        release.set()
+        await saving
+
+        assert rebuilt.value == "Corrected"
+        await editor.text_blurred(MagicMock(control=rebuilt))
+        assert service.update_line.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_a_failed_save_puts_the_old_text_back_on_the_line(self, make_editor):
+        editor, service = make_editor(_long(WINDOW_SIZE + 1))
+        service.update_line.side_effect = RuntimeError("database is locked")
+        await editor.load()
+        field = _fields(_row(editor))["text"]
+        field.value = "Attempted"
+
+        await editor.text_blurred(MagicMock(control=field))
+        await _press(editor, editor.next_button)
+        await _press(editor, editor.previous_button)
+
+        assert _fields(_row(editor))["text"].value == "Line 0"
+
+    @pytest.mark.asyncio
     async def test_editing_does_not_reload_the_whole_list(self, make_editor):
         """Reloading on every blur would throw away the caret and the scroll position."""
         editor, service = make_editor([_line("One")])
@@ -305,6 +348,21 @@ class TestReassigningASpeaker:
         await editor.speaker_changed(MagicMock(control=_fields(_row(editor))["speaker"]))
 
         service.update_line.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_failed_speaker_save_puts_the_old_speaker_back(self, make_editor):
+        editor, service = make_editor([_line(speaker="Nyx")])
+        service.update_line.side_effect = RuntimeError("database is locked")
+        await editor.load()
+        field = _fields(_row(editor))["speaker"]
+        field.value = "Vale"
+
+        await editor.speaker_changed(MagicMock(control=field))
+
+        assert field.value == "Nyx"
+        assert editor.lines[_fields(_row(editor))["speaker"].data.split(":")[1]].speaker_name == (
+            "Nyx"
+        )
 
     @pytest.mark.asyncio
     async def test_a_new_name_is_offered_on_the_next_window(self, make_editor):
