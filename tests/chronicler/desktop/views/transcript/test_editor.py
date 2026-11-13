@@ -234,6 +234,28 @@ class TestWindow:
         assert editor.pager.visible is False
 
     @pytest.mark.asyncio
+    async def test_moving_to_another_window_scrolls_to_its_top(self, make_editor):
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+        editor.line_list.scroll_to = AsyncMock()
+
+        await _press(editor, editor.next_button)
+
+        editor.line_list.scroll_to.assert_awaited_once_with(offset=0)
+
+    @pytest.mark.asyncio
+    async def test_reloading_the_same_window_keeps_the_scroll_position(self, make_editor):
+        """A delete reloads the window; jumping to its top would lose your place."""
+        editor, _ = make_editor(_long(250))
+        await editor.load()
+        await _press(editor, editor.next_button)
+        editor.line_list.scroll_to = AsyncMock()
+
+        await editor.load()
+
+        editor.line_list.scroll_to.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_editing_again_reopens_the_window_left_last_time(self, make_editor):
         """
         The view keeps one editor, and leaving edit mode to read a passage and coming
