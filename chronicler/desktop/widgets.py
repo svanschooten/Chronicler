@@ -44,6 +44,7 @@ def searchable_dropdown(
     width: int | None = None,
     data: str | None = None,
     on_select=None,
+    options_on_focus: bool = False,
 ) -> ft.Dropdown:
     """
     A dropdown for a list nobody wants to scroll: models, speakers, anything open-ended.
@@ -61,12 +62,21 @@ def searchable_dropdown(
     by the client and writing it back changes nothing on screen, while `value` is the
     selection and does repaint the field. Leaving without choosing puts the selection back.
 
+    `options_on_focus` is for a screen with many of these at once, like the transcript
+    editor's speaker column: each one starts with only its own value as an option and gets
+    the rest when it is focused. `options` is read at that moment, so a caller can keep
+    adding to the same list. See docs/transcript-editing.md.
+
     See docs/desktop.md.
     """
     remembered = value
 
     def clear_for_typing(event):
         nonlocal remembered
+        if options_on_focus:
+            current = event.control.value
+            names = options if not current or current in options else [current, *options]
+            event.control.options = _options(names)
         remembered = event.control.value
         event.control.value = None
         _repaint(event.control)
@@ -76,12 +86,16 @@ def searchable_dropdown(
             event.control.value = remembered
             _repaint(event.control)
 
+    initial = options
+    if options_on_focus:
+        initial = [value] if value else []
+
     return ft.Dropdown(
         label=label,
         width=width,
         data=data,
         value=value,
-        options=[ft.DropdownOption(key=option, text=option) for option in options],
+        options=_options(initial),
         editable=True,
         enable_filter=True,
         menu_height=MENU_HEIGHT,
@@ -89,6 +103,10 @@ def searchable_dropdown(
         on_focus=clear_for_typing,
         on_blur=restore_if_nothing_chosen,
     )
+
+
+def _options(names: list[str]) -> list[ft.DropdownOption]:
+    return [ft.DropdownOption(key=name, text=name) for name in names]
 
 
 def chosen_value(control: ft.Control) -> str:

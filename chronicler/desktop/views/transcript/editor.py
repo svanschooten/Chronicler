@@ -24,6 +24,7 @@ from chronicler.i18n import t
 logger = logging.getLogger(__name__)
 
 CONFIRMATION_EXCERPT = 60
+WINDOW_SIZE = 100
 
 
 def describe_transcript_error(error: BaseException) -> str:
@@ -49,10 +50,45 @@ class TranscriptEditor(ft.Column):
         self.on_changed = on_changed
 
         self.lines: dict[str, TranscriptLine] = {}
+        self.ordered: list[TranscriptLine] = []
+        self.speakers: list[str] = []
+        self.window_start = 0
+
         self.line_list = ft.ListView(spacing=6, expand=True)
-        super().__init__(expand=True, controls=[self.line_list])
+        self.first_button = self._pager_button(ft.Icons.FIRST_PAGE, "transcript.first_lines")
+        self.previous_button = self._pager_button(
+            ft.Icons.CHEVRON_LEFT, "transcript.previous_lines"
+        )
+        self.next_button = self._pager_button(ft.Icons.CHEVRON_RIGHT, "transcript.next_lines")
+        self.last_button = self._pager_button(ft.Icons.LAST_PAGE, "transcript.last_lines")
+        self.window_label = ft.Text(size=12, color=self.colors.muted)
+        self.pager = ft.Row(
+            visible=False,
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[
+                self.first_button,
+                self.previous_button,
+                self.window_label,
+                self.next_button,
+                self.last_button,
+            ],
+        )
+        super().__init__(expand=True, controls=[self.pager, self.line_list])
+
+    def _pager_button(self, icon: ft.IconData, tooltip_key: str) -> ft.IconButton:
+        return ft.IconButton(
+            icon=icon,
+            icon_size=18,
+            tooltip=t(tooltip_key),
+            on_click=self.pager_clicked,
+            data=tooltip_key,
+        )
 
     async def load(self) -> None:
+        """
+        Loads the lines and shows the window that was showing, so deleting a line on the
+        fifth window does not throw the user back to the first.
+        """
         try:
             lines = await self.transcript_service.get_transcript(self.chronicle.id)
             speakers = await self.transcript_service.speaker_suggestions(self.chronicle.id)
@@ -62,24 +98,71 @@ class TranscriptEditor(ft.Column):
             return
 
         self.lines = {str(line.id): line for line in lines}
+        self.ordered = list(lines)
+        self.speakers = list(speakers)
         if not lines:
             self._show_message(t("transcript.empty"))
             return
 
-        self.line_list.controls = [self._row(line, speakers) for line in lines]
+        await self._show_window(self.window_start)
+
+    async def pager_clicked(self, e) -> None:
+        last = self._last_window_start()
+        target = {
+            "transcript.first_lines": 0,
+            "transcript.previous_lines": self.window_start - WINDOW_SIZE,
+            "transcript.next_lines": self.window_start + WINDOW_SIZE,
+            "transcript.last_lines": last,
+        }[e.control.data]
+        await self._show_window(target)
+
+    def _last_window_start(self) -> int:
+        if not self.ordered:
+            return 0
+        return (len(self.ordered) - 1) // WINDOW_SIZE * WINDOW_SIZE
+
+    async def _show_window(self, start: int) -> None:
+        start = max(0, min(start, self._last_window_start()))
+        moved = start != self.window_start
+        self.window_start = start
+
+        shown = self.ordered[start : start + WINDOW_SIZE]
+        self.line_list.controls = [self._row(line) for line in shown]
+
+        total = len(self.ordered)
+        self.pager.visible = total > WINDOW_SIZE
+        self.window_label.value = t(
+            "transcript.line_window",
+            first=f"{start + 1:,}",
+            last=f"{start + len(shown):,}",
+            total=f"{total:,}",
+        )
+        self.first_button.disabled = self.previous_button.disabled = start == 0
+        self.next_button.disabled = self.last_button.disabled = start + WINDOW_SIZE >= total
+
         self._refresh()
+        if moved:
+            await self._scroll_to_top()
+
+    async def _scroll_to_top(self) -> None:
+        """A new window should start at its first line, not where the last one was left."""
+        try:
+            await self.line_list.scroll_to(offset=0)
+        except (RuntimeError, AssertionError):
+            pass
 
     def _show_message(self, message: str) -> None:
+        self.pager.visible = False
         self.line_list.controls = [ft.Text(message, size=12, color=self.colors.muted)]
         self._refresh()
 
     def _refresh(self) -> None:
         try:
-            self.line_list.update()
+            self.update()
         except (RuntimeError, AssertionError):
             pass
 
-    def _row(self, line: TranscriptLine, speakers: list[str]) -> ft.Row:
+    def _row(self, line: TranscriptLine) -> ft.Row:
         """
         Each control carries `<field>:<line id>` so a handler knows which line it is for
         without the row having to be found again.
@@ -96,11 +179,12 @@ class TranscriptEditor(ft.Column):
                     font_family="monospace",
                 ),
                 searchable_dropdown(
-                    speakers,
+                    self.speakers,
                     value=line.speaker_name,
                     width=150,
                     data=f"speaker:{key}",
                     on_select=self.speaker_changed,
+                    options_on_focus=True,
                 ),
                 ft.TextField(
                     data=f"text:{key}",
@@ -161,6 +245,8 @@ class TranscriptEditor(ft.Column):
             self._repaint(control)
             return
         line.speaker_name = chosen
+        if chosen not in self.speakers:
+            self.speakers.append(chosen)
 
     async def _save(self, line: TranscriptLine, **changes) -> bool:
         try:
