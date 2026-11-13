@@ -106,3 +106,12 @@ whole transcript at once — see [cleaning.md](cleaning.md). Hand-deleting 232 c
 
 There is no undo. The scope here is correcting what a model misheard, not a document
 editor.
+
+## Planned: click-to-edit lines
+
+Wave 11 of [tickets/README.md](../tickets/README.md) (tickets 082-085) replaces the rows of
+form controls described above. Edit mode stays a separate view, but each line is shown as
+text in the reading view's style, the row highlights on hover, and clicking the speaker or
+the text opens that part's control in place. The design is in
+[superpowers/specs/2026-11-13-inline-transcript-editor-design.md](superpowers/specs/2026-11-13-inline-transcript-editor-design.md).
+Update this page in the same PR as each of those tickets.

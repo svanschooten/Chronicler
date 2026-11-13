@@ -30,4 +30,4 @@ work is needed.
 
 ### related tickets
 
-- none
+- (CLOSED BY) [082-F5_inline_transcript_editor](082-F5_inline_transcript_editor.md): rows become plain text, and a speaker dropdown is built only when a speaker is clicked
