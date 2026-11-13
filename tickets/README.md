@@ -7,6 +7,9 @@ private page until its owner shares it, and every ticket stands on its own witho
 Tickets 067-071 came out of reviewing the first merged work. Tickets 072-081 came out of a
 review of the whole application after wave 4, which also re-checked every open ticket
 against the code, re-baselined `TODO.md`, and set the order of the open waves below.
+Tickets 082-085 replace the form-style transcript editor with click-to-edit lines. Their
+design is in
+[docs/superpowers/specs/2026-11-13-inline-transcript-editor-design.md](../docs/superpowers/specs/2026-11-13-inline-transcript-editor-design.md).
 
 ## How to use this list
 
@@ -50,6 +53,8 @@ Merged tickets are left in for context.
 | Runtime locks | 016, 067, then 035 | Each regenerates `scripts/runtime/locks/`. Merge one, then regenerate on top of it |
 | CI workflow | 004 → 005 → 044 | Same file |
 | Release workflow | 081 → 059 | Same file |
+| Transcript editor | 036 → 041 → 082 → 084 → 085 | Same parts of `desktop/views/transcript/editor.py` and `desktop/widgets.py` |
+| Speaker matching | 040 → 043 → 083 | Same callers of `get_or_create_speaker` in the handlers and `TranscriptService` |
 
 ## Reading a ticket
 
@@ -229,7 +234,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [x] [037-P2 Zip exports hold everything in memory](037-P2_streamed_zip_export.md) · medium · M · after 028
 
-- [ ] [056-P5 The transcript editor builds every row up front](056-P5_editor_windowing.md) · low · M
+- [ ] [056-P5 The transcript editor builds every row up front](056-P5_editor_windowing.md) · low · closed by 082
 
 ### Wave 8: docs
 
@@ -275,7 +280,23 @@ Internal only, and the most likely to conflict, so these come after the user-fac
 
 - [ ] [043-S16 Split TranscriptService](043-S16_split_transcript_service.md) · low · M · after 041, 032, 037
 
-### Wave 11: waiting on a decision
+### Wave 11: a transcript editor that reads like the transcript
+
+Edit mode stays a separate view, but each line is shown as text, in the reading view's
+style, and clicking the speaker or the text opens that part's control in place. NPCs and
+other new speakers are ordinary speakers, added by typing a name. This comes after wave 10
+because 036 and 041 rewrite the same desktop files, and 040 and 043 reshape the speaker
+code 083 changes.
+
+- [ ] [083-L18 Typing a speaker in different case creates a second speaker in the chronicle](083-L18_speaker_case_duplicates.md) · low · S · after 040
+
+- [ ] [082-F5 The transcript editor looks like a form, not like the transcript](082-F5_inline_transcript_editor.md) · medium · M · after 036, 041
+
+- [ ] [084-F6 Adding a new speaker from the editor works but cannot be discovered](084-F6_new_speaker_in_editor.md) · low · S · after 082, 083
+
+- [ ] [085-F7 Correcting a run of lines needs the mouse for every line](085-F7_editor_keyboard_flow.md) · low · S · after 082
+
+### Wave 12: waiting on a decision
 
 Start only once one release of the runtime build has been used.
 
