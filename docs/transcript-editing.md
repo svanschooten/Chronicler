@@ -82,8 +82,7 @@ position and the scroll position on every keystroke-and-tab.
 
 The example transcript has 1,686 lines. Building a row for each, with every speaker as an
 option in every row's dropdown, came to 18,546 controls and about 0.4-0.6 s on the Python
-side alone, before any of it was sent to the client and laid out. Two changes keep that
-small.
+side alone, before any of it was sent to the client and laid out.
 
 The editor shows `WINDOW_SIZE` (100) rows at a time. Above the list, a pager steps a
 window forward or back, or jumps to the first or last one, and says which lines are on
@@ -99,10 +98,20 @@ the row is gone by then.
 A window and not a search-and-jump: the reader's find already does the searching, and a
 window is what you want when going through a transcript in order.
 
-Each speaker dropdown starts with only its own speaker as an option and gets the full list
-when it is focused (`searchable_dropdown(..., options_on_focus=True)`, in
-`chronicler/desktop/widgets.py`). That list is the editor's, so a name typed into one row
-is offered in every other row too, without a reload.
+With 100 rows that is about 1,100 controls. Measured in the desktop client on the example,
+under software rendering on a virtual display, edit mode shows its rows about 0.35 s after
+the click, and moving to the next window takes about 0.3 s.
+
+### Every row still carries every speaker
+
+Building each speaker dropdown's options only when it gets focus was tried and dropped.
+Clicking the arrow of an editable `Dropdown` in Flet 0.86 opens the menu without focusing
+the field, so `on_focus` never fires and the menu offers only the one name the row
+started with. The control has no event for the menu opening that could be used instead.
+The window already keeps the count small, so the rows keep their full option lists.
+
+A name typed into one row is added to the editor's list, so rows built after that, on
+another window or after a delete, offer it too.
 
 ## Speakers
 
