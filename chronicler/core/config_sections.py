@@ -182,6 +182,12 @@ DEFAULT_CHUNK_PROMPT = (
     "anything not carried forward. Do not add a preamble."
 )
 
+DEFAULT_CONDENSE_PROMPT = (
+    "Below are notes taken from consecutive sections of a transcript. Merge them into one "
+    "shorter list of single-line bullet points, keeping every event, decision and name that "
+    "matters and dropping repetition. Do not add a preamble."
+)
+
 DEFAULT_RECAP_PROMPT = (
     "Below are notes taken from a transcript. Write a flowing recap of what happened. "
     'Do not begin with "The session began with". Do not add a preamble or a title.'
@@ -200,10 +206,11 @@ class SummarySettings(BaseModel):
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     chunk_prompt: str = DEFAULT_CHUNK_PROMPT
     recap_prompt: str = DEFAULT_RECAP_PROMPT
+    condense_prompt: str = DEFAULT_CONDENSE_PROMPT
     chunk_token_budget: int = Field(default=1024, gt=0)
     language: str | None = None
 
-    @field_validator("system_prompt", "chunk_prompt", "recap_prompt")
+    @field_validator("system_prompt", "chunk_prompt", "recap_prompt", "condense_prompt")
     @classmethod
     def _require_text(cls, value: str) -> str:
         cleaned = value.strip()

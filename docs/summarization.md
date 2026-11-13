@@ -37,9 +37,15 @@ transcript → [chunk → bullet points] × n → recap
 A transcript short enough to fit in one request skips the chunking entirely and goes
 straight to a recap — one round trip instead of several.
 
-The recap prompt is budgeted like a chunk. When the chunk notes together are too long for
-one request, they are grouped in order and each group is condensed with the chunk prompt,
-repeating until they fit, and only then is the recap written. The condensing calls count in
+Every request is budgeted against its own prompt: `budget_characters` takes the prompt the
+text goes with. A chunk must fit beside both the chunk prompt and the recap prompt, because
+a transcript that fits in one chunk goes out with the recap prompt instead.
+
+When the chunk notes together are too long for one recap, they are grouped in order and
+each group is merged with `condense_prompt`, repeating until they fit, and only then is the
+recap written. Each pass leaves fewer notes, so this ends. If no two notes fit one
+condensing request, it fails with an error naming `llm.context_window` before the recap is
+paid for, instead of sending a request that would overflow. The condensing calls count in
 the token totals; `chunk_summaries` still holds the first-level notes.
 
 `chunk_transcript` splits on **speaker turns**, never mid-turn. A single turn longer than
@@ -63,11 +69,13 @@ Deleting one is explicit and confirmed.
 
 ## Prompts
 
-Three templates, all in `SummarySettings` and all overridable per task:
+Four templates, all in `SummarySettings`. The first three are also overridable per task:
 
 * `system_prompt` — the standing instruction, plus a language request when one is set
 * `chunk_prompt` — what to extract from one section
 * `recap_prompt` — how to turn the notes into prose
+* `condense_prompt` — how to merge notes when there are too many for one recap. Only very
+  long transcripts use it
 
 Defaults live in settings and are editable in the settings panel. A per-task override
 applies to that run only and is stored with the summary, so a summary always records the
