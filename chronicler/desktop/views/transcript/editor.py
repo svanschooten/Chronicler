@@ -259,11 +259,21 @@ class TranscriptEditor(ft.Column):
             self.speakers.append(chosen)
 
     async def _save(self, line: TranscriptLine, **changes) -> bool:
+        """
+        The failure names the line by its time: paging away is what starts a save, so by
+        the time it fails the row may no longer be on screen.
+        """
         try:
             await self.transcript_service.update_line(self.chronicle.id, line.id, **changes)
         except Exception as error:
             logger.exception("Could not save a transcript line")
-            self.show_snackbar(t("transcript.save_failed", error=error))
+            self.show_snackbar(
+                t(
+                    "transcript.line_save_failed",
+                    time=format_timestamp(line.start_time),
+                    error=error,
+                )
+            )
             return False
         return True
 

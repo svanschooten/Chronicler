@@ -210,6 +210,7 @@ MESSAGES = {
             "Das kann nicht rueckgaengig gemacht werden."
         ),
         "save_failed": "Aenderung konnte nicht gespeichert werden: {error}",
+        "line_save_failed": "Die Zeile bei {time} konnte nicht gespeichert werden: {error}",
         "title": "Transkript",
         "loading": "Transkript wird geladen...",
         "empty": "Transkript ist leer oder wird noch verarbeitet.",

@@ -204,6 +204,7 @@ MESSAGES = {
             'This removes "{excerpt}" from the transcript. This cannot be undone.'
         ),
         "save_failed": "Could not save the change: {error}",
+        "line_save_failed": "Could not save the line at {time}: {error}",
         "title": "Transcript",
         "loading": "Loading transcript...",
         "empty": "Transcript is empty or still processing.",

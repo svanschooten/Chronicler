@@ -349,6 +349,19 @@ class TestEditingText:
         assert service.update_line.await_count == 1
 
     @pytest.mark.asyncio
+    async def test_a_failed_save_says_which_line_it_was(self, make_editor):
+        """Paging away starts the save, so the row may be gone by the time it fails."""
+        editor, service = make_editor([_line("Original", start=3725.0)])
+        service.update_line.side_effect = RuntimeError("database is locked")
+        await editor.load()
+        field = _fields(_row(editor))["text"]
+        field.value = "Attempted"
+
+        await editor.text_blurred(MagicMock(control=field))
+
+        assert "01:02:05" in editor.show_snackbar.call_args[0][0]
+
+    @pytest.mark.asyncio
     async def test_a_failed_save_puts_the_old_text_back_on_the_line(self, make_editor):
         editor, service = make_editor(_long(WINDOW_SIZE + 1))
         service.update_line.side_effect = RuntimeError("database is locked")
