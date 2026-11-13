@@ -78,6 +78,32 @@ text visible after a failed write is the worse option: it looks saved.
 Editing one line does **not** reload the list. Reloading would throw away the caret
 position and the scroll position on every keystroke-and-tab.
 
+## A window of rows, not all of them
+
+The example transcript has 1,686 lines. Building a row for each, with every speaker as an
+option in every row's dropdown, came to 18,546 controls and about 0.4-0.6 s on the Python
+side alone, before any of it was sent to the client and laid out. Two changes keep that
+small.
+
+The editor shows `WINDOW_SIZE` (100) rows at a time. Above the list, a pager steps a
+window forward or back, or jumps to the first or last one, and says which lines are on
+screen ("Lines 101-200 of 1,686"). A transcript that fits in one window gets no pager.
+Deleting a line reloads the same window rather than going back to the first; if the
+window no longer exists, because its only line was deleted, it falls back to the last one.
+Moving to another window scrolls back to its top.
+
+A text field saves on blur, and moving the window blurs it, so an edit is not lost by
+paging away. The save goes to the line itself, not to the row, so it does not matter that
+the row is gone by then.
+
+A window and not a search-and-jump: the reader's find already does the searching, and a
+window is what you want when going through a transcript in order.
+
+Each speaker dropdown starts with only its own speaker as an option and gets the full list
+when it is focused (`searchable_dropdown(..., options_on_focus=True)`, in
+`chronicler/desktop/widgets.py`). That list is the editor's, so a name typed into one row
+is offered in every other row too, without a reload.
+
 ## Speakers
 
 The speaker dropdown offers every name in the workspace, not just this chronicle's — same
