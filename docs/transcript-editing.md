@@ -99,12 +99,22 @@ window no longer exists, because its only line was deleted, it falls back to the
 Moving to another window scrolls back to its top.
 
 The view keeps one editor for as long as the chronicle is open, so finishing editing and
-starting again, with no find showing, reopens the window you left, not the first one. Leaving edit mode to read
-a passage should not mean paging back to where you were.
+starting again, with no find showing, reopens the window you left, not the first one.
+Leaving edit mode to read a passage should not mean paging back to where you were.
 
-A text field saves on blur, and moving the window blurs it, so an edit is not lost by
-paging away. The save goes to the line itself, not to the row, so it does not matter that
-the row is gone by then.
+A text field saves on blur, but an edit does not rely on the blur when the rows are
+replaced. The Flet client sends no blur for a focused field that is taken off the screen,
+so paging, the reload after a delete, and finishing editing first save any text the
+window holds that its line does not. A field its blur already saved matches its line by
+then, so nothing is saved twice. The save goes to the line itself, not to the row, so it
+does not matter that the row is gone by then.
+
+The line takes the new text when the save starts, not when it ends, so paging straight
+back during a save rebuilds the row with the correction rather than with the old text. A
+failed save is undone only once the field's last running save ends: the line and the
+row on screen, which may be a rebuilt one, then get what the database is known to hold,
+the last text that saved or what the line held before. A failure that a later edit has
+already saved over is reported but takes nothing back.
 
 The reader's find does the searching, and edit mode picks it up: with a find showing,
 switching to edit mode opens a window that starts at the first match. It starts at that

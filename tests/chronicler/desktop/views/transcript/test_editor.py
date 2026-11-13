@@ -144,8 +144,8 @@ class TestWindow:
         assert len(_rows(editor)) == WINDOW_SIZE
         assert _texts(editor)[0] == "Line 0"
         assert editor.pager.visible is True
-        assert "1-100" in editor.window_label.value
-        assert "1,686" in editor.window_label.value
+        assert "1-100" in editor.pager.label.value
+        assert "1,686" in editor.pager.label.value
 
     @pytest.mark.asyncio
     async def test_the_line_count_is_written_the_local_way(self, make_editor):
@@ -156,17 +156,17 @@ class TestWindow:
         finally:
             set_locale("en")
 
-        assert "1.686" in editor.window_label.value
+        assert "1.686" in editor.pager.label.value
 
     @pytest.mark.asyncio
     async def test_next_and_previous_move_one_window(self, make_editor):
         editor, _ = make_editor(_long(250))
         await editor.load()
 
-        await _press(editor, editor.next_button)
+        await _press(editor, editor.pager.next_button)
         assert _texts(editor)[0] == f"Line {WINDOW_SIZE}"
 
-        await _press(editor, editor.previous_button)
+        await _press(editor, editor.pager.previous_button)
         assert _texts(editor)[0] == "Line 0"
 
     @pytest.mark.asyncio
@@ -174,11 +174,11 @@ class TestWindow:
         editor, _ = make_editor(_long(250))
         await editor.load()
 
-        await _press(editor, editor.last_button)
+        await _press(editor, editor.pager.last_button)
         assert _texts(editor) == [f"Line {i}" for i in range(200, 250)]
-        assert "201-250" in editor.window_label.value
+        assert "201-250" in editor.pager.label.value
 
-        await _press(editor, editor.first_button)
+        await _press(editor, editor.pager.first_button)
         assert _texts(editor)[0] == "Line 0"
 
     @pytest.mark.asyncio
@@ -197,10 +197,10 @@ class TestWindow:
         editor, _ = make_editor(lines)
         await editor.load()
 
-        await _press(editor, editor.next_button)
+        await _press(editor, editor.pager.next_button)
 
-        assert "00:04:10-00:08:19" in editor.window_label.value
-        assert "101-200" in editor.window_label.value
+        assert "00:04:10-00:08:19" in editor.pager.label.value
+        assert "101-200" in editor.pager.label.value
 
     @pytest.mark.asyncio
     async def test_line_indices_are_not_shown_as_a_time_span(self, make_editor):
@@ -218,7 +218,7 @@ class TestWindow:
 
         await editor.load()
 
-        assert ":" not in editor.window_label.value
+        assert ":" not in editor.pager.label.value
 
     @pytest.mark.asyncio
     async def test_a_long_transcript_ends_each_window_with_a_pager(self, make_editor):
@@ -229,7 +229,7 @@ class TestWindow:
 
         assert editor.line_list.controls[-1] is editor.bottom_pager
         assert editor.bottom_pager.visible is True
-        assert editor.bottom_pager.label.value == editor.window_label.value
+        assert editor.bottom_pager.label.value == editor.pager.label.value
 
     @pytest.mark.asyncio
     async def test_a_short_transcript_has_no_pager_at_the_end(self, make_editor):
@@ -248,7 +248,7 @@ class TestWindow:
         await _press(editor, editor.bottom_pager.next_button)
 
         assert _texts(editor)[0] == f"Line {WINDOW_SIZE}"
-        assert editor.bottom_pager.label.value == editor.window_label.value
+        assert editor.bottom_pager.label.value == editor.pager.label.value
         editor.line_list.scroll_to.assert_awaited_once_with(offset=0)
 
     @pytest.mark.asyncio
@@ -267,19 +267,19 @@ class TestWindow:
         editor, _ = make_editor(_long(250))
         await editor.load()
 
-        assert editor.first_button.disabled and editor.previous_button.disabled
-        assert not editor.next_button.disabled
+        assert editor.pager.first_button.disabled and editor.pager.previous_button.disabled
+        assert not editor.pager.next_button.disabled
 
-        await _press(editor, editor.last_button)
+        await _press(editor, editor.pager.last_button)
 
-        assert editor.next_button.disabled and editor.last_button.disabled
-        assert not editor.previous_button.disabled
+        assert editor.pager.next_button.disabled and editor.pager.last_button.disabled
+        assert not editor.pager.previous_button.disabled
 
     @pytest.mark.asyncio
     async def test_a_line_on_a_later_window_still_saves(self, make_editor):
         editor, service = make_editor(_long(250))
         await editor.load()
-        await _press(editor, editor.next_button)
+        await _press(editor, editor.pager.next_button)
         field = _fields(_row(editor))["text"]
         field.value = "Corrected"
 
@@ -293,7 +293,7 @@ class TestWindow:
         editor, service = make_editor(lines)
         attach_page(TranscriptEditor)
         await editor.load()
-        await _press(editor, editor.next_button)
+        await _press(editor, editor.pager.next_button)
         button = _fields(_row(editor))["delete"]
         service.get_transcript.return_value = lines[:100] + lines[101:]
 
@@ -311,7 +311,7 @@ class TestWindow:
         lines = _long(101)
         editor, service = make_editor(lines)
         await editor.load()
-        await _press(editor, editor.last_button)
+        await _press(editor, editor.pager.last_button)
         service.get_transcript.return_value = lines[:100]
 
         await editor.load()
@@ -325,7 +325,7 @@ class TestWindow:
         await editor.load()
         editor.line_list.scroll_to = AsyncMock()
 
-        await _press(editor, editor.next_button)
+        await _press(editor, editor.pager.next_button)
 
         editor.line_list.scroll_to.assert_awaited_once_with(offset=0)
 
@@ -334,7 +334,7 @@ class TestWindow:
         """A delete reloads the window; jumping to its top would lose your place."""
         editor, _ = make_editor(_long(250))
         await editor.load()
-        await _press(editor, editor.next_button)
+        await _press(editor, editor.pager.next_button)
         editor.line_list.scroll_to = AsyncMock()
 
         await editor.load()
@@ -350,7 +350,7 @@ class TestWindow:
         await editor.load(show_line=lines[1234].id)
 
         assert _texts(editor)[0] == "Line 1234"
-        assert "1,235-1,334" in editor.window_label.value
+        assert "1,235-1,334" in editor.pager.label.value
 
     @pytest.mark.asyncio
     async def test_a_line_near_the_end_still_starts_the_window(self, make_editor):
@@ -360,7 +360,7 @@ class TestWindow:
         await editor.load(show_line=lines[1680].id)
 
         assert _texts(editor) == [f"Line {i}" for i in range(1680, 1686)]
-        assert editor.next_button.disabled
+        assert editor.pager.next_button.disabled
 
     @pytest.mark.asyncio
     async def test_paging_from_a_found_line_moves_a_whole_window(self, make_editor):
@@ -368,10 +368,10 @@ class TestWindow:
         editor, _ = make_editor(lines)
         await editor.load(show_line=lines[1234].id)
 
-        await _press(editor, editor.previous_button)
+        await _press(editor, editor.pager.previous_button)
         assert _texts(editor)[0] == "Line 1134"
 
-        await _press(editor, editor.last_button)
+        await _press(editor, editor.pager.last_button)
         assert _texts(editor)[0] == "Line 1600"
 
     @pytest.mark.asyncio
@@ -379,7 +379,7 @@ class TestWindow:
         """The match may have been deleted or cleaned away since the find ran."""
         editor, _ = make_editor(_long(250))
         await editor.load()
-        await _press(editor, editor.next_button)
+        await _press(editor, editor.pager.next_button)
 
         await editor.load(show_line=_line().id)
 
@@ -393,7 +393,7 @@ class TestWindow:
         """
         editor, _ = make_editor(_long(250))
         await editor.load()
-        await _press(editor, editor.next_button)
+        await _press(editor, editor.pager.next_button)
 
         await editor.load()
 
@@ -468,8 +468,8 @@ class TestEditingText:
 
         saving = asyncio.create_task(editor.text_blurred(MagicMock(control=field)))
         await asyncio.sleep(0)
-        await _press(editor, editor.next_button)
-        await _press(editor, editor.previous_button)
+        await _press(editor, editor.pager.next_button)
+        await _press(editor, editor.pager.previous_button)
         rebuilt = _fields(_row(editor))["text"]
         release.set()
         await saving
@@ -500,10 +500,114 @@ class TestEditingText:
         field.value = "Attempted"
 
         await editor.text_blurred(MagicMock(control=field))
-        await _press(editor, editor.next_button)
-        await _press(editor, editor.previous_button)
+        await _press(editor, editor.pager.next_button)
+        await _press(editor, editor.pager.previous_button)
 
         assert _fields(_row(editor))["text"].value == "Line 0"
+
+    @pytest.mark.asyncio
+    async def test_a_save_failing_after_paging_back_repaints_the_rebuilt_row(self, make_editor):
+        """The row that started the save is gone; the one on screen must not look saved."""
+        editor, service = make_editor(_long(WINDOW_SIZE + 1))
+        await editor.load()
+        release = asyncio.Event()
+
+        async def failing_save(*args, **kwargs):
+            await release.wait()
+            raise RuntimeError("database is locked")
+
+        service.update_line.side_effect = failing_save
+        field = _fields(_row(editor))["text"]
+        field.value = "Attempted"
+
+        saving = asyncio.create_task(editor.text_blurred(MagicMock(control=field)))
+        await asyncio.sleep(0)
+        await _press(editor, editor.pager.next_button)
+        await _press(editor, editor.pager.previous_button)
+        rebuilt = _fields(_row(editor))["text"]
+        release.set()
+        await saving
+
+        assert rebuilt.value == "Line 0"
+        assert editor.ordered[0].text == "Line 0"
+
+    @pytest.mark.asyncio
+    async def test_a_failure_after_a_later_edit_saved_keeps_the_later_edit(self, make_editor):
+        """
+        The first save fails after a second edit of the same line has saved. Putting back
+        the text from before the first would show the line as unedited while the
+        database holds the second edit, and the next blur would see nothing to save.
+        """
+        editor, service = make_editor([_line("Original")])
+        await editor.load()
+        release_first = asyncio.Event()
+
+        async def save(chronicle_id, line_id, **changes):
+            if changes["text"] == "First":
+                await release_first.wait()
+                raise RuntimeError("database is locked")
+
+        service.update_line.side_effect = save
+        field = _fields(_row(editor))["text"]
+        field.value = "First"
+        first = asyncio.create_task(editor.text_blurred(MagicMock(control=field)))
+        await asyncio.sleep(0)
+        field.value = "Second"
+        await editor.text_blurred(MagicMock(control=field))
+        release_first.set()
+        await first
+
+        assert field.value == "Second"
+        assert editor.ordered[0].text == "Second"
+
+    @pytest.mark.asyncio
+    async def test_a_later_failure_puts_back_the_last_text_that_saved(self, make_editor):
+        editor, service = make_editor([_line("Original")])
+        await editor.load()
+        release_second = asyncio.Event()
+
+        async def save(chronicle_id, line_id, **changes):
+            if changes["text"] == "Second":
+                await release_second.wait()
+                raise RuntimeError("database is locked")
+
+        service.update_line.side_effect = save
+        field = _fields(_row(editor))["text"]
+        field.value = "First"
+        await editor.text_blurred(MagicMock(control=field))
+        field.value = "Second"
+        second = asyncio.create_task(editor.text_blurred(MagicMock(control=field)))
+        await asyncio.sleep(0)
+        release_second.set()
+        await second
+
+        assert field.value == "First"
+        assert editor.ordered[0].text == "First"
+
+    @pytest.mark.asyncio
+    async def test_paging_saves_text_whose_blur_never_came(self, make_editor):
+        """The Flet client sends no blur for a focused field it takes off the screen."""
+        editor, service = make_editor(_long(WINDOW_SIZE + 1))
+        await editor.load()
+        _fields(_row(editor))["text"].value = "Typed, never blurred"
+
+        await _press(editor, editor.pager.next_button)
+
+        service.update_line.assert_awaited_once()
+        assert service.update_line.await_args.kwargs["text"] == "Typed, never blurred"
+        assert editor.ordered[0].text == "Typed, never blurred"
+
+    @pytest.mark.asyncio
+    async def test_paging_after_a_blur_saves_nothing_twice(self, make_editor):
+        editor, service = make_editor(_long(WINDOW_SIZE + 1))
+        await editor.load()
+        field = _fields(_row(editor))["text"]
+        field.value = "Corrected"
+
+        await editor.text_blurred(MagicMock(control=field))
+        await _press(editor, editor.pager.next_button)
+
+        service.update_line.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_editing_does_not_reload_the_whole_list(self, make_editor):
@@ -556,6 +660,31 @@ class TestReassigningASpeaker:
         )
 
     @pytest.mark.asyncio
+    async def test_a_speaker_failing_after_paging_back_repaints_the_rebuilt_row(self, make_editor):
+        editor, service = make_editor(_long(WINDOW_SIZE + 1))
+        await editor.load()
+        release = asyncio.Event()
+
+        async def failing_save(*args, **kwargs):
+            await release.wait()
+            raise RuntimeError("database is locked")
+
+        service.update_line.side_effect = failing_save
+        field = _fields(_row(editor))["speaker"]
+        field.value = "Vale"
+
+        saving = asyncio.create_task(editor.speaker_changed(MagicMock(control=field)))
+        await asyncio.sleep(0)
+        await _press(editor, editor.pager.next_button)
+        await _press(editor, editor.pager.previous_button)
+        rebuilt = _fields(_row(editor))["speaker"]
+        release.set()
+        await saving
+
+        assert rebuilt.value == "Nyx"
+        assert editor.ordered[0].speaker_name == "Nyx"
+
+    @pytest.mark.asyncio
     async def test_a_new_name_is_offered_on_the_next_window(self, make_editor):
         editor, _ = make_editor(_long(WINDOW_SIZE + 1))
         await editor.load()
@@ -563,7 +692,7 @@ class TestReassigningASpeaker:
         first.value = "Morrow"
 
         await editor.speaker_changed(MagicMock(control=first))
-        await _press(editor, editor.next_button)
+        await _press(editor, editor.pager.next_button)
 
         options = [option.key for option in _fields(_row(editor))["speaker"].options]
         assert "Morrow" in options
@@ -613,6 +742,28 @@ class TestDeletingALine:
 
         service.delete_line.assert_awaited_once()
         editor.on_changed.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_text_typed_into_another_row_is_saved_before_the_reload(
+        self, make_editor, attach_page
+    ):
+        """The reload replaces every row, and a field taken off the screen sends no blur."""
+        kept, doomed = _line("Kept", start=0.0), _line("Doomed", start=1.0)
+        editor, service = make_editor([kept, doomed])
+        attach_page(TranscriptEditor)
+        await editor.load()
+        _fields(_row(editor, 0))["text"].value = "Kept, corrected"
+        service.get_transcript.return_value = [kept]
+
+        with patch(
+            "chronicler.desktop.views.transcript.editor.confirm",
+            new=AsyncMock(return_value=True),
+        ):
+            await editor.delete_clicked(MagicMock(control=_fields(_row(editor, 1))["delete"]))
+
+        service.update_line.assert_awaited_once()
+        assert service.update_line.await_args.args[1] == kept.id
+        assert _fields(_row(editor))["text"].value == "Kept, corrected"
 
     @pytest.mark.asyncio
     async def test_the_confirmation_quotes_the_line(self, make_editor, attach_page):

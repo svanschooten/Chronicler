@@ -7,9 +7,11 @@ mis-parsed line would silently rewrite the ones around it. One control per line 
 edit touches exactly the line it was typed into. See docs/transcript-editing.md.
 """
 
+import asyncio
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import flet as ft
 
@@ -38,8 +40,9 @@ def describe_transcript_error(error: BaseException) -> str:
 class LinePager(ft.Row):
     """First / previous / "Lines 101-200 of 1,686" / next / last, for the editor's window."""
 
-    def __init__(self, colors: ThemeColors, on_click: Callable[..., Awaitable[None]]):
-        self.on_click = on_click
+    def __init__(self, colors: ThemeColors, on_page: Callable[..., Awaitable[None]]):
+        # Not `on_click`: on a Row that name reads as the Row's own event.
+        self.on_page = on_page
         self.first_button = self._button(ft.Icons.FIRST_PAGE, "transcript.first_lines")
         self.previous_button = self._button(ft.Icons.CHEVRON_LEFT, "transcript.previous_lines")
         self.next_button = self._button(ft.Icons.CHEVRON_RIGHT, "transcript.next_lines")
@@ -62,7 +65,7 @@ class LinePager(ft.Row):
             icon=icon,
             icon_size=18,
             tooltip=t(tooltip_key),
-            on_click=self.on_click,
+            on_click=self.on_page,
             data=tooltip_key,
         )
 
@@ -93,6 +96,18 @@ class LinePager(ft.Row):
         self.next_button.disabled = self.last_button.disabled = start + WINDOW_SIZE >= total
 
 
+@dataclass
+class _Saves:
+    """
+    The saves still running for one field of one line, and the value the database is
+    known to hold: what the last save to succeed wrote, or what the line held before
+    the first of them started.
+    """
+
+    confirmed: str | None
+    pending: int = 0
+
+
 class TranscriptEditor(ft.Column):
     def __init__(
         self,
@@ -109,6 +124,8 @@ class TranscriptEditor(ft.Column):
         self.on_changed = on_changed
 
         self.lines: dict[str, TranscriptLine] = {}
+        # Keyed by (field, line id). See `_start_save`.
+        self._saves: dict[tuple[str, str], _Saves] = {}
         self.ordered: list[TranscriptLine] = []
         self.speakers: list[str] = []
         self.window_start = 0
@@ -120,11 +137,6 @@ class TranscriptEditor(ft.Column):
         # of a window leads straight on to the next without scrolling back up.
         self.pager = LinePager(colors, self.pager_clicked)
         self.bottom_pager = LinePager(colors, self.pager_clicked)
-        self.first_button = self.pager.first_button
-        self.previous_button = self.pager.previous_button
-        self.next_button = self.pager.next_button
-        self.last_button = self.pager.last_button
-        self.window_label = self.pager.label
         super().__init__(expand=True, controls=[self.pager, self.line_list])
 
     async def load(self, show_line: uuid.UUID | None = None) -> None:
@@ -167,6 +179,7 @@ class TranscriptEditor(ft.Column):
             "transcript.next_lines": self.window_start + WINDOW_SIZE,
             "transcript.last_lines": last,
         }[e.control.data]
+        await self.save_unsaved()
         await self._show_window(target)
 
     def _last_window_start(self) -> int:
@@ -266,14 +279,40 @@ class TranscriptEditor(ft.Column):
     def _line_for(self, control: ft.Control) -> TranscriptLine | None:
         return self.lines.get(self._line_id(control))
 
+    def _shown_control(self, prefix: str, line_id: str) -> ft.TextField | ft.Dropdown | None:
+        """The field on screen for one part of a line, if its row is in the window."""
+        data = f"{prefix}:{line_id}"
+        for row in self.line_list.controls:
+            for control in getattr(row, "controls", []):
+                if isinstance(control, ft.TextField | ft.Dropdown) and control.data == data:
+                    return control
+        return None
+
+    async def save_unsaved(self) -> None:
+        """
+        Saves any text typed into the window that its line does not hold yet. Called
+        before the rows are replaced (paging, reloading after a delete, leaving edit
+        mode), so an edit does not depend on the field's blur reaching us: the Flet
+        client sends no blur for a focused field that is removed from the screen. A
+        field the blur already saved matches its line by now, so nothing is saved twice.
+        """
+        saves = []
+        for row in self.line_list.controls:
+            for control in getattr(row, "controls", []):
+                if not isinstance(control, ft.TextField) or not control.data:
+                    continue
+                line = self._line_for(control)
+                typed = control.value or ""
+                if line is not None and typed != line.text:
+                    saves.append(self._start_save(line, "text", typed))
+        if saves:
+            await asyncio.gather(*saves)
+
     async def text_blurred(self, e) -> None:
         """
         A blur fires whether or not anything was typed, so unchanged text is ignored.
-
-        The line takes the typed text before the save is awaited, not after. Paging away
-        is what blurs the field, so paging straight back can rebuild the row while the
-        save is still running; built from the old text, that row would save the old text
-        over the correction the next time it is blurred.
+        See `_start_save` for when the line takes the new text, and how a failure is
+        undone.
         """
         control = e.control
         line = self._line_for(control)
@@ -284,12 +323,7 @@ class TranscriptEditor(ft.Column):
         if typed == line.text:
             return
 
-        previous = line.text
-        line.text = typed
-        if not await self._save(line, text=typed):
-            line.text = previous
-            control.value = previous
-            self._repaint(control)
+        await self._start_save(line, "text", typed)
 
     async def speaker_changed(self, e) -> None:
         control = e.control
@@ -301,16 +335,60 @@ class TranscriptEditor(ft.Column):
         if not chosen or chosen == line.speaker_name:
             return
 
-        # Set before the save is awaited, for the same reason as in `text_blurred`.
-        previous = line.speaker_name
-        line.speaker_name = chosen
-        if not await self._save(line, speaker_name=chosen):
-            line.speaker_name = previous
-            control.value = previous
-            self._repaint(control)
-            return
-        if chosen not in self.speakers:
+        if await self._start_save(line, "speaker_name", chosen) and chosen not in self.speakers:
             self.speakers.append(chosen)
+
+    def _start_save(self, line: TranscriptLine, field: str, value: str) -> Awaitable[bool]:
+        """
+        Puts `value` on the line now and returns the save to await.
+
+        The line takes the value before the save runs, not after. Paging away is what
+        blurs a text field, so paging straight back can rebuild the row while the save is
+        still running; built from the old text, that row would save the old text over the
+        correction the next time it is blurred.
+
+        That makes a failure harder to undo: by the time one save fails, a later edit of
+        the same field may have been saved, or still be running. So nothing is put back
+        until the field's last running save ends, and then the line and its row get the
+        value the database is known to hold.
+        """
+        key = (field, str(line.id))
+        saves = self._saves.get(key)
+        if saves is None:
+            saves = self._saves[key] = _Saves(confirmed=getattr(line, field))
+        saves.pending += 1
+        setattr(line, field, value)
+        return self._finish_save(line, field, value, saves)
+
+    async def _finish_save(
+        self, line: TranscriptLine, field: str, value: str, saves: _Saves
+    ) -> bool:
+        saved = await self._save(line, **{field: value})
+        saves.pending -= 1
+        if saved:
+            saves.confirmed = value
+        if saves.pending == 0:
+            self._saves.pop((field, str(line.id)), None)
+            self._settle(line, field, saves.confirmed)
+        return saved
+
+    def _settle(self, line: TranscriptLine, field: str, confirmed: str | None) -> None:
+        """
+        Gives the line, and the row showing it, the value the database holds. The row is
+        looked up again rather than taken from the event: by now the window may have
+        moved and come back, so the control that started the save may not be on screen.
+        A reload during the save may also have replaced the line object.
+        """
+        key = str(line.id)
+        setattr(line, field, confirmed)
+        current = self.lines.get(key)
+        if current is not None and current is not line:
+            setattr(current, field, confirmed)
+        prefix = "text" if field == "text" else "speaker"
+        control = self._shown_control(prefix, key)
+        if control is not None and control.value != confirmed:
+            control.value = confirmed
+            self._repaint(control)
 
     async def _save(self, line: TranscriptLine, **changes) -> bool:
         """
@@ -348,6 +426,9 @@ class TranscriptEditor(ft.Column):
         ):
             return
 
+        # Before the delete, so text still unsaved in this very row is not saved to a
+        # line that is gone.
+        await self.save_unsaved()
         try:
             await self.transcript_service.delete_line(self.chronicle.id, line.id)
         except Exception as error:

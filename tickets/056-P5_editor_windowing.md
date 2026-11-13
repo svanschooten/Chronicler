@@ -42,6 +42,10 @@ about 1,100 controls, and opens in about 0.45 s.
 - Building speaker options on focus was dropped: in Flet 0.86 clicking a dropdown's arrow
   opens the menu without focusing it, so `on_focus` never fires. Every row still carries
   every speaker, so `chronicler/desktop/widgets.py` is untouched.
+- Text still unsaved in the window is saved before its rows are replaced (paging, the
+  reload after a delete, finishing editing): the Flet client sends no blur for a focused
+  field it takes off the screen. A failed save is undone only once the line's last
+  running save ends, so it never takes back an edit that a later save has stored.
 
 Left open: the window caps the rows, not the options. A workspace with many speaker
 names still builds 100 x names options per window; only the example's 6 were measured.

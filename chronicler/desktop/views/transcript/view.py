@@ -343,6 +343,9 @@ class TranscriptView(ft.Column):
         block, which is what makes it readable, and that is exactly what cannot be edited
         line by line. See docs/transcript-editing.md.
         """
+        if self.editing:
+            # Before the editor leaves the screen: its fields send no blur once removed.
+            await self.editor.save_unsaved()
         self.editing = not self.editing
         self.edit_toggle.icon = ft.Icons.DONE if self.editing else ft.Icons.EDIT
         self.edit_toggle.tooltip = t("transcript.done") if self.editing else t("transcript.edit")

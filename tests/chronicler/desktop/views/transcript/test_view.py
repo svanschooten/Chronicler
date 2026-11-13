@@ -460,6 +460,22 @@ class TestEditMode:
         view.load_transcript.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_finishing_editing_saves_text_still_unsaved_first(self, make_view, attach_page):
+        """The editor's fields send no blur once they are off the screen."""
+        view = make_view()
+        attach_page(TranscriptView)
+        calls = []
+        view.editor.load = AsyncMock()
+        view.editor.save_unsaved = AsyncMock(side_effect=lambda: calls.append("save"))
+        view.load_transcript = AsyncMock(side_effect=lambda: calls.append("reload"))
+
+        await view.edit_toggled(MagicMock())
+        view.editor.save_unsaved.assert_not_awaited()
+        await view.edit_toggled(MagicMock())
+
+        assert calls == ["save", "reload"]
+
+    @pytest.mark.asyncio
     async def test_the_timestamp_checkbox_is_disabled_while_editing(self, make_view, attach_page):
         """Edit rows always show their own timestamp, so the read-view toggle means nothing."""
         view = make_view()
