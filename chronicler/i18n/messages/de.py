@@ -17,6 +17,7 @@ MESSAGES = {
         "close": "Schließen",
         "unknown": "Unbekannt",
         "ok": "OK",
+        "thousands_separator": ".",
     },
     "settings": {
         "title": "Einstellungen",

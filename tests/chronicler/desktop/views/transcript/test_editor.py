@@ -9,6 +9,7 @@ import pytest
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.transcript.editor import WINDOW_SIZE, TranscriptEditor
+from chronicler.i18n import set_locale
 
 
 def _line(text="Some words", speaker="Nyx", start=0.0):
@@ -140,6 +141,17 @@ class TestWindow:
         assert editor.pager.visible is True
         assert "1-100" in editor.window_label.value
         assert "1,686" in editor.window_label.value
+
+    @pytest.mark.asyncio
+    async def test_the_line_count_is_written_the_local_way(self, make_editor):
+        editor, _ = make_editor(_long(1686))
+        set_locale("de")
+        try:
+            await editor.load()
+        finally:
+            set_locale("en")
+
+        assert "1.686" in editor.window_label.value
 
     @pytest.mark.asyncio
     async def test_next_and_previous_move_one_window(self, make_editor):

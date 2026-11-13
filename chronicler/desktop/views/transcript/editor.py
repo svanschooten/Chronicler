@@ -19,7 +19,7 @@ from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.dialogs import confirm
 from chronicler.desktop.theme import ThemeColors
 from chronicler.desktop.widgets import chosen_value, searchable_dropdown
-from chronicler.i18n import t
+from chronicler.i18n import format_count, t
 
 logger = logging.getLogger(__name__)
 
@@ -133,9 +133,9 @@ class TranscriptEditor(ft.Column):
         self.pager.visible = total > WINDOW_SIZE
         self.window_label.value = t(
             "transcript.line_window",
-            first=f"{start + 1:,}",
-            last=f"{start + len(shown):,}",
-            total=f"{total:,}",
+            first=format_count(start + 1),
+            last=format_count(start + len(shown)),
+            total=format_count(total),
         )
         self.first_button.disabled = self.previous_button.disabled = start == 0
         self.next_button.disabled = self.last_button.disabled = start + WINDOW_SIZE >= total

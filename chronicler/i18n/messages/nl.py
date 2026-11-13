@@ -16,6 +16,7 @@ MESSAGES = {
         "close": "Sluiten",
         "unknown": "Onbekend",
         "ok": "OK",
+        "thousands_separator": ".",
     },
     "settings": {
         "title": "Instellingen",
