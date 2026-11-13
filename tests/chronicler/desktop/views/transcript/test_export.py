@@ -1,6 +1,7 @@
 """Tests for TranscriptExporter - the Export menu and save flow."""
 
 import asyncio
+import os
 from unittest.mock import AsyncMock, MagicMock
 
 import flet as ft
@@ -255,6 +256,26 @@ class TestZipExport:
 
         assert destination.read_bytes() == b"PK"
         assert not exported.exists()
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(os.name != "posix", reason="file modes are POSIX")
+    async def test_the_saved_file_is_not_left_private(self, make_exporter, tmp_path):
+        """A temporary file is owner-only and a move keeps that; the saved export must not."""
+        transcript_service = AsyncMock()
+        exported = _exported(tmp_path, b"PK")
+        exported.chmod(0o600)
+        transcript_service.export_zip.return_value = exported
+        exporter, picker = make_exporter(transcript_service=transcript_service)
+        exporter._page = lambda: None
+        destination = tmp_path / "chronicle.zip"
+        picker.save_file.return_value = str(destination)
+        umask = os.umask(0o022)
+        try:
+            await exporter.export_zip_clicked(_event())
+        finally:
+            os.umask(umask)
+
+        assert destination.stat().st_mode & 0o777 == 0o644
 
     @pytest.mark.asyncio
     async def test_a_cancelled_save_dialog_deletes_the_temporary_file(

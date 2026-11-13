@@ -12,10 +12,15 @@ from pydantic import BaseModel, Field
 
 from chronicler import __version__
 from chronicler.core.models import Chronicle
+from chronicler.core.rpc import TempFile
 
 MANIFEST_NAME = "chronicle.json"
 DATABASE_NAME = "project.db"
 SOURCES_DIR = "sources"
+
+UNCOMPRESSED_AUDIO = {".wav", ".aif", ".aiff"}
+"""Plain PCM, which still shrinks under DEFLATE. Other audio is already encoded and is
+stored as it is: compressing it gains almost nothing and costs seconds."""
 
 
 class BundleManifest(BaseModel):
@@ -61,18 +66,21 @@ def format_bundle(
     manifest: BundleManifest,
     root: str,
     sources: Sequence[Path] = (),
-) -> Path:
+    directory: Path | None = None,
+) -> TempFile:
     """
-    Packs a chronicle into a zip file and returns its path, which the caller must delete.
+    Packs a chronicle into a zip file in `directory` and returns its path, which the caller
+    must move or delete.
 
     Everything sits under one `root` folder so unpacking it somewhere busy leaves one
-    directory behind rather than loose files. The zip is written to a temporary file, never
-    held in memory: with audio it is hundreds of megabytes. Audio is stored, not
-    compressed - encoded audio gains almost nothing from DEFLATE and costs seconds.
+    directory behind rather than loose files. The zip is written to a file, never held in
+    memory: with audio it is hundreds of megabytes. `directory` defaults to the system's
+    temporary directory, which on some systems is memory too, so the service passes one on
+    the workspace's disk. Encoded audio is stored, not compressed; see UNCOMPRESSED_AUDIO.
     """
-    handle, name = tempfile.mkstemp(prefix="chronicler-", suffix=".zip")
+    handle, name = tempfile.mkstemp(prefix="chronicler-", suffix=".zip", dir=directory)
     os.close(handle)
-    archive = Path(name)
+    archive = TempFile(name)
     try:
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
             bundle.writestr(
@@ -81,8 +89,13 @@ def format_bundle(
             )
             bundle.write(project_db, f"{root}/{DATABASE_NAME}")
             for source in sources:
+                compression = (
+                    zipfile.ZIP_DEFLATED
+                    if source.suffix.lower() in UNCOMPRESSED_AUDIO
+                    else zipfile.ZIP_STORED
+                )
                 bundle.write(
-                    source, f"{root}/{SOURCES_DIR}/{source.name}", compress_type=zipfile.ZIP_STORED
+                    source, f"{root}/{SOURCES_DIR}/{source.name}", compress_type=compression
                 )
     except BaseException:
         archive.unlink(missing_ok=True)

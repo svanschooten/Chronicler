@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -17,6 +18,32 @@ from chronicler.desktop.widgets import amber_button
 from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
+
+
+def _new_file_mode() -> int:
+    """The mode a file this process creates gets: 0o666 less the umask."""
+    try:
+        with open("/proc/self/status", encoding="ascii") as status:
+            for line in status:
+                if line.startswith("Umask:"):
+                    return 0o666 & ~int(line.split()[1], 8)
+    except OSError:
+        pass
+    # Elsewhere the umask can only be read by setting it, so it is put straight back.
+    umask = os.umask(0o077)
+    os.umask(umask)
+    return 0o666 & ~umask
+
+
+def _move_into_place(temporary: Path, destination: str) -> None:
+    """
+    Moves an export made as a temporary file to where the user saved it. A temporary file
+    is readable only by its owner and a move keeps that, so the saved file gets the mode any
+    other new file would, as the in-memory exports do.
+    """
+    shutil.move(temporary, destination)
+    if os.name == "posix":
+        os.chmod(destination, _new_file_mode())
 
 
 class TranscriptExporter:
@@ -228,7 +255,7 @@ class TranscriptExporter:
 
         try:
             if isinstance(content, Path):
-                await asyncio.to_thread(shutil.move, content, destination)
+                await asyncio.to_thread(_move_into_place, content, destination)
             elif isinstance(content, bytearray):
                 with open(destination, "wb") as handle:
                     handle.write(content)

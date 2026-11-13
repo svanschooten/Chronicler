@@ -12,8 +12,19 @@ EXPOSED_ATTRIBUTE = "__rpc_exposed__"
 
 BINARY_RETURNS = (bytes, bytearray)
 BINARY_MEDIA_TYPE = "application/octet-stream"
-FILE_RETURN = Path
-"""A method returning a `Path` returns a temporary file: RPC streams it and deletes it."""
+
+
+class TempFile(Path):
+    """
+    A file made for one caller, who must move or delete it.
+
+    A method annotated `-> TempFile` has its answer streamed over RPC, and the server deletes
+    its copy once sent. It is a type of its own, not `Path`, so that annotating a method
+    `-> Path`, such as one naming a chronicle's audio, can never get that file deleted.
+    """
+
+
+FILE_RETURN = TempFile
 
 
 def refusals() -> dict[str, tuple[type[Exception], int]]:

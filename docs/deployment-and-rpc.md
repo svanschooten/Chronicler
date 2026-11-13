@@ -55,15 +55,18 @@ at a third more bytes and a decode on each end.
 A PDF is held in memory on both sides. A Chronicle archive is not, because it can be
 hundreds of megabytes of audio.
 
-## Large files come back as a `Path`
+## Large files come back as a `TempFile`
 
-A method annotated `-> Path` returns a temporary file, and RPC streams it rather than
-holding it. `RpcServer` answers with a `FileResponse` and deletes the file once it has been
-sent. `RemoteServiceProxy` streams the answer into a temporary file on the client and
-returns its path. Either way the caller owns the file it gets and must move or delete it:
-the desktop export moves it to where the user saved, and deletes it if they cancel.
-`export_zip` is the one method that does this. Do not annotate a method `-> Path` for
-anything that is not such a file.
+A method annotated `-> TempFile` (from `core/rpc.py`) returns a temporary file, and RPC
+streams it rather than holding it. `RpcServer` answers with a `FileResponse` and deletes the
+file once it has been sent. `RemoteServiceProxy` streams the answer into a temporary file on
+the client, readable only by its owner, and returns its path. Either way the caller owns the
+file it gets and must move or delete it: the desktop export moves it to where the user
+saved, and deletes it if they cancel. `export_zip` is the one method that does this.
+
+`TempFile` is a `Path` subclass, not `Path` itself, on purpose. A method that returns a
+plain `Path`, such as one naming a chronicle's audio, is answered as JSON like any other,
+so exposing it can never get that file deleted.
 
 Without a container there is nothing to resolve service instances from, so only
 `/upload` (which needs just a `DatabaseManager`) is registered in that case.

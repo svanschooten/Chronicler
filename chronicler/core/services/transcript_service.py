@@ -13,7 +13,7 @@ from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import AudioSource, Chronicle, Summary, TranscriptLine, TranscriptMatch
 from chronicler.core.processing.fingerprint import fingerprint_file
 from chronicler.core.repositories import ChronicleRepository, KnownSpeakerRepository
-from chronicler.core.rpc import service
+from chronicler.core.rpc import TempFile, service
 from chronicler.core.services.bundle import (
     DATABASE_NAME,
     BundleManifest,
@@ -241,7 +241,7 @@ class TranscriptService:
         lines = await self.get_transcript(chronicle_id)
         return await asyncio.to_thread(format_pdf, lines, chronicle_title)
 
-    async def export_zip(self, chronicle_id: UUID, include_sources: bool = False) -> Path:
+    async def export_zip(self, chronicle_id: UUID, include_sources: bool = False) -> TempFile:
         """
         A portable copy of the chronicle: its own database, plus a manifest naming what
         the workspace database knows and optionally the audio it was built from.
@@ -252,7 +252,9 @@ class TranscriptService:
         as missing rather than as never having been there.
 
         Returns a temporary file the caller owns and must move or delete: the archive is
-        never held in memory. Over RPC the server deletes its copy once it has been sent.
+        never held in memory. It is built in the workspace's exports folder, on the same disk
+        as the audio, not in a system temporary directory that may be memory. Over RPC the
+        server deletes its copy once it has been sent.
         """
         chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
         if chronicle is None:
@@ -275,6 +277,7 @@ class TranscriptService:
                 manifest,
                 root=safe_folder_name(chronicle.title),
                 sources=on_disk if include_sources else (),
+                directory=self.db_manager.get_exports_path(),
             )
 
     async def list_summaries(self, chronicle_id: UUID) -> list[Summary]:

@@ -1,5 +1,6 @@
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -14,7 +15,7 @@ from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.local_container import register_local_repositories
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.repositories import ChronicleRepository, TagRepository, TaskRepository
-from chronicler.core.rpc import RpcServer, service
+from chronicler.core.rpc import RpcServer, TempFile, service
 from chronicler.core.services import (
     ChronicleService,
     TaskService,
@@ -26,6 +27,22 @@ from chronicler.core.sqlite import (
     SQLiteTranscriptRepository,
 )
 from chronicler.server.main import build_rpc_server
+
+_PATH_PROBE_FILES: dict[str, Path] = {}
+
+
+@service(expose=["kept", "handed_over"])
+class _PathProbeService:
+    """Test-only service returning a plain `Path` and a `TempFile`."""
+
+    def __init__(self, repository: TaskRepository):
+        self.repository = repository
+
+    async def kept(self) -> Path:
+        return _PATH_PROBE_FILES["kept"]
+
+    async def handed_over(self) -> TempFile:
+        return TempFile(_PATH_PROBE_FILES["handed_over"])
 
 
 @service(expose=["session_id"])
@@ -599,3 +616,37 @@ def test_a_subtitle_refusal_is_explained_as_unprocessable():
     from chronicler.core.rpc import refusal_for
 
     assert refusal_for(NoRealTimestampsError("no timings")) == ("NoRealTimestampsError", 422)
+
+
+@pytest.mark.asyncio
+async def test_only_a_temp_file_is_streamed_and_deleted(tmp_path):
+    """
+    A method returning a plain `Path`, such as one naming a chronicle's audio, must never have
+    that file deleted for being sent: only a `TempFile` is handed over.
+    """
+    db_manager = DatabaseManager(tmp_path)
+    try:
+        await db_manager.init_archive()
+        kept = tmp_path / "recording.wav"
+        kept.write_bytes(b"RIFF")
+        handed_over = tmp_path / "export.zip"
+        handed_over.write_bytes(b"PK")
+        _PATH_PROBE_FILES.update(kept=kept, handed_over=handed_over)
+
+        container = Container()
+        container.register_instance(DatabaseManager, db_manager)
+        container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
+        container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
+        app = RpcServer(container, services=[_PathProbeService], api_key="probe-key").build()
+
+        headers = {"X-API-Key": "probe-key"}
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            plain = await client.post("/_pathprobe/kept", json={}, headers=headers)
+            streamed = await client.post("/_pathprobe/handed_over", json={}, headers=headers)
+
+        assert plain.json() == str(kept)
+        assert kept.exists()
+        assert streamed.content == b"PK"
+        assert not handed_over.exists()
+    finally:
+        await db_manager.close_all()

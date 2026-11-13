@@ -2,13 +2,12 @@ import inspect
 import os
 import tempfile
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any, TypeVar, get_type_hints
 
 import httpx
 from pydantic import TypeAdapter
 
-from chronicler.core.rpc import BINARY_RETURNS, FILE_RETURN, exposed_methods, refusals
+from chronicler.core.rpc import BINARY_RETURNS, FILE_RETURN, TempFile, exposed_methods, refusals
 
 T = TypeVar("T")
 
@@ -55,8 +54,12 @@ class RemoteServiceProxy:
         for name in exposed_methods(cls):
             setattr(self, name, self._make_remote_method(name, getattr(cls, name)))
 
-    async def _download(self, url: str, payload: dict, headers: dict) -> Path:
-        """Streams the answer into a temporary file, which the caller owns."""
+    async def _download(self, url: str, payload: dict, headers: dict) -> TempFile:
+        """
+        Streams the answer into a temporary file, which the caller owns. It goes to the
+        system's temporary directory, readable only by its owner, since a thin client has no
+        workspace of its own.
+        """
         async with self._client.stream("POST", url, json=payload, headers=headers) as response:
             if not response.is_success:
                 await response.aread()
@@ -64,7 +67,7 @@ class RemoteServiceProxy:
                 response.raise_for_status()
 
             handle, name = tempfile.mkstemp(prefix="chronicler-", suffix=".download")
-            path = Path(name)
+            path = TempFile(name)
             try:
                 with os.fdopen(handle, "wb") as out:
                     async for chunk in response.aiter_bytes():

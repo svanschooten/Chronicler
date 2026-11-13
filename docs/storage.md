@@ -387,11 +387,18 @@ server's for every client.
 
 ### Never held in memory
 
-`export_zip` returns a `Path` to a temporary zip, which the caller moves or deletes; see
+`export_zip` returns a `TempFile`, a temporary zip the caller moves or deletes; see
 [deployment-and-rpc.md](deployment-and-rpc.md) for how it crosses to a thin client.
-`format_bundle` writes straight to that file, and stores audio uncompressed (`ZIP_STORED`):
-encoded audio gains almost nothing from DEFLATE and costs seconds. A failed build deletes
+`format_bundle` writes straight to that file. Encoded audio is stored uncompressed
+(`ZIP_STORED`): it gains almost nothing from DEFLATE and costs seconds. Plain PCM (`wav`,
+`aif`, `aiff`) still shrinks, so it is compressed like the database. A failed build deletes
 its file.
+
+The zip is built in the workspace's `exports/` folder, not the system temporary directory:
+that is memory on many Linux systems, which would undo the point. A file there belongs to
+one export in flight, so whatever is left when the workspace next opens was abandoned by a
+crash and is removed. The desktop gives the saved file the mode any new file gets, since a
+temporary file is readable only by its owner and a move keeps that.
 
 ### Why a manifest
 

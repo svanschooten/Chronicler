@@ -1,6 +1,7 @@
 """Tests for the Chronicle archive (.zip) export - the bundle format and the service."""
 
 import json
+import os
 import tempfile
 import threading
 import zipfile
@@ -44,20 +45,62 @@ def _opened(archive: Path) -> zipfile.ZipFile:
 
 
 class TestBundleFormat:
-    def test_audio_is_stored_and_everything_else_compressed(self, tmp_path):
+    def test_encoded_audio_is_stored_and_everything_else_compressed(self, tmp_path):
         project_db = tmp_path / "project.db"
         project_db.write_bytes(b"db" * 5000)
-        alice = tmp_path / "alice.wav"
-        alice.write_bytes(b"RIFF" + b"\x00" * 5000)
+        sources = []
+        for name in ["alice.mp3", "bob.WAV", "carol.aiff"]:
+            sources.append(tmp_path / name)
+            sources[-1].write_bytes(b"\x00" * 5000)
 
         archive = format_bundle(
-            project_db, _manifest(sources_included=True), root="C", sources=[alice]
+            project_db, _manifest(sources_included=True), root="C", sources=sources
         )
 
         with _opened(archive) as bundle:
             kinds = {info.filename: info.compress_type for info in bundle.infolist()}
-        assert kinds["C/sources/alice.wav"] == zipfile.ZIP_STORED
+        assert kinds["C/sources/alice.mp3"] == zipfile.ZIP_STORED
+        # Plain PCM still shrinks, so it is worth the time.
+        assert kinds["C/sources/bob.WAV"] == zipfile.ZIP_DEFLATED
+        assert kinds["C/sources/carol.aiff"] == zipfile.ZIP_DEFLATED
         assert kinds["C/project.db"] == zipfile.ZIP_DEFLATED
+
+    def test_the_archive_is_a_temp_file_in_the_directory_asked_for(self, tmp_path):
+        from chronicler.core.rpc import TempFile
+
+        project_db = tmp_path / "project.db"
+        project_db.write_bytes(b"db")
+        exports = tmp_path / "exports"
+        exports.mkdir()
+
+        archive = format_bundle(project_db, _manifest(), root="C", directory=exports)
+
+        assert isinstance(archive, TempFile)
+        assert archive.parent == exports
+
+    def test_audio_is_never_held_in_memory(self, tmp_path):
+        """The ticket's bar: a large export must not grow memory by its size."""
+        import tracemalloc
+
+        project_db = tmp_path / "project.db"
+        project_db.write_bytes(b"db")
+        audio = tmp_path / "long.mp3"
+        size = 32 * 1024 * 1024
+        with open(audio, "wb") as handle:
+            for _ in range(size // (1024 * 1024)):
+                handle.write(os.urandom(1024 * 1024))
+
+        tracemalloc.start()
+        try:
+            archive = format_bundle(
+                project_db, _manifest(sources_included=True), root="C", sources=[audio]
+            )
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+
+        assert archive.stat().st_size > size
+        assert peak < size // 8
 
     def test_a_failed_build_leaves_no_file_behind(self, tmp_path):
         with pytest.raises(FileNotFoundError):
@@ -181,6 +224,27 @@ async def _chronicle_with_a_transcript(db_manager: DatabaseManager, **fields) ->
 
 
 class TestExportZip:
+    @pytest.mark.asyncio
+    async def test_it_is_built_in_the_workspace_and_leftovers_go_at_the_next_start(self, tmp_path):
+        """A system temp directory can be memory; the workspace is on disk with the audio."""
+        db_manager = DatabaseManager(tmp_path)
+        await db_manager.init_archive()
+        chronicle = await _chronicle_with_a_transcript(db_manager)
+        async with db_manager.get_archive_session() as session:
+            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+
+            archive = await service.export_zip(chronicle.id)
+
+        assert archive.parent == tmp_path / "exports"
+        await db_manager.close_all()
+
+        reopened = DatabaseManager(tmp_path)
+        await reopened.init_archive()
+        try:
+            assert not archive.exists()
+        finally:
+            await reopened.close_all()
+
     @pytest.mark.asyncio
     async def test_the_exported_database_can_be_read_back(self, tmp_path):
         db_manager = DatabaseManager(tmp_path)
