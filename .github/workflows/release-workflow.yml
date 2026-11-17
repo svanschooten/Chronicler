@@ -32,9 +32,40 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Releasing $version from tag $RAW_TAG"
 
+  # The same gates as CI, on the commit being released: a tag given to workflow_dispatch can
+  # point at a commit CI never ran on. Nothing is built unless these pass.
+  checks:
+    name: Checks on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      - name: Check Ruff
+        if: runner.os == 'Linux'
+        run: ruff check chronicler tests
+
+      - name: Check Ruff Format
+        if: runner.os == 'Linux'
+        run: ruff format --check chronicler tests
+
+      - name: Check Mypy
+        if: runner.os == 'Linux'
+        run: mypy chronicler tests
+
+      - name: Run the tests
+        shell: bash
+        run: pytest --cov=chronicler --cov-report=term --cov-fail-under=80
+
   pack:
     name: Pack on ${{ matrix.os }}
-    needs: version
+    needs: [version, checks]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -118,7 +149,7 @@ jobs:
   # See docs/runtime-build.md.
   runtime:
     name: Build the embedded runtime on ${{ matrix.os }}
-    needs: version
+    needs: [version, checks]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
