@@ -191,6 +191,7 @@ MESSAGES = {
     "transcript": {
         "edit": "Edit the transcript",
         "done": "Finish editing",
+        "empty_line": "(empty line)",
         "delete_line": "Delete this line",
         "line_window": "Lines {first}-{last} of {total}",
         "line_window_timed": "Lines {first}-{last} of {total} · {start}-{end}",

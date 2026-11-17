@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock
 
 import flet as ft
@@ -134,7 +135,8 @@ class TestSearchableDropdown:
     def _type(dropdown: ft.Dropdown, text: str) -> None:
         """As the client reports typing: `text` first, then the event."""
         dropdown.text = text
-        dropdown.on_text_change(MagicMock(control=dropdown, data=text))
+        handler: Any = dropdown.on_text_change
+        handler(MagicMock(control=dropdown, data=text))
 
     def test_leaving_with_something_typed_keeps_the_typing(self):
         dropdown = searchable_dropdown(MODELS, value="provider/model-3")

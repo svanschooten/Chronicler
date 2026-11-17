@@ -192,6 +192,7 @@ MESSAGES = {
     "transcript": {
         "edit": "Transcript bewerken",
         "done": "Bewerken afronden",
+        "empty_line": "(lege regel)",
         "delete_line": "Deze regel verwijderen",
         "line_window": "Regels {first}-{last} van {total}",
         "line_window_timed": "Regels {first}-{last} van {total} · {start}-{end}",

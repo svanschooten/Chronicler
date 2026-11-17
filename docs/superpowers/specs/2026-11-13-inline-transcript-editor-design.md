@@ -116,8 +116,9 @@ The editor keeps a `dict[str, ft.Container]` from line id to row.
   timestamp and `Speaker: ` spans, then a borderless multi-line `TextField` with the
   line's text, `TRANSCRIPT_STYLE`, `content_padding=0`, `dense=True`, `shift_enter=True`
   and `expand=True`. The field must not move the words around it.
-- The field is focused with `await field.focus()` after the row is updated, not with
-  `autofocus`: Flet honours `autofocus` only for the first such control added to the page.
+- The field has `autofocus` and is also given `focus()`. In the Flet web client,
+  `focus()` alone, right after the row's update, did not focus the new field; `autofocus`
+  on the freshly built field did. (This reverses the first draft of this design.)
 - **Enter** (`on_submit`) saves and closes. **Shift+Enter** adds a newline.
   **Esc** discards the edit and closes. **Blur** saves and closes, when it arrives.
 - It saves only when the text actually changed, through 056's `_start_save`.
@@ -136,9 +137,13 @@ The editor keeps a `dict[str, ft.Container]` from line id to row.
   and only for this picker. A name saved from the editor joins that list.
 - **Picking an option** (`on_select`, by click or Enter on the highlighted option) saves
   it and closes the picker.
-- **Leaving without picking** (blur, Esc, or opening another part) closes the picker and
-  saves nothing, *even if a name was typed*. A half-typed filter such as `Az` must never
-  become a speaker. The way to use a new name is the explicit "Add speaker" option (084).
+- **Leaving without picking** saves nothing, *even if a name was typed*. A half-typed
+  filter such as `Az` must never become a speaker. The way to use a new name is the
+  explicit "Add speaker" option (084). Esc and opening another part close the picker. A
+  blur closes it only when something was typed, and only after a 0.3 s grace: in the web
+  client a click on a menu option blurs the field before the pick arrives, and a click on
+  the picker's own arrow blurs it while opening the menu. An empty picker left open shows
+  only the current name as its hint, so it cannot look like a change.
 - A name that matches an existing one apart from case or spacing is saved with the
   existing spelling (083, enforced in the repository so every caller gets it).
 
@@ -182,10 +187,12 @@ closes and the pager takes over. If Flet does not let the field handle Tab, **Al
 - Flet 0.86.5. Checked in the installed package: `Container.on_hover`, `TextSpan.on_click`,
   `Text.spans`, `TextField.shift_enter` / `on_submit` / `focus()`, `Dropdown.hint_text` /
   `focus()`, `ListView.scroll_to(scroll_key=...)`, `Control.key`.
-- Still to confirm by hand in the desktop client, and to record in
-  `docs/transcript-editing.md`: that a click on a span does not also fire the row
-  container's click, that the span's click cursor shows on hover, and that Enter in an
-  editable `Dropdown` fires `on_select` for the highlighted option.
+- Checked in the Flet web client (0.86.5, under Playwright) and recorded in
+  `docs/transcript-editing.md`: a span click reaches its handler, Enter submits the text
+  field and Shift+Enter adds a newline, Esc reaches the page handler with a field focused,
+  Enter in the picker picks the highlighted option, and the blur-before-pick order above.
+  The row has no click handler of its own, so a span click cannot also click the row.
+  Still by hand in the desktop client: the click cursor over spans.
 - Thin-client mode: no new RPC methods. `update_line`, `delete_line` and
   `speaker_suggestions` are already exposed.
 - Every new string goes in all three message maps (en, nl, de), as `docs/i18n.md`
@@ -196,8 +203,10 @@ closes and the pager takes over. If Flet does not let the field handle Tab, **Al
 
 ## Left to the builder
 
-- Exact hover tint and padding, within `ThemeColors`.
-- How the open control is swapped into the row.
+- Exact hover tint and padding, within `ThemeColors`. (Built: `ThemeColors.hover`, a
+  2 px accent bar on the open row, and a delete button sized to one text line so short
+  rows are not taller than long ones.)
+- How the open control is swapped into the row. (Built: `LineRow` replaces its body.)
 
 ## Ticket order
 

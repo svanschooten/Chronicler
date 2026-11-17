@@ -17,6 +17,8 @@ class ThemeColors:
     border: str
     accent: str
     sidebar: str
+    # A light tint for the row under the mouse, where a row can be clicked to edit it.
+    hover: str
 
 
 def theme_colors(dark_mode: bool) -> ThemeColors:
@@ -29,6 +31,7 @@ def theme_colors(dark_mode: bool) -> ThemeColors:
             border=ft.Colors.BLUE_GREY_600,
             accent=ft.Colors.AMBER_300,
             sidebar=ft.Colors.BLUE_GREY_900,
+            hover=ft.Colors.with_opacity(0.08, ft.Colors.WHITE),
         )
     return ThemeColors(
         surface=ft.Colors.WHITE,
@@ -38,4 +41,5 @@ def theme_colors(dark_mode: bool) -> ThemeColors:
         border=ft.Colors.BROWN_200,
         accent=ft.Colors.AMBER_800,
         sidebar=ft.Colors.WHITE,
+        hover=ft.Colors.with_opacity(0.06, ft.Colors.BROWN_900),
     )

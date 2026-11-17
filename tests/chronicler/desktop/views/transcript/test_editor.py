@@ -8,8 +8,15 @@ import pytest
 
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.desktop.theme import theme_colors
-from chronicler.desktop.views.transcript.editor import WINDOW_SIZE, LinePager, TranscriptEditor
-from chronicler.i18n import set_locale
+from chronicler.desktop.views.transcript.editor import (
+    WINDOW_SIZE,
+    LinePager,
+    LineRow,
+    TranscriptEditor,
+)
+from chronicler.desktop.views.transcript.style import TRANSCRIPT_STYLE
+from chronicler.i18n import set_locale, t
+from tests.chronicler.desktop.controls import find_controls
 
 
 def _line(text="Some words", speaker="Nyx", start=0.0):
@@ -35,12 +42,50 @@ def make_editor():
     return _make
 
 
-def _row(editor, index=0):
+def _row(editor, index=0) -> LineRow:
     return editor.line_list.controls[index]
 
 
-def _fields(row) -> dict:
-    return {c.data.split(":")[0]: c for c in row.controls if getattr(c, "data", None)}
+def _spans(row: LineRow) -> list[ft.TextSpan]:
+    """The time, speaker and text spans of a row showing its line as text."""
+    assert isinstance(row.body, ft.Text), "the row has a part open"
+    return row.body.spans or []
+
+
+def _shown_text(row: LineRow) -> str:
+    return _spans(row)[2].text or ""
+
+
+def _shown_speaker(row: LineRow) -> str:
+    return _spans(row)[1].text or ""
+
+
+async def _open_text(editor, index=0) -> ft.TextField:
+    """Clicks a row's text, as the client does, and returns the field it opened."""
+    await editor.text_clicked(MagicMock(control=_spans(_row(editor, index))[2]))
+    assert isinstance(editor.open.control, ft.TextField)
+    return editor.open.control
+
+
+async def _open_speaker(editor, index=0) -> ft.Dropdown:
+    await editor.speaker_clicked(MagicMock(control=_spans(_row(editor, index))[1]))
+    assert isinstance(editor.open.control, ft.Dropdown)
+    return editor.open.control
+
+
+async def _edit_text(editor, value, index=0) -> ft.TextField:
+    """Opens a row's text, types `value` and leaves the field, which saves it."""
+    field = await _open_text(editor, index)
+    field.value = value
+    await editor.text_blurred(MagicMock(control=field))
+    return field
+
+
+async def _pick(editor, name, index=0) -> ft.Dropdown:
+    picker = await _open_speaker(editor, index)
+    picker.value = name
+    await editor.speaker_picked(MagicMock(control=picker))
+    return picker
 
 
 class TestLoading:
@@ -53,14 +98,54 @@ class TestLoading:
         assert len(editor.line_list.controls) == 2
 
     @pytest.mark.asyncio
-    async def test_each_row_shows_its_text_and_speaker(self, make_editor):
-        editor, _ = make_editor([_line("Hello there", speaker="Vale")])
+    async def test_each_row_reads_like_the_reader(self, make_editor):
+        """`Speaker: text`, as one wrapping text in the reader's style."""
+        editor, _ = make_editor([_line("Hello there", speaker="Vale", start=3725.0)])
 
         await editor.load()
 
-        fields = _fields(_row(editor))
-        assert fields["text"].value == "Hello there"
-        assert fields["speaker"].value == "Vale"
+        row = _row(editor)
+        assert [span.text for span in _spans(row)] == ["[01:02:05] ", "Vale: ", "Hello there"]
+        assert row.body.style == TRANSCRIPT_STYLE
+
+    @pytest.mark.asyncio
+    async def test_rows_hold_no_form_controls_until_clicked(self, make_editor):
+        """Ticket 056's cost: every row used to carry a dropdown of every speaker."""
+        editor, _ = make_editor(_long(WINDOW_SIZE), speakers=[f"Name {i}" for i in range(40)])
+
+        await editor.load()
+
+        assert find_controls(editor.line_list, lambda c: isinstance(c, ft.Dropdown)) == []
+        assert find_controls(editor.line_list, lambda c: isinstance(c, ft.TextField)) == []
+
+    @pytest.mark.asyncio
+    async def test_the_speaker_and_the_text_can_be_clicked_but_not_the_time(self, make_editor):
+        editor, _ = make_editor()
+
+        await editor.load()
+
+        time, speaker, text = _spans(_row(editor))
+        assert time.on_click is None
+        assert speaker.on_click is not None
+        assert text.on_click is not None
+
+    @pytest.mark.asyncio
+    async def test_a_line_without_a_speaker_says_unknown(self, make_editor):
+        editor, _ = make_editor([_line(speaker=None)])
+
+        await editor.load()
+
+        assert _shown_speaker(_row(editor)) == f"{t('common.unknown')}: "
+
+    @pytest.mark.asyncio
+    async def test_an_empty_line_still_has_something_to_click(self, make_editor):
+        editor, _ = make_editor([_line("")])
+
+        await editor.load()
+
+        text = _spans(_row(editor))[2]
+        assert text.text == t("transcript.empty_line")
+        assert text.on_click is not None
 
     @pytest.mark.asyncio
     async def test_an_empty_transcript_says_so(self, make_editor):
@@ -70,24 +155,6 @@ class TestLoading:
 
         assert len(editor.line_list.controls) == 1
         assert isinstance(editor.line_list.controls[0], ft.Text)
-
-    @pytest.mark.asyncio
-    async def test_the_speaker_field_offers_every_workspace_name(self, make_editor):
-        editor, service = make_editor(speakers=["Alice", "Nyx", "Vale"])
-
-        await editor.load()
-
-        options = [option.key for option in _fields(_row(editor))["speaker"].options]
-        assert options == ["Alice", "Nyx", "Vale"]
-        service.speaker_suggestions.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_the_speaker_field_accepts_a_new_name(self, make_editor):
-        editor, _ = make_editor()
-
-        await editor.load()
-
-        assert _fields(_row(editor))["speaker"].editable is True
 
     @pytest.mark.asyncio
     async def test_a_failing_load_degrades_rather_than_raising(self, make_editor):
@@ -107,6 +174,50 @@ class TestLoading:
         assert isinstance(editor.line_list, ft.ListView)
         assert len(editor.line_list.controls) == 50
 
+    @pytest.mark.asyncio
+    async def test_each_row_is_keyed_by_its_line_so_it_can_be_scrolled_to(self, make_editor):
+        line = _line()
+        editor, _ = make_editor([line])
+
+        await editor.load()
+
+        assert _row(editor).key == str(line.id)
+
+
+class TestHover:
+    @pytest.mark.asyncio
+    async def test_the_row_under_the_mouse_is_tinted_and_shows_delete(self, make_editor):
+        editor, _ = make_editor()
+        await editor.load()
+        row = _row(editor)
+
+        row.hover_changed(MagicMock(data=True))
+
+        assert row.bgcolor == editor.colors.hover
+        assert row.delete_button.opacity == 1
+
+    @pytest.mark.asyncio
+    async def test_leaving_the_row_takes_the_tint_and_delete_away(self, make_editor):
+        editor, _ = make_editor()
+        await editor.load()
+        row = _row(editor)
+        row.hover_changed(MagicMock(data=True))
+
+        row.hover_changed(MagicMock(data=False))
+
+        assert row.bgcolor is None
+        assert row.delete_button.opacity == 0
+
+    @pytest.mark.asyncio
+    async def test_a_row_being_edited_stays_tinted(self, make_editor):
+        editor, _ = make_editor()
+        await editor.load()
+
+        await _open_text(editor)
+
+        assert _row(editor).bgcolor == editor.colors.hover
+        assert _row(editor).delete_button.opacity == 1
+
 
 def _long(count):
     return [_line(f"Line {i}", start=float(i)) for i in range(count)]
@@ -118,7 +229,7 @@ def _rows(editor) -> list:
 
 
 def _texts(editor) -> list[str]:
-    return [_fields(row)["text"].value for row in _rows(editor)]
+    return [_shown_text(row) for row in _rows(editor)]
 
 
 async def _press(editor, button):
@@ -280,10 +391,8 @@ class TestWindow:
         editor, service = make_editor(_long(250))
         await editor.load()
         await _press(editor, editor.pager.next_button)
-        field = _fields(_row(editor))["text"]
-        field.value = "Corrected"
 
-        await editor.text_blurred(MagicMock(control=field))
+        await _edit_text(editor, "Corrected")
 
         assert service.update_line.await_args.kwargs["text"] == "Corrected"
 
@@ -294,7 +403,7 @@ class TestWindow:
         attach_page(TranscriptEditor)
         await editor.load()
         await _press(editor, editor.pager.next_button)
-        button = _fields(_row(editor))["delete"]
+        button = _row(editor).delete_button
         service.get_transcript.return_value = lines[:100] + lines[101:]
 
         with patch(
@@ -400,18 +509,146 @@ class TestWindow:
         assert _texts(editor)[0] == f"Line {WINDOW_SIZE}"
 
 
+class TestOpeningAPart:
+    @pytest.mark.asyncio
+    async def test_clicking_the_text_opens_a_field_holding_it(self, make_editor):
+        editor, _ = make_editor([_line("Hello there", speaker="Vale")])
+        await editor.load()
+
+        field = await _open_text(editor)
+
+        assert field.value == "Hello there"
+        assert field.multiline is True
+        assert field.shift_enter is True
+        assert field.text_style == TRANSCRIPT_STYLE
+
+    @pytest.mark.asyncio
+    async def test_the_field_replaces_only_the_text(self, make_editor):
+        """The time and speaker stay as they read, so nothing jumps."""
+        editor, _ = make_editor([_line("Hello there", speaker="Vale", start=5.0)])
+        await editor.load()
+
+        await _open_text(editor)
+
+        prefix = find_controls(_row(editor), lambda c: isinstance(c, ft.Text))[0]
+        assert [span.text for span in prefix.spans] == ["[00:00:05] ", "Vale: "]
+
+    @pytest.mark.asyncio
+    async def test_the_opened_field_is_focused(self, make_editor):
+        editor, _ = make_editor()
+        await editor.load()
+
+        with patch.object(ft.TextField, "focus", new=AsyncMock()) as focus:
+            await _open_text(editor)
+
+        focus.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_opening_another_part_closes_the_first(self, make_editor):
+        editor, _ = make_editor([_line("First"), _line("Second", start=1.0)])
+        await editor.load()
+        await _open_text(editor, 0)
+
+        await _open_text(editor, 1)
+
+        assert _shown_text(_row(editor, 0)) == "First"
+        assert editor.open.line_id == _row(editor, 1).line_id
+
+    @pytest.mark.asyncio
+    async def test_clicking_the_open_part_again_keeps_it_open(self, make_editor):
+        editor, _ = make_editor()
+        await editor.load()
+        field = await _open_text(editor)
+        field.value = "Half typed"
+
+        await editor.text_clicked(MagicMock(control=MagicMock(data=_row(editor).line_id)))
+
+        assert editor.open.control is field
+        assert field.value == "Half typed"
+
+
 class TestEditingText:
     @pytest.mark.asyncio
-    async def test_a_changed_line_is_saved(self, make_editor):
+    async def test_a_changed_line_is_saved_on_blur(self, make_editor):
         editor, service = make_editor([_line("原文")])
         await editor.load()
-        field = _fields(_row(editor))["text"]
-        field.value = "Corrected"
+
+        await _edit_text(editor, "Corrected")
+
+        service.update_line.assert_awaited_once()
+        assert service.update_line.await_args.kwargs["text"] == "Corrected"
+
+    @pytest.mark.asyncio
+    async def test_closing_shows_the_new_text(self, make_editor):
+        editor, _ = make_editor([_line("Old")])
+        await editor.load()
+
+        await _edit_text(editor, "New")
+
+        assert editor.open is None
+        assert _shown_text(_row(editor)) == "New"
+
+    @pytest.mark.asyncio
+    async def test_enter_saves_and_closes(self, make_editor):
+        editor, service = make_editor([_line("Old")])
+        await editor.load()
+        field = await _open_text(editor)
+        field.value = "New"
+
+        await editor.text_submitted(MagicMock(control=field))
+
+        assert service.update_line.await_args.kwargs["text"] == "New"
+        assert editor.open is None
+
+    @pytest.mark.asyncio
+    async def test_escape_discards_the_edit(self, make_editor):
+        editor, service = make_editor([_line("Old")])
+        await editor.load()
+        field = await _open_text(editor)
+        field.value = "Never mind"
+
+        await editor.key_pressed(MagicMock(key="Escape"))
+
+        service.update_line.assert_not_awaited()
+        assert _shown_text(_row(editor)) == "Old"
+
+    @pytest.mark.asyncio
+    async def test_a_blur_after_escape_saves_nothing(self, make_editor):
+        """Removing the field can still deliver its blur; the edit was discarded."""
+        editor, service = make_editor([_line("Old")])
+        await editor.load()
+        field = await _open_text(editor)
+        field.value = "Never mind"
+        await editor.key_pressed(MagicMock(key="Escape"))
+
+        await editor.text_blurred(MagicMock(control=field))
+
+        service.update_line.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_opening_another_part_saves_the_open_text(self, make_editor):
+        """The field is removed, and a removed field sends no blur."""
+        editor, service = make_editor([_line("First"), _line("Second", start=1.0)])
+        await editor.load()
+        field = await _open_text(editor, 0)
+        field.value = "First, corrected"
+
+        await _open_speaker(editor, 1)
+
+        service.update_line.assert_awaited_once()
+        assert service.update_line.await_args.kwargs["text"] == "First, corrected"
+
+    @pytest.mark.asyncio
+    async def test_a_late_blur_from_a_closed_field_saves_nothing_twice(self, make_editor):
+        editor, service = make_editor([_line("First"), _line("Second", start=1.0)])
+        await editor.load()
+        field = await _open_text(editor, 0)
+        field.value = "First, corrected"
+        await _open_text(editor, 1)
 
         await editor.text_blurred(MagicMock(control=field))
 
         service.update_line.assert_awaited_once()
-        assert service.update_line.await_args.kwargs["text"] == "Corrected"
 
     @pytest.mark.asyncio
     async def test_an_unchanged_line_saves_nothing(self, make_editor):
@@ -419,7 +656,7 @@ class TestEditingText:
         editor, service = make_editor([_line("Untouched")])
         await editor.load()
 
-        await editor.text_blurred(MagicMock(control=_fields(_row(editor))["text"]))
+        await _edit_text(editor, "Untouched")
 
         service.update_line.assert_not_awaited()
 
@@ -427,34 +664,57 @@ class TestEditingText:
     async def test_a_second_edit_compares_against_the_first(self, make_editor):
         editor, service = make_editor([_line("One")])
         await editor.load()
-        field = _fields(_row(editor))["text"]
 
-        field.value = "Two"
-        await editor.text_blurred(MagicMock(control=field))
-        await editor.text_blurred(MagicMock(control=field))
+        await _edit_text(editor, "Two")
+        await _edit_text(editor, "Two")
 
         assert service.update_line.await_count == 1
 
     @pytest.mark.asyncio
-    async def test_a_failed_save_is_reported_and_the_field_reverts(self, make_editor):
+    async def test_a_failed_save_is_reported_and_the_line_reverts(self, make_editor):
         editor, service = make_editor([_line("Original")])
         service.update_line.side_effect = RuntimeError("database is locked")
         await editor.load()
-        field = _fields(_row(editor))["text"]
-        field.value = "Attempted"
 
-        await editor.text_blurred(MagicMock(control=field))
+        await _edit_text(editor, "Attempted")
 
         editor.show_snackbar.assert_called_once()
         assert "database is locked" in editor.show_snackbar.call_args[0][0]
-        assert field.value == "Original"
+        assert _shown_text(_row(editor)) == "Original"
+        assert editor.ordered[0].text == "Original"
+
+    @pytest.mark.asyncio
+    async def test_a_failed_save_says_which_line_it_was(self, make_editor):
+        """The field is closed by the time the save fails."""
+        editor, service = make_editor([_line("Original", start=3725.0)])
+        service.update_line.side_effect = RuntimeError("database is locked")
+        await editor.load()
+
+        await _edit_text(editor, "Attempted")
+
+        assert "01:02:05" in editor.show_snackbar.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_the_line_shows_the_new_text_while_it_saves(self, make_editor):
+        editor, service = make_editor([_line("Old")])
+        await editor.load()
+        release = asyncio.Event()
+
+        async def slow_save(*args, **kwargs):
+            await release.wait()
+
+        service.update_line.side_effect = slow_save
+
+        saving = asyncio.create_task(_edit_text(editor, "New"))
+        await asyncio.sleep(0)
+        shown = _shown_text(_row(editor))
+        release.set()
+        await saving
+
+        assert shown == "New"
 
     @pytest.mark.asyncio
     async def test_paging_back_during_a_save_shows_the_new_text(self, make_editor):
-        """
-        Paging away blurs the field and starts the save; paging straight back rebuilds
-        the row. Built from the old text, it would save the old text over the new one.
-        """
         editor, service = make_editor(_long(WINDOW_SIZE + 1))
         await editor.load()
         release = asyncio.Event()
@@ -463,47 +723,16 @@ class TestEditingText:
             await release.wait()
 
         service.update_line.side_effect = slow_save
-        field = _fields(_row(editor))["text"]
-        field.value = "Corrected"
 
-        saving = asyncio.create_task(editor.text_blurred(MagicMock(control=field)))
+        saving = asyncio.create_task(_edit_text(editor, "Corrected"))
         await asyncio.sleep(0)
         await _press(editor, editor.pager.next_button)
         await _press(editor, editor.pager.previous_button)
-        rebuilt = _fields(_row(editor))["text"]
         release.set()
         await saving
 
-        assert rebuilt.value == "Corrected"
-        await editor.text_blurred(MagicMock(control=rebuilt))
+        assert _shown_text(_row(editor)) == "Corrected"
         assert service.update_line.await_count == 1
-
-    @pytest.mark.asyncio
-    async def test_a_failed_save_says_which_line_it_was(self, make_editor):
-        """Paging away starts the save, so the row may be gone by the time it fails."""
-        editor, service = make_editor([_line("Original", start=3725.0)])
-        service.update_line.side_effect = RuntimeError("database is locked")
-        await editor.load()
-        field = _fields(_row(editor))["text"]
-        field.value = "Attempted"
-
-        await editor.text_blurred(MagicMock(control=field))
-
-        assert "01:02:05" in editor.show_snackbar.call_args[0][0]
-
-    @pytest.mark.asyncio
-    async def test_a_failed_save_puts_the_old_text_back_on_the_line(self, make_editor):
-        editor, service = make_editor(_long(WINDOW_SIZE + 1))
-        service.update_line.side_effect = RuntimeError("database is locked")
-        await editor.load()
-        field = _fields(_row(editor))["text"]
-        field.value = "Attempted"
-
-        await editor.text_blurred(MagicMock(control=field))
-        await _press(editor, editor.pager.next_button)
-        await _press(editor, editor.pager.previous_button)
-
-        assert _fields(_row(editor))["text"].value == "Line 0"
 
     @pytest.mark.asyncio
     async def test_a_save_failing_after_paging_back_repaints_the_rebuilt_row(self, make_editor):
@@ -517,26 +746,42 @@ class TestEditingText:
             raise RuntimeError("database is locked")
 
         service.update_line.side_effect = failing_save
-        field = _fields(_row(editor))["text"]
-        field.value = "Attempted"
 
-        saving = asyncio.create_task(editor.text_blurred(MagicMock(control=field)))
+        saving = asyncio.create_task(_edit_text(editor, "Attempted"))
         await asyncio.sleep(0)
         await _press(editor, editor.pager.next_button)
         await _press(editor, editor.pager.previous_button)
-        rebuilt = _fields(_row(editor))["text"]
         release.set()
         await saving
 
-        assert rebuilt.value == "Line 0"
+        assert _shown_text(_row(editor)) == "Line 0"
         assert editor.ordered[0].text == "Line 0"
+
+    @pytest.mark.asyncio
+    async def test_a_failure_corrects_the_field_if_the_line_is_open_again(self, make_editor):
+        editor, service = make_editor([_line("Original")])
+        await editor.load()
+        release = asyncio.Event()
+
+        async def failing_save(*args, **kwargs):
+            await release.wait()
+            raise RuntimeError("database is locked")
+
+        service.update_line.side_effect = failing_save
+        saving = asyncio.create_task(_edit_text(editor, "Attempted"))
+        await asyncio.sleep(0)
+        reopened = await _open_text(editor)
+        release.set()
+        await saving
+
+        assert reopened.value == "Original"
 
     @pytest.mark.asyncio
     async def test_a_failure_after_a_later_edit_saved_keeps_the_later_edit(self, make_editor):
         """
         The first save fails after a second edit of the same line has saved. Putting back
         the text from before the first would show the line as unedited while the
-        database holds the second edit, and the next blur would see nothing to save.
+        database holds the second edit.
         """
         editor, service = make_editor([_line("Original")])
         await editor.load()
@@ -548,16 +793,13 @@ class TestEditingText:
                 raise RuntimeError("database is locked")
 
         service.update_line.side_effect = save
-        field = _fields(_row(editor))["text"]
-        field.value = "First"
-        first = asyncio.create_task(editor.text_blurred(MagicMock(control=field)))
+        first = asyncio.create_task(_edit_text(editor, "First"))
         await asyncio.sleep(0)
-        field.value = "Second"
-        await editor.text_blurred(MagicMock(control=field))
+        await _edit_text(editor, "Second")
         release_first.set()
         await first
 
-        assert field.value == "Second"
+        assert _shown_text(_row(editor)) == "Second"
         assert editor.ordered[0].text == "Second"
 
     @pytest.mark.asyncio
@@ -572,16 +814,13 @@ class TestEditingText:
                 raise RuntimeError("database is locked")
 
         service.update_line.side_effect = save
-        field = _fields(_row(editor))["text"]
-        field.value = "First"
-        await editor.text_blurred(MagicMock(control=field))
-        field.value = "Second"
-        second = asyncio.create_task(editor.text_blurred(MagicMock(control=field)))
+        await _edit_text(editor, "First")
+        second = asyncio.create_task(_edit_text(editor, "Second"))
         await asyncio.sleep(0)
         release_second.set()
         await second
 
-        assert field.value == "First"
+        assert _shown_text(_row(editor)) == "First"
         assert editor.ordered[0].text == "First"
 
     @pytest.mark.asyncio
@@ -589,7 +828,8 @@ class TestEditingText:
         """The Flet client sends no blur for a focused field it takes off the screen."""
         editor, service = make_editor(_long(WINDOW_SIZE + 1))
         await editor.load()
-        _fields(_row(editor))["text"].value = "Typed, never blurred"
+        field = await _open_text(editor)
+        field.value = "Typed, never blurred"
 
         await _press(editor, editor.pager.next_button)
 
@@ -598,50 +838,159 @@ class TestEditingText:
         assert editor.ordered[0].text == "Typed, never blurred"
 
     @pytest.mark.asyncio
-    async def test_paging_after_a_blur_saves_nothing_twice(self, make_editor):
-        editor, service = make_editor(_long(WINDOW_SIZE + 1))
+    async def test_finishing_editing_saves_the_open_text(self, make_editor):
+        editor, service = make_editor([_line("Old")])
         await editor.load()
-        field = _fields(_row(editor))["text"]
-        field.value = "Corrected"
+        field = await _open_text(editor)
+        field.value = "New"
 
-        await editor.text_blurred(MagicMock(control=field))
-        await _press(editor, editor.pager.next_button)
+        await editor.finish_editing()
 
-        service.update_line.assert_awaited_once()
+        assert service.update_line.await_args.kwargs["text"] == "New"
 
     @pytest.mark.asyncio
     async def test_editing_does_not_reload_the_whole_list(self, make_editor):
-        """Reloading on every blur would throw away the caret and the scroll position."""
+        """Reloading on every save would throw away the scroll position."""
         editor, service = make_editor([_line("One")])
         await editor.load()
         service.get_transcript.reset_mock()
-        field = _fields(_row(editor))["text"]
-        field.value = "Two"
 
-        await editor.text_blurred(MagicMock(control=field))
+        await _edit_text(editor, "Two")
 
         service.get_transcript.assert_not_awaited()
 
 
 class TestReassigningASpeaker:
     @pytest.mark.asyncio
-    async def test_choosing_a_different_speaker_saves_it(self, make_editor):
-        editor, service = make_editor([_line(speaker="Nyx")])
+    async def test_the_picker_opens_empty_with_the_speaker_as_a_hint(self, make_editor):
+        """Typing filters at once, and the line's speaker never looks deleted."""
+        editor, _ = make_editor([_line(speaker="Nyx")])
         await editor.load()
-        field = _fields(_row(editor))["speaker"]
-        field.value = "Vale"
 
-        await editor.speaker_changed(MagicMock(control=field))
+        picker = await _open_speaker(editor)
 
-        assert service.update_line.await_args.kwargs["speaker_name"] == "Vale"
+        assert picker.value is None
+        assert picker.hint_text == "Nyx"
+        assert picker.editable is True
+        assert picker.enable_filter is True
 
     @pytest.mark.asyncio
-    async def test_reselecting_the_same_speaker_saves_nothing(self, make_editor):
+    async def test_the_picker_offers_every_workspace_name(self, make_editor):
+        editor, service = make_editor(speakers=["Alice", "Nyx", "Vale"])
+        await editor.load()
+
+        picker = await _open_speaker(editor)
+
+        assert [option.key for option in picker.options] == ["Alice", "Nyx", "Vale"]
+        service.speaker_suggestions.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_the_picker_replaces_only_the_speaker(self, make_editor):
+        editor, _ = make_editor([_line("Hello there", speaker="Vale")])
+        await editor.load()
+
+        await _open_speaker(editor)
+
+        texts = find_controls(_row(editor), lambda c: isinstance(c, ft.Text))
+        assert texts[-1].spans[0].text == ": Hello there"
+
+    @pytest.mark.asyncio
+    async def test_picking_a_different_speaker_saves_it_and_closes(self, make_editor):
         editor, service = make_editor([_line(speaker="Nyx")])
         await editor.load()
 
-        await editor.speaker_changed(MagicMock(control=_fields(_row(editor))["speaker"]))
+        await _pick(editor, "Vale")
 
+        assert service.update_line.await_args.kwargs["speaker_name"] == "Vale"
+        assert editor.open is None
+        assert _shown_speaker(_row(editor)) == "Vale: "
+
+    @pytest.mark.asyncio
+    async def test_the_line_takes_the_spelling_the_chronicle_keeps(self, make_editor):
+        """Ticket 083: `vale` picked where `Vale` exists is stored, and shown, as `Vale`."""
+        editor, service = make_editor([_line(speaker="Nyx")])
+        service.update_line.return_value = _line(speaker="Vale")
+        await editor.load()
+
+        await _pick(editor, "vale")
+
+        assert _shown_speaker(_row(editor)) == "Vale: "
+
+    @pytest.mark.asyncio
+    async def test_picking_the_same_speaker_saves_nothing(self, make_editor):
+        editor, service = make_editor([_line(speaker="Nyx")])
+        await editor.load()
+
+        await _pick(editor, "Nyx")
+
+        service.update_line.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_leaving_without_picking_saves_nothing_even_if_typed(self, make_editor):
+        """A half-typed filter such as `Az` must never become a speaker."""
+        editor, service = make_editor([_line(speaker="Nyx")])
+        await editor.load()
+        picker = await _open_speaker(editor)
+        picker.text = "Az"
+
+        with patch("chronicler.desktop.views.transcript.editor.PICKER_BLUR_GRACE", 0):
+            await editor.speaker_blurred(MagicMock(control=picker))
+
+        service.update_line.assert_not_awaited()
+        assert editor.open is None
+        assert _shown_speaker(_row(editor)) == "Nyx: "
+
+    @pytest.mark.asyncio
+    async def test_leaving_with_nothing_typed_keeps_the_picker_open(self, make_editor):
+        """The picker's arrow blurs the field as it opens the menu."""
+        editor, service = make_editor([_line(speaker="Nyx")])
+        await editor.load()
+        picker = await _open_speaker(editor)
+        picker.text = ""
+
+        with patch("chronicler.desktop.views.transcript.editor.PICKER_BLUR_GRACE", 0):
+            await editor.speaker_blurred(MagicMock(control=picker))
+
+        assert editor.open is not None
+        service.update_line.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_picker_left_open_closes_when_another_line_is_clicked(self, make_editor):
+        editor, service = make_editor([_line(speaker="Nyx"), _line("Next", start=1.0)])
+        await editor.load()
+        await _open_speaker(editor, 0)
+
+        await _open_text(editor, 1)
+
+        assert _shown_speaker(_row(editor, 0)) == "Nyx: "
+        service.update_line.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_pick_arriving_just_after_the_blur_still_counts(self, make_editor):
+        """Clicking an option can blur the field before the pick reaches us."""
+        editor, service = make_editor([_line(speaker="Nyx")])
+        await editor.load()
+        picker = await _open_speaker(editor)
+
+        with patch("chronicler.desktop.views.transcript.editor.PICKER_BLUR_GRACE", 0.05):
+            blurring = asyncio.create_task(editor.speaker_blurred(MagicMock(control=picker)))
+            await asyncio.sleep(0)
+            picker.value = "Vale"
+            await editor.speaker_picked(MagicMock(control=picker))
+            await blurring
+
+        assert service.update_line.await_args.kwargs["speaker_name"] == "Vale"
+        assert _shown_speaker(_row(editor)) == "Vale: "
+
+    @pytest.mark.asyncio
+    async def test_escape_closes_the_picker(self, make_editor):
+        editor, service = make_editor([_line(speaker="Nyx")])
+        await editor.load()
+        await _open_speaker(editor)
+
+        await editor.key_pressed(MagicMock(key="Escape"))
+
+        assert editor.open is None
         service.update_line.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -649,15 +998,11 @@ class TestReassigningASpeaker:
         editor, service = make_editor([_line(speaker="Nyx")])
         service.update_line.side_effect = RuntimeError("database is locked")
         await editor.load()
-        field = _fields(_row(editor))["speaker"]
-        field.value = "Vale"
 
-        await editor.speaker_changed(MagicMock(control=field))
+        await _pick(editor, "Vale")
 
-        assert field.value == "Nyx"
-        assert editor.lines[_fields(_row(editor))["speaker"].data.split(":")[1]].speaker_name == (
-            "Nyx"
-        )
+        assert _shown_speaker(_row(editor)) == "Nyx: "
+        assert editor.ordered[0].speaker_name == "Nyx"
 
     @pytest.mark.asyncio
     async def test_a_speaker_failing_after_paging_back_repaints_the_rebuilt_row(self, make_editor):
@@ -670,44 +1015,67 @@ class TestReassigningASpeaker:
             raise RuntimeError("database is locked")
 
         service.update_line.side_effect = failing_save
-        field = _fields(_row(editor))["speaker"]
-        field.value = "Vale"
 
-        saving = asyncio.create_task(editor.speaker_changed(MagicMock(control=field)))
+        saving = asyncio.create_task(_pick(editor, "Vale"))
         await asyncio.sleep(0)
         await _press(editor, editor.pager.next_button)
         await _press(editor, editor.pager.previous_button)
-        rebuilt = _fields(_row(editor))["speaker"]
         release.set()
         await saving
 
-        assert rebuilt.value == "Nyx"
+        assert _shown_speaker(_row(editor)) == "Nyx: "
         assert editor.ordered[0].speaker_name == "Nyx"
 
     @pytest.mark.asyncio
-    async def test_a_new_name_is_offered_on_the_next_window(self, make_editor):
-        editor, _ = make_editor(_long(WINDOW_SIZE + 1))
+    async def test_a_new_name_is_offered_by_the_next_picker(self, make_editor):
+        editor, _ = make_editor([_line(), _line(start=1.0)])
         await editor.load()
-        first = _fields(_row(editor, 0))["speaker"]
-        first.value = "Morrow"
 
-        await editor.speaker_changed(MagicMock(control=first))
-        await _press(editor, editor.pager.next_button)
+        await _pick(editor, "Morrow", index=0)
+        picker = await _open_speaker(editor, 1)
 
-        options = [option.key for option in _fields(_row(editor))["speaker"].options]
-        assert "Morrow" in options
+        assert "Morrow" in [option.key for option in picker.options]
 
     @pytest.mark.asyncio
-    async def test_clearing_the_speaker_saves_nothing(self, make_editor):
+    async def test_an_empty_pick_saves_nothing(self, make_editor):
         """A line with no speaker at all is not a state the editor should be able to make."""
         editor, service = make_editor([_line(speaker="Nyx")])
         await editor.load()
-        field = _fields(_row(editor))["speaker"]
-        field.value = "   "
 
-        await editor.speaker_changed(MagicMock(control=field))
+        await _pick(editor, "   ")
 
         service.update_line.assert_not_awaited()
+
+
+class TestKeys:
+    @pytest.mark.asyncio
+    async def test_editing_listens_for_keys_and_finishing_hands_them_back(
+        self, make_editor, attach_page
+    ):
+        editor, _ = make_editor()
+        page = attach_page(TranscriptEditor)
+        earlier = MagicMock()
+        page.on_keyboard_event = earlier
+
+        await editor.load()
+        listening = page.on_keyboard_event
+        await editor.finish_editing()
+
+        assert listening == editor.key_pressed
+        assert page.on_keyboard_event is earlier
+
+    @pytest.mark.asyncio
+    async def test_keys_with_nothing_open_go_to_the_earlier_handler(self, make_editor, attach_page):
+        editor, _ = make_editor()
+        page = attach_page(TranscriptEditor)
+        earlier = MagicMock()
+        page.on_keyboard_event = earlier
+        await editor.load()
+
+        event = MagicMock(key="Escape")
+        await editor.key_pressed(event)
+
+        earlier.assert_called_once_with(event)
 
 
 class TestDeletingALine:
@@ -716,13 +1084,12 @@ class TestDeletingALine:
         editor, service = make_editor([_line("Doomed")])
         attach_page(TranscriptEditor)
         await editor.load()
-        button = _fields(_row(editor))["delete"]
 
         with patch(
             "chronicler.desktop.views.transcript.editor.confirm",
             new=AsyncMock(return_value=False),
         ) as ask:
-            await editor.delete_clicked(MagicMock(control=button))
+            await editor.delete_clicked(MagicMock(control=_row(editor).delete_button))
 
         ask.assert_awaited_once()
         service.delete_line.assert_not_awaited()
@@ -732,19 +1099,18 @@ class TestDeletingALine:
         editor, service = make_editor([_line("Doomed")])
         attach_page(TranscriptEditor)
         await editor.load()
-        button = _fields(_row(editor))["delete"]
 
         with patch(
             "chronicler.desktop.views.transcript.editor.confirm",
             new=AsyncMock(return_value=True),
         ):
-            await editor.delete_clicked(MagicMock(control=button))
+            await editor.delete_clicked(MagicMock(control=_row(editor).delete_button))
 
         service.delete_line.assert_awaited_once()
         editor.on_changed.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_text_typed_into_another_row_is_saved_before_the_reload(
+    async def test_text_open_in_another_row_is_saved_before_the_reload(
         self, make_editor, attach_page
     ):
         """The reload replaces every row, and a field taken off the screen sends no blur."""
@@ -752,44 +1118,33 @@ class TestDeletingALine:
         editor, service = make_editor([kept, doomed])
         attach_page(TranscriptEditor)
         await editor.load()
-        _fields(_row(editor, 0))["text"].value = "Kept, corrected"
+        field = await _open_text(editor, 0)
+        field.value = "Kept, corrected"
         service.get_transcript.return_value = [kept]
 
         with patch(
             "chronicler.desktop.views.transcript.editor.confirm",
             new=AsyncMock(return_value=True),
         ):
-            await editor.delete_clicked(MagicMock(control=_fields(_row(editor, 1))["delete"]))
+            await editor.delete_clicked(MagicMock(control=_row(editor, 1).delete_button))
 
         service.update_line.assert_awaited_once()
         assert service.update_line.await_args.args[1] == kept.id
-        assert _fields(_row(editor))["text"].value == "Kept, corrected"
+        assert _shown_text(_row(editor)) == "Kept, corrected"
 
     @pytest.mark.asyncio
     async def test_the_confirmation_quotes_the_line(self, make_editor, attach_page):
         editor, _ = make_editor([_line("The exact words at risk")])
         attach_page(TranscriptEditor)
         await editor.load()
-        button = _fields(_row(editor))["delete"]
 
         with patch(
             "chronicler.desktop.views.transcript.editor.confirm",
             new=AsyncMock(return_value=False),
         ) as ask:
-            await editor.delete_clicked(MagicMock(control=button))
+            await editor.delete_clicked(MagicMock(control=_row(editor).delete_button))
 
         assert "The exact words" in " ".join(str(part) for part in ask.await_args[0])
-
-
-class TestTimestamps:
-    @pytest.mark.asyncio
-    async def test_each_row_shows_when_the_line_starts(self, make_editor):
-        editor, _ = make_editor([_line("Later", start=3725.0)])
-
-        await editor.load()
-
-        stamps = [c.value for c in _row(editor).controls if isinstance(c, ft.Text)]
-        assert any("01:02:05" in value for value in stamps)
 
 
 class TestConcurrency:
@@ -798,15 +1153,8 @@ class TestConcurrency:
         editor, service = make_editor([_line("First"), _line("Second", start=1.0)])
         await editor.load()
 
-        first = _fields(_row(editor, 0))["text"]
-        second = _fields(_row(editor, 1))["text"]
-        first.value = "First edited"
-        second.value = "Second edited"
-
-        await asyncio.gather(
-            editor.text_blurred(MagicMock(control=first)),
-            editor.text_blurred(MagicMock(control=second)),
-        )
+        await _edit_text(editor, "First edited", index=0)
+        await _edit_text(editor, "Second edited", index=1)
 
         saved = {call.kwargs["text"] for call in service.update_line.await_args_list}
         assert saved == {"First edited", "Second edited"}

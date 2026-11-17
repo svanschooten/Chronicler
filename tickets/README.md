@@ -287,15 +287,15 @@ style, and clicking the speaker or the text opens that part's control in place. 
 other new speakers are ordinary speakers, added by typing a name. It builds on 056's window
 of rows and save handling (PR #92), so 056 merges first. 082 comes after wave 10 because
 036 and 041 rewrite the same desktop files, and 040 and 043 reshape the speaker code 083
-changes. That order is a scheduling choice: if the editor matters more, take 082 right
-after 056 and rebase 036 and 041 onto it. 086 is a bug in the shared dropdown and needs
+changes. That order is a scheduling choice, and it was taken: 083 and 082 were built right
+after 056, before wave 10, so 036, 040, 041 and 043 rebase onto them. 086 is a bug in the shared dropdown and needs
 nothing else, so it can be taken now.
 
 - [x] [086-L19 Clicking a speaker or model picker empties it, and leaving does not always put it back](086-L19_dropdown_clears_on_click.md) · medium · XS
 
 - [x] [083-L18 Typing a speaker in different case creates a second speaker in the chronicle](083-L18_speaker_case_duplicates.md) · low · S · after 040
 
-- [ ] [082-F5 The transcript editor looks like a form, not like the transcript](082-F5_inline_transcript_editor.md) · medium · M · after 056, 086, 036, 041
+- [x] [082-F5 The transcript editor looks like a form, not like the transcript](082-F5_inline_transcript_editor.md) · medium · M · after 056, 086, 036, 041
 
 - [ ] [084-F6 Adding a new speaker from the editor works but cannot be discovered](084-F6_new_speaker_in_editor.md) · low · S · after 082, 083
 

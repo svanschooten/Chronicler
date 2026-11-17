@@ -28,6 +28,7 @@ from chronicler.desktop.views.transcript.editor import (
 from chronicler.desktop.views.transcript.export import TranscriptExporter
 from chronicler.desktop.views.transcript.recording import RecordingDialog
 from chronicler.desktop.views.transcript.sources import SourcesPanel
+from chronicler.desktop.views.transcript.style import TRANSCRIPT_STYLE
 from chronicler.desktop.views.transcript.summaries import SummariesPanel
 from chronicler.i18n import t
 
@@ -45,10 +46,6 @@ READER_MIN_WIDTH = 480
 READER_MIN_HEIGHT = 320
 DEFAULT_PAGE_WIDTH = 1200
 DEFAULT_PAGE_HEIGHT = 800
-
-TRANSCRIPT_LINE_HEIGHT = 1.35
-TRANSCRIPT_TEXT_SIZE = 13
-TRANSCRIPT_STYLE = ft.TextStyle(height=TRANSCRIPT_LINE_HEIGHT, size=TRANSCRIPT_TEXT_SIZE)
 
 MIN_DETAIL_WIDTH = 260
 MAX_DETAIL_WIDTH = 520
@@ -345,7 +342,7 @@ class TranscriptView(ft.Column):
         """
         if self.editing:
             # Before the editor leaves the screen: its fields send no blur once removed.
-            await self.editor.save_unsaved()
+            await self.editor.finish_editing()
         self.editing = not self.editing
         self.edit_toggle.icon = ft.Icons.DONE if self.editing else ft.Icons.EDIT
         self.edit_toggle.tooltip = t("transcript.done") if self.editing else t("transcript.edit")

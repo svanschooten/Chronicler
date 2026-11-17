@@ -12,16 +12,18 @@ returned its argument and wrote nothing.
 
 The read view is a single selectable block of text, which is what makes it readable — and
 exactly what cannot be edited line by line. So editing is a mode: the toggle in the
-transcript panel's header swaps the block for one row per line.
+transcript panel's header swaps the block for one row per line. Each row still reads like
+the transcript (see "Lines that read like the transcript" below).
 
 Whole-blob editing was the obvious alternative and is worse. Parsing the text back into
 lines would have to guess where a speaker turn begins, which line each timing belongs to,
 and what a line containing a colon means. One mis-parse would silently rewrite the lines
-around the one that was edited. One control per line means an edit touches exactly the
-line it was typed into, and nothing else.
+around the one that was edited. Editing one part of one line at a time means an edit
+touches exactly the line it was typed into, and nothing else.
 
-Each row carries the line's start time, its speaker, its text, and a delete button. The
-"show timestamps" checkbox is disabled while editing, because rows always show theirs.
+Each row shows the line's start time, its speaker and its text, with a delete button on
+the hovered row. The "show timestamps" checkbox is disabled while editing, because rows
+always show theirs.
 
 ### The block is a Text, not a read-only TextField
 
@@ -66,23 +68,27 @@ Re-timing a line is a different feature and would need to be able to see the aud
 
 ## Saving
 
-A field saves on blur, and only when the value actually changed — the same rule the
+A text field saves when it closes (Enter, blur, or opening another part), and only when
+the value actually changed — the same rule the
 Settings page follows, for the same reason: blur fires on every focus change, and a save
 plus a confirmation on each one is noise. The editor keeps the loaded line as the
 comparison point and updates it after a successful write, so a second blur on a
-twice-edited field does not re-save the first version.
+twice-edited field does not re-save the first version. A speaker saves only when one is
+picked.
 
 A failed save reverts the field to what is still on disk and says why. Leaving the typed
 text visible after a failed write is the worse option: it looks saved.
 
 Editing one line does **not** reload the list. Reloading would throw away the caret
-position and the scroll position on every keystroke-and-tab.
+position and the scroll position on every edit.
 
 ## A window of rows, not all of them
 
-The example transcript has 1,686 lines. Building a row for each, with every speaker as an
-option in every row's dropdown, came to 18,546 controls and about 0.4-0.6 s on the Python
-side alone, before any of it was sent to the client and laid out.
+The example transcript has 1,686 lines. Building a form row for each, with every speaker
+as an option in every row's dropdown, came to 18,546 controls and about 0.4-0.6 s on the
+Python side alone, before any of it was sent to the client and laid out (ticket 056).
+Plain-text rows (ticket 082) are seven controls each, but 1,686 of them would still be
+about 11,800, so the window stayed.
 
 The editor shows `WINDOW_SIZE` (100) rows at a time. Above the list, a pager steps a
 window forward or back, or jumps to the first or last one, and says which lines are on
@@ -102,15 +108,14 @@ The view keeps one editor for as long as the chronicle is open, so finishing edi
 starting again, with no find showing, reopens the window you left, not the first one.
 Leaving edit mode to read a passage should not mean paging back to where you were.
 
-A text field saves on blur, but an edit does not rely on the blur when the rows are
-replaced. The Flet client sends no blur for a focused field that is taken off the screen,
-so paging, the reload after a delete, and finishing editing first save any text the
-window holds that its line does not. A field its blur already saved matches its line by
-then, so nothing is saved twice. The save goes to the line itself, not to the row, so it
-does not matter that the row is gone by then.
+An edit never relies on a blur when the rows are replaced. The Flet client sends no blur
+for a focused field that is taken off the screen, so paging, the reload after a delete,
+and finishing editing first close the open part, saving its text. The save goes to the
+line itself, not to the row, so it does not matter that the row is gone by then.
 
-The line takes the new text when the save starts, not when it ends, so paging straight
-back during a save rebuilds the row with the correction rather than with the old text. A
+The line takes the new text when the save starts, not when it ends, so the row shows the
+correction as soon as the field closes, and paging straight back during a save rebuilds
+the row with it rather than with the old text. A
 failed save is undone only once the field's last running save ends: the line and the
 row on screen, which may be a rebuilt one, then get what the database is known to hold,
 the last text that saved or what the line held before. A failure that a later edit has
@@ -119,35 +124,93 @@ already saved over is reported but takes nothing back.
 The reader's find does the searching, and edit mode picks it up: with a find showing,
 switching to edit mode opens a window that starts at the first match. It starts at that
 line rather than at the usual boundary (line 1,201 for a match on line 1,235) because a
-`ListView` cannot be scrolled to one of its rows, so the top of the window is the one
-place the line is sure to be seen. Paging from there moves a whole window at a time, and
+`ListView` can only be scrolled to a row the client has already built, and a row far down
+a fresh window has not been, so the top of the window is the one place the line is sure
+to be seen. Paging from there moves a whole window at a time, and
 "last" still goes to the last whole window. A match that has since been deleted leaves
 the window where it was.
 
-With 100 rows that is about 1,100 controls. Measured in the desktop client on the example,
-under software rendering on a virtual display, edit mode shows its rows about 0.45 s after
-the click, and moving to the next window takes about 0.3 s.
+With 100 form rows that was about 1,100 controls. Measured in the desktop client on the
+example, under software rendering on a virtual display, edit mode showed its rows about
+0.45 s after the click, and moving to the next window took about 0.3 s. With plain-text
+rows a window is about 700 controls whatever the number of speakers; it has not been
+re-measured in the desktop client.
 
-### Every row still carries every speaker
+## Lines that read like the transcript
 
-Building each speaker dropdown's options only when it gets focus was tried and dropped.
-Clicking the arrow of an editable `Dropdown` in Flet 0.86 opens the menu without focusing
-the field, so `on_focus` never fires and the menu offers only the one name the row
-started with. The control has no event for the menu opening that could be used instead.
-The window already keeps the count small, so the rows keep their full option lists.
+Edit mode used to be a row of form controls per line, which looked like a settings page
+rather than the conversation being corrected. Each row is now one `Text` in the reader's
+style (`TRANSCRIPT_STYLE` in `views/transcript/style.py`), made of three spans:
+`[time] `, `Speaker: ` and the text, wrapping the way the reader wraps. The time is muted
+and not clickable. The speaker and the text are spans with their own `on_click`. An empty
+line shows a muted "(empty line)" so there is still something to click. Rows sit with no
+gap between them.
 
-A name typed into one row is added to the editor's list, so rows built after that, on
-another window or after a delete, offer it too.
+The row under the mouse is tinted (`ThemeColors.hover`) and shows its delete button. The
+button is always in the layout and only faded in, and is sized to one text line, so
+neither hovering nor a short line changes a row's height.
+
+Clicking a part swaps only that part for its control (`LineRow.show_text_field`,
+`show_speaker_picker`). The open row gets an accent bar on its left: the text field is
+borderless and in the reader's style, so without the bar nothing would show that the line
+is being edited.
+
+### The text field
+
+A click on the text opens a borderless multi-line `TextField` with the line's text, in the
+same style, with `shift_enter`. **Enter** saves and closes. **Shift+Enter** adds a
+newline. **Esc** discards the edit and closes. **Blur** saves and closes. While it is open,
+its text wraps under the start of the field rather than under the time.
+
+The field has `autofocus` and is also given `focus()`. Checked in the Flet web client:
+`focus()` alone, called right after the row's update, did not focus the new field, so
+typing went nowhere. `autofocus` on the freshly built field did.
+
+### The speaker picker
+
+A click on the speaker opens an editable `Dropdown` with every workspace name, built for
+this picker only, so a window of rows builds no options at all. It opens **empty, with
+the line's speaker as its hint**, so typing filters at once and the speaker never looks
+deleted. Clicking the field opens the menu without losing focus; typing filters it; Enter
+picks the highlighted option.
+
+Only a pick saves. Leaving the picker with something typed closes it and saves nothing: a
+half-typed filter such as `Az` must not become a speaker. Leaving it with nothing typed
+keeps it open, because a click on the picker's own arrow blurs the field while it opens
+the menu, and closing then would make the arrow useless. An empty picker only shows the
+current name as its hint, so it cannot look like a change. It closes on the next click on
+a line, Esc, a pick, paging or finishing.
+
+A blur is acted on only after `PICKER_BLUR_GRACE` (0.3 s). Checked in the web client: a
+click on a menu option blurs the field first and delivers the pick a moment later, so
+closing at once would take the menu away under the click.
+
+### One part open at a time
+
+The editor holds at most one open part (`TranscriptEditor.open`). Opening another closes
+it first, saving a text field. Closing reads the control's value on the server and starts
+the save itself, because the control is being removed and a removed field sends no blur.
+`open` is cleared before the swap, and every blur, submit and pick handler checks that its
+control is still the open one, so a late blur from a field already closed (by Esc, say)
+does nothing.
+
+Esc goes through `page.on_keyboard_event`. The editor installs its handler when edit mode
+loads, passes on any key it does not use to the handler that was there before, and puts
+that one back when editing finishes.
+
+A name saved from a picker is added to the editor's list, so the next picker offers it
+without a reload, in the spelling the chronicle keeps (ticket 083).
 
 ## Speakers
 
-The speaker dropdown offers every name in the workspace, not just this chronicle's — same
-source as the transcribe dialog, see [speakers.md](speakers.md). A name typed here is
+The speaker picker offers every name in the workspace, not just this chronicle's — same
+source as the transcribe dialog, see [speakers.md](speakers.md). A name saved here is
 created if new and joins the workspace registry, so a name learned while correcting a
-transcript is offered the next time a track is transcribed.
+transcript is offered the next time a track is transcribed. A name that matches an
+existing one apart from case or spacing is the existing speaker (ticket 083).
 
-Clearing the speaker saves nothing. A line belonging to nobody is not a state the editor
-should be able to produce.
+An empty pick saves nothing. A line belonging to nobody is not a state the editor should
+be able to produce.
 
 ## Deleting
 
@@ -168,13 +231,9 @@ whole transcript at once — see [cleaning.md](cleaning.md). Hand-deleting 232 c
 There is no undo. The scope here is correcting what a model misheard, not a document
 editor.
 
-## Planned: click-to-edit lines
+## Design
 
-Wave 11 of [tickets/README.md](../tickets/README.md) (tickets 082-086) replaces the rows of
-form controls described above, on top of 056's window of rows. Edit mode stays a separate
-view, but each line is shown as `Speaker: text` in the reading view's style, the row
-highlights on hover, and clicking the speaker or the text opens that part's control in
-place. A speaker picker opens empty with the current name as a hint, so clicking it no
-longer makes the name disappear (086), and leaving it without picking saves nothing. The design is in
-[superpowers/specs/2026-11-13-inline-transcript-editor-design.md](superpowers/specs/2026-11-13-inline-transcript-editor-design.md).
-Update this page in the same PR as each of those tickets.
+The click-to-edit rows were planned in
+[superpowers/specs/2026-11-13-inline-transcript-editor-design.md](superpowers/specs/2026-11-13-inline-transcript-editor-design.md)
+(wave 11 of [tickets/README.md](../tickets/README.md)), which also records the approaches
+that were not taken.
