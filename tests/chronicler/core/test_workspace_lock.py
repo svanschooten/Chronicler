@@ -79,6 +79,8 @@ def test_a_killed_process_does_not_block_the_next_start(tmp_path):
     finally:
         holder.kill()
         holder.wait(timeout=10)
+        if holder.stdout is not None:
+            holder.stdout.close()
 
     lock = WorkspaceLock(tmp_path)
     lock.acquire()

@@ -3,6 +3,7 @@ import io
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 
@@ -141,34 +142,44 @@ async def test_remote_container_full_cycle():
         assert new_item.name == "Remote Item"
 
 
-async def _build_upload_app(tmp_path):
-    from sqlalchemy.ext.asyncio import AsyncSession
+@pytest_asyncio.fixture
+async def build_upload_app():
+    """Builds an app that accepts uploads, closing its databases after the test."""
+    managers = []
 
-    from chronicler.core.database_manager import DatabaseManager
-    from chronicler.core.repositories import ChronicleRepository, TagRepository, TaskRepository
-    from chronicler.core.sqlite import (
-        SQLiteChronicleRepository,
-        SQLiteTagRepository,
-        SQLiteTaskRepository,
-    )
+    async def build(tmp_path):
+        from sqlalchemy.ext.asyncio import AsyncSession
 
-    db_manager = DatabaseManager(tmp_path)
-    await db_manager.init_archive()
+        from chronicler.core.database_manager import DatabaseManager
+        from chronicler.core.repositories import ChronicleRepository, TagRepository, TaskRepository
+        from chronicler.core.sqlite import (
+            SQLiteChronicleRepository,
+            SQLiteTagRepository,
+            SQLiteTaskRepository,
+        )
 
-    container = Container()
-    container.register_instance(DatabaseManager, db_manager)
-    container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-    container.register_factory(ChronicleRepository, SQLiteChronicleRepository)
-    container.register_factory(TaskRepository, SQLiteTaskRepository)
-    container.register_factory(TagRepository, SQLiteTagRepository)
+        db_manager = DatabaseManager(tmp_path)
+        managers.append(db_manager)
+        await db_manager.init_archive()
 
-    server = RpcServer(container=container, services=[], api_key="test-key")
-    return server.build(), db_manager.get_imports_path()
+        container = Container()
+        container.register_instance(DatabaseManager, db_manager)
+        container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
+        container.register_factory(ChronicleRepository, SQLiteChronicleRepository)
+        container.register_factory(TaskRepository, SQLiteTaskRepository)
+        container.register_factory(TagRepository, SQLiteTagRepository)
+
+        server = RpcServer(container=container, services=[], api_key="test-key")
+        return server.build(), db_manager.get_imports_path()
+
+    yield build
+    for db_manager in managers:
+        await db_manager.close_all()
 
 
 @pytest.mark.asyncio
-async def test_rpc_server_upload(tmp_path):
-    app, upload_dir = await _build_upload_app(tmp_path)
+async def test_rpc_server_upload(tmp_path, build_upload_app):
+    app, upload_dir = await build_upload_app(tmp_path)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -187,8 +198,8 @@ async def test_rpc_server_upload(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_upload_rejects_path_traversal_filename(tmp_path):
-    app, upload_dir = await _build_upload_app(tmp_path)
+async def test_upload_rejects_path_traversal_filename(tmp_path, build_upload_app):
+    app, upload_dir = await build_upload_app(tmp_path)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -206,9 +217,9 @@ async def test_upload_rejects_path_traversal_filename(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_upload_rejects_oversized_file(tmp_path, monkeypatch):
+async def test_upload_rejects_oversized_file(tmp_path, build_upload_app, monkeypatch):
     monkeypatch.setattr(RpcServer, "MAX_UPLOAD_SIZE", 10)
-    app, upload_dir = await _build_upload_app(tmp_path)
+    app, upload_dir = await build_upload_app(tmp_path)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -220,8 +231,8 @@ async def test_upload_rejects_oversized_file(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_upload_same_filename_twice_no_collision(tmp_path):
-    app, upload_dir = await _build_upload_app(tmp_path)
+async def test_upload_same_filename_twice_no_collision(tmp_path, build_upload_app):
+    app, upload_dir = await build_upload_app(tmp_path)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -395,8 +406,10 @@ class TestUploadKeyBeforeBody:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(("api_key", "expected"), [(None, 401), (b"wrong-key", 403)])
-    async def test_nothing_is_received_or_stored(self, tmp_path, api_key, expected):
-        app, upload_dir = await _build_upload_app(tmp_path)
+    async def test_nothing_is_received_or_stored(
+        self, tmp_path, build_upload_app, api_key, expected
+    ):
+        app, upload_dir = await build_upload_app(tmp_path)
 
         status, pulled = await _post_upload(app, [b"x" * 1000] * 100, api_key=api_key)
 
@@ -405,8 +418,8 @@ class TestUploadKeyBeforeBody:
         assert list(upload_dir.iterdir()) == []
 
     @pytest.mark.asyncio
-    async def test_a_key_is_checked_before_the_declared_length(self, tmp_path):
-        app, _ = await _build_upload_app(tmp_path)
+    async def test_a_key_is_checked_before_the_declared_length(self, tmp_path, build_upload_app):
+        app, _ = await build_upload_app(tmp_path)
 
         status, _ = await _post_upload(app, [b"x"], declared_length=10**12, api_key=None)
 
@@ -418,11 +431,11 @@ class TestUploadCapWhileReceiving:
 
     @pytest.mark.asyncio
     async def test_a_declared_length_over_the_cap_is_refused_before_reading(
-        self, tmp_path, monkeypatch
+        self, tmp_path, build_upload_app, monkeypatch
     ):
         monkeypatch.setattr(RpcServer, "MAX_UPLOAD_SIZE", 1000)
         monkeypatch.setattr(RpcServer, "MULTIPART_OVERHEAD", 0)
-        app, upload_dir = await _build_upload_app(tmp_path)
+        app, upload_dir = await build_upload_app(tmp_path)
 
         status, pulled = await _post_upload(app, [b"x" * 1000] * 100, declared_length=100_000)
 
@@ -433,11 +446,11 @@ class TestUploadCapWhileReceiving:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("declared_length", [None, 10])
     async def test_a_body_that_outgrows_its_declared_length_stops_at_the_cap(
-        self, tmp_path, monkeypatch, declared_length
+        self, tmp_path, build_upload_app, monkeypatch, declared_length
     ):
         monkeypatch.setattr(RpcServer, "MAX_UPLOAD_SIZE", 1000)
         monkeypatch.setattr(RpcServer, "MULTIPART_OVERHEAD", 0)
-        app, upload_dir = await _build_upload_app(tmp_path)
+        app, upload_dir = await build_upload_app(tmp_path)
 
         status, pulled = await _post_upload(
             app, [b"x" * 1000] * 100, declared_length=declared_length
@@ -448,9 +461,11 @@ class TestUploadCapWhileReceiving:
         assert list(upload_dir.iterdir()) == []
 
     @pytest.mark.asyncio
-    async def test_a_file_under_the_cap_still_uploads(self, tmp_path, monkeypatch):
+    async def test_a_file_under_the_cap_still_uploads(
+        self, tmp_path, build_upload_app, monkeypatch
+    ):
         monkeypatch.setattr(RpcServer, "MAX_UPLOAD_SIZE", 1000)
-        app, upload_dir = await _build_upload_app(tmp_path)
+        app, upload_dir = await build_upload_app(tmp_path)
 
         status, _ = await _post_upload(app, [b"x" * 500])
 

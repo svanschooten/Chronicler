@@ -305,6 +305,7 @@ class DatabaseManager:
                 async with self.archive_engine.begin() as conn:
                     await conn.run_sync(_run_alembic_upgrade, "archive")
         except Exception:
+            await self.archive_engine.dispose()
             self._workspace_lock.release()
             raise
 

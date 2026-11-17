@@ -417,6 +417,7 @@ class TestExportsLeaveTheEventLoopFree:
             service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
 
             pdf = await service.export_pdf(chronicle.id, chronicle.title)
+        await db_manager.close_all()
 
         assert bytes(pdf).startswith(b"%PDF")
         assert seen and seen[0] is not threading.main_thread()
@@ -431,6 +432,7 @@ class TestExportsLeaveTheEventLoopFree:
             service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
 
             archive = await service.export_zip(chronicle.id)
+        await db_manager.close_all()
 
         with _opened(archive) as bundle:
             assert bundle.testzip() is None

@@ -1,6 +1,7 @@
 """Upgrading an existing project.db to the current schema."""
 
 import sqlite3
+from contextlib import closing
 
 import pytest
 from alembic import command
@@ -32,7 +33,7 @@ def _project_db_at(path, revision: str) -> None:
 async def test_lines_and_sources_survive_the_source_id_migration(tmp_path):
     project_db = tmp_path / "project.db"
     _project_db_at(project_db, BEFORE_SOURCE_IDS)
-    with sqlite3.connect(project_db) as connection:
+    with closing(sqlite3.connect(project_db)) as connection, connection:
         connection.execute("INSERT INTO speakers (id, name) VALUES (?, 'Alice')", (SPEAKER,))
         connection.execute(
             "INSERT INTO transcript_lines (id, speaker_id, start_time, end_time, text) "
@@ -82,7 +83,7 @@ async def test_the_migration_attributes_lines_only_where_one_track_is_certain(tm
         (uid(23), "bob-2.wav", "Bob", "DONE"),
         (uid(24), "dave.wav", "Dave", "PENDING"),
     ]
-    with sqlite3.connect(project_db) as connection:
+    with closing(sqlite3.connect(project_db)) as connection, connection:
         for index, (name, speaker_id) in enumerate(speakers.items()):
             connection.execute("INSERT INTO speakers (id, name) VALUES (?, ?)", (speaker_id, name))
             connection.execute(
@@ -118,7 +119,7 @@ async def test_the_migration_attributes_lines_only_where_one_track_is_certain(tm
 def test_synthetic_timing_column_is_added_and_old_rows_stay_null(tmp_path):
     project_db = tmp_path / "project.db"
     _project_db_at(project_db, "f6c3a9d2b417")
-    with sqlite3.connect(project_db) as connection:
+    with closing(sqlite3.connect(project_db)) as connection, connection:
         connection.execute(
             "INSERT INTO transcript_lines (id, start_time, end_time, text) "
             "VALUES (?, 0.0, 1.0, 'Hello')",
@@ -127,6 +128,6 @@ def test_synthetic_timing_column_is_added_and_old_rows_stay_null(tmp_path):
 
     _project_db_at(project_db, "head")
 
-    with sqlite3.connect(project_db) as connection:
+    with closing(sqlite3.connect(project_db)) as connection, connection:
         row = connection.execute("SELECT synthetic_timing FROM transcript_lines").fetchone()
     assert row == (None,)
