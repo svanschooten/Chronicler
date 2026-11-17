@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from chronicler.i18n import Translator, available_locales, set_locale, t
+from chronicler.i18n import Translator, available_locales, format_count, set_locale, t
 from chronicler.i18n.messages import MESSAGES
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[3] / "chronicler"
@@ -109,6 +109,21 @@ class TestModuleLevelApi:
     def test_available_locales_reports_what_ships(self):
         assert "en" in available_locales()
         assert "nl" in available_locales()
+
+    @pytest.mark.parametrize(
+        ("locale", "expected"),
+        [("en", "1,686"), ("nl", "1.686"), ("de", "1.686"), ("nl-be", "1.686")],
+    )
+    def test_a_count_groups_its_thousands_the_local_way(self, locale, expected):
+        """In Dutch and German "1,686" reads as one point six eight six."""
+        set_locale(locale)
+
+        assert format_count(1686) == expected
+
+    def test_a_small_count_has_no_separator(self):
+        set_locale("nl")
+
+        assert format_count(100) == "100"
 
 
 class TestMessageCatalogueIntegrity:
