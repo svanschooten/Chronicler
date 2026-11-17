@@ -56,7 +56,7 @@ async def _make_transcribe_task(
     """
     The file must already live in the chronicle's durable sources/ directory - that's
     ChronicleService.add_audio_source's job, a separate earlier step from transcribing it
-    (see TODO.md).
+    (see docs/audio-sources.md).
     """
     await register_chronicle(db_manager, chronicle_id)
     sources_dir = db_manager.get_chronicle_sources_path(str(chronicle_id))
