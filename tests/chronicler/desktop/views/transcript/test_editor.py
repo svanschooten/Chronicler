@@ -1047,6 +1047,89 @@ class TestReassigningASpeaker:
         service.update_line.assert_not_awaited()
 
 
+class TestAddingASpeaker:
+    """Ticket 084: a name that matches nobody can be added from the picker."""
+
+    @staticmethod
+    async def _type(editor, picker, text):
+        picker.text = text
+        await editor.speaker_typed(MagicMock(control=picker, data=text))
+
+    @pytest.mark.asyncio
+    async def test_a_name_nobody_has_offers_to_add_it(self, make_editor):
+        editor, _ = make_editor(speakers=["Nyx", "Vale"])
+        await editor.load()
+        picker = await _open_speaker(editor)
+
+        await self._type(editor, picker, "Gundren")
+
+        button = editor.open.add_button
+        assert button.opacity == 1 and not button.disabled
+        assert button.content == t("transcript.add_speaker", name="Gundren")
+
+    @pytest.mark.asyncio
+    async def test_the_offer_is_hidden_until_something_new_is_typed(self, make_editor):
+        editor, _ = make_editor()
+        await editor.load()
+
+        await _open_speaker(editor)
+
+        assert editor.open.add_button.opacity == 0
+        assert editor.open.add_button.disabled
+
+    @pytest.mark.asyncio
+    async def test_a_known_name_in_another_case_is_not_offered(self, make_editor):
+        editor, _ = make_editor(speakers=["Nyx", "Vale"])
+        await editor.load()
+        picker = await _open_speaker(editor)
+
+        await self._type(editor, picker, "  vale ")
+
+        assert editor.open.add_button.disabled
+
+    @pytest.mark.asyncio
+    async def test_typing_leaves_the_picker_options_alone(self, make_editor):
+        """Changing a Dropdown's options while it is typed into resets the field."""
+        editor, _ = make_editor(speakers=["Nyx", "Vale"])
+        await editor.load()
+        picker = await _open_speaker(editor)
+        options = picker.options
+
+        await self._type(editor, picker, "Gundren")
+
+        assert picker.options is options
+
+    @pytest.mark.asyncio
+    async def test_adding_labels_the_line_and_the_next_picker_offers_it(self, make_editor):
+        editor, service = make_editor([_line(), _line(start=1.0)], speakers=["Nyx"])
+        await editor.load()
+        picker = await _open_speaker(editor, 0)
+        await self._type(editor, picker, " Gundren  ")
+
+        await editor.add_speaker_clicked(MagicMock(control=editor.open.add_button))
+
+        assert service.update_line.await_args.kwargs["speaker_name"] == "Gundren"
+        assert _shown_speaker(_row(editor, 0)) == "Gundren: "
+        next_picker = await _open_speaker(editor, 1)
+        assert "Gundren" in [option.key for option in next_picker.options]
+
+    @pytest.mark.asyncio
+    async def test_the_click_still_counts_after_the_blur_it_causes(self, make_editor):
+        editor, service = make_editor(speakers=["Nyx"])
+        await editor.load()
+        picker = await _open_speaker(editor)
+        await self._type(editor, picker, "Gundren")
+        button = editor.open.add_button
+
+        with patch("chronicler.desktop.views.transcript.editor.PICKER_BLUR_GRACE", 0.05):
+            blurring = asyncio.create_task(editor.speaker_blurred(MagicMock(control=picker)))
+            await asyncio.sleep(0)
+            await editor.add_speaker_clicked(MagicMock(control=button))
+            await blurring
+
+        assert service.update_line.await_args.kwargs["speaker_name"] == "Gundren"
+
+
 class TestKeys:
     @pytest.mark.asyncio
     async def test_editing_listens_for_keys_and_finishing_hands_them_back(

@@ -24,6 +24,7 @@ from chronicler.core.database_manager import NewerSchemaError
 from chronicler.core.formatting import format_timestamp, looks_synthetic
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.services.transcript_service import TranscriptService
+from chronicler.core.sqlite.known_speaker_repository import normalize_speaker_name
 from chronicler.desktop.dialogs import confirm
 from chronicler.desktop.theme import ThemeColors
 from chronicler.desktop.views.transcript.style import TRANSCRIPT_STYLE, TRANSCRIPT_TEXT_SIZE
@@ -132,6 +133,9 @@ class _Open:
     line_id: str
     part: str
     control: ft.TextField | ft.Dropdown
+    # A speaker picker's "Add speaker" button, and the new name it would add.
+    add_button: ft.TextButton | None = None
+    new_name: str = ""
 
 
 class LineRow(ft.Container):
@@ -241,8 +245,14 @@ class LineRow(ft.Container):
             )
         )
 
-    def show_speaker_picker(self, line: TranscriptLine, picker: ft.Dropdown) -> None:
-        """The time and text stay as they were; only the speaker becomes a picker."""
+    def show_speaker_picker(
+        self, line: TranscriptLine, picker: ft.Dropdown, add_button: ft.TextButton
+    ) -> None:
+        """
+        The time and text stay as they were; only the speaker becomes a picker. The
+        "Add speaker" button goes at the end of the row, so its changing label does not
+        move the text.
+        """
         self.is_open = True
         self._set_body(
             ft.Row(
@@ -253,6 +263,7 @@ class LineRow(ft.Container):
                     self._text([self._timestamp_span(line)], expand=False),
                     picker,
                     self._text([ft.TextSpan(f": {line.text}")]),
+                    add_button,
                 ],
             )
         )
@@ -459,13 +470,15 @@ class TranscriptEditor(ft.Column):
             return
 
         control: ft.TextField | ft.Dropdown
+        add_button = None
         if part == TEXT:
             control = self._text_field(line)
             row.show_text_field(line, control)
         else:
             control = self._speaker_picker(line)
-            row.show_speaker_picker(line, control)
-        self.open = _Open(line_id, part, control)
+            add_button = self._add_speaker_button(line)
+            row.show_speaker_picker(line, control, add_button)
+        self.open = _Open(line_id, part, control, add_button)
         row.repaint()
         try:
             await control.focus()
@@ -503,7 +516,7 @@ class TranscriptEditor(ft.Column):
             value=None,
             hint_text=line.speaker_name or t("common.unknown"),
             hint_style=ft.TextStyle(color=self.colors.muted),
-            options=[ft.DropdownOption(key=name, text=name) for name in self.speakers],
+            options=self._speaker_options(),
             editable=True,
             enable_filter=True,
             menu_height=MENU_HEIGHT,
@@ -513,8 +526,65 @@ class TranscriptEditor(ft.Column):
             content_padding=ft.Padding(left=0, top=2, right=0, bottom=2),
             text_size=TRANSCRIPT_TEXT_SIZE,
             on_select=self.speaker_picked,
+            on_text_change=self.speaker_typed,
             on_blur=self.speaker_blurred,
         )
+
+    def _speaker_options(self) -> list[ft.DropdownOption]:
+        return [ft.DropdownOption(key=name, text=name) for name in self.speakers]
+
+    def _add_speaker_button(self, line: TranscriptLine) -> ft.TextButton:
+        """Hidden until a name is typed that matches nobody. See `speaker_typed`."""
+        return ft.TextButton(
+            content=t("transcript.add_speaker", name=""),
+            icon=ft.Icons.PERSON_ADD_ALT,
+            data=str(line.id),
+            opacity=0,
+            disabled=True,
+            on_click=self.add_speaker_clicked,
+        )
+
+    async def speaker_typed(self, e) -> None:
+        """
+        Offers to add the typed name while it matches no known name under the registry's
+        rule, case and spacing ignored (ticket 084).
+
+        The offer is a button beside the picker, not an extra option in its menu:
+        changing a `Dropdown`'s options while it is being typed into resets the field in
+        the Flet client, and the next keystrokes are lost. Only the button is updated.
+        """
+        opened = self.open
+        if opened is None or opened.control is not e.control or opened.add_button is None:
+            return
+        data = getattr(e, "data", None)
+        typed = data if isinstance(data, str) else (getattr(e.control, "text", None) or "")
+        name = " ".join(typed.split())
+        is_new = bool(name) and all(
+            normalize_speaker_name(known) != normalize_speaker_name(name) for known in self.speakers
+        )
+        opened.new_name = name if is_new else ""
+        button = opened.add_button
+        button.content = t("transcript.add_speaker", name=name)
+        button.opacity = 1 if is_new else 0
+        button.disabled = not is_new
+        self._repaint(button)
+
+    async def add_speaker_clicked(self, e) -> None:
+        """
+        Saves the typed name as the line's speaker. Clicking the button blurs the
+        picker first; the blur waits `PICKER_BLUR_GRACE`, so the picker is still open
+        when this arrives.
+        """
+        opened = self.open
+        if opened is None or opened.add_button is not e.control or not opened.new_name:
+            return
+        line = self.lines.get(opened.line_id)
+        name = opened.new_name
+        await self.close_open(save=False)
+        if line is None:
+            return
+        if await self._start_save(line, "speaker_name", name):
+            self._learn_speaker(line.speaker_name or name)
 
     def _is_open(self, control: ft.Control) -> bool:
         """A late event from a control already closed must not act on the line again."""

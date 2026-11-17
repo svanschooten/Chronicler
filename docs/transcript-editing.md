@@ -181,9 +181,23 @@ the menu, and closing then would make the arrow useless. An empty picker only sh
 current name as its hint, so it cannot look like a change. It closes on the next click on
 a line, Esc, a pick, paging or finishing.
 
+### Adding a speaker
+
+A line often needs a speaker who is not in the list yet, such as an NPC the GM voices.
+While the typed name matches no known name, case and spacing ignored, an
+"Add speaker '{name}'" button shows at the end of the row. Clicking it saves the line with
+that name, which joins the workspace registry like any other (see
+[speakers.md](speakers.md)), and the next picker offers it without a reload. This button
+is the only way a new name is saved from the editor.
+
+It is a button, not an extra option in the picker's menu. That was tried first: changing
+a `Dropdown`'s options while it is being typed into resets its field in the Flet client,
+and the keystrokes that follow are lost. Only the button is updated as you type.
+
 A blur is acted on only after `PICKER_BLUR_GRACE` (0.3 s). Checked in the web client: a
 click on a menu option blurs the field first and delivers the pick a moment later, so
-closing at once would take the menu away under the click.
+closing at once would take the menu away under the click. The "Add speaker" button
+blurs the field the same way, and is caught by the same grace.
 
 ### One part open at a time
 

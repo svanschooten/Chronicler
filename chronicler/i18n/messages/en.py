@@ -191,6 +191,7 @@ MESSAGES = {
     "transcript": {
         "edit": "Edit the transcript",
         "done": "Finish editing",
+        "add_speaker": "Add speaker '{name}'",
         "empty_line": "(empty line)",
         "delete_line": "Delete this line",
         "line_window": "Lines {first}-{last} of {total}",

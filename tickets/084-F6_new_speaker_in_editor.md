@@ -53,3 +53,11 @@ mode.
 
 - (BLOCKER) [082-F5_inline_transcript_editor](082-F5_inline_transcript_editor.md)
 - (BLOCKER) [083-L18_speaker_case_duplicates](083-L18_speaker_case_duplicates.md)
+
+### outcome
+
+Built as the fallback: an "Add speaker '{name}'" button at the end of the row, updated as
+you type. Adding the option to the menu, as proposed, reset the picker's field in the
+Flet client on every keystroke (checked in the web client under Playwright), so the
+button is the only path. Enter does not add a new name: an editable `Dropdown` has no
+submit event when no option is highlighted.

@@ -139,7 +139,8 @@ The editor keeps a `dict[str, ft.Container]` from line id to row.
   it and closes the picker.
 - **Leaving without picking** saves nothing, *even if a name was typed*. A half-typed
   filter such as `Az` must never become a speaker. The way to use a new name is the
-  explicit "Add speaker" option (084). Esc and opening another part close the picker. A
+  explicit "Add speaker" button (084; a menu option was tried first and reset the field
+  on every keystroke). Esc and opening another part close the picker. A
   blur closes it only when something was typed, and only after a 0.3 s grace: in the web
   client a click on a menu option blurs the field before the pick arrives, and a click on
   the picker's own arrow blurs it while opening the menu. An empty picker left open shows
