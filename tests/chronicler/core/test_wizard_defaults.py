@@ -1,14 +1,7 @@
 from pathlib import Path
 
-import pytest
-
 from chronicler.core.config import CONFIG_FILE_ENV_VAR, Settings
 from chronicler.core.wizard import default_workspace_path, supported_languages
-
-
-@pytest.fixture(autouse=True)
-def _isolate_every_test(isolated_config):
-    """Every test here builds a Settings(); see the shared fixture in tests/conftest.py."""
 
 
 class TestDefaultWorkspacePath:

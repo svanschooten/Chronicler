@@ -6,11 +6,6 @@ from chronicler.core.config import Mode, Settings
 from chronicler.core.wizard import SetupError, configure_server
 
 
-@pytest.fixture(autouse=True)
-def _isolated(isolated_config):
-    """Every test builds a Settings and saves it; see the shared fixture in conftest."""
-
-
 def _fail_if_asked(_prompt: str) -> str:
     raise AssertionError("the server must not prompt when it was given everything")
 

@@ -22,11 +22,6 @@ from chronicler.core.sqlite import (
 from chronicler.core.worker_wiring import build_worker_manager
 
 
-@pytest.fixture(autouse=True)
-def _defaults_not_the_developers_config(isolated_config):
-    """`Settings()` here has to mean the shipped defaults. See docs/testing.md."""
-
-
 @pytest_asyncio.fixture
 async def workspace(tmp_path):
     db_manager = DatabaseManager(tmp_path)

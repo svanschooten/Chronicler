@@ -70,16 +70,17 @@ async def two_sessions(tmp_path) -> AsyncIterator[TwoSessions]:
     await db_manager.close_all()
 
 
-@pytest.fixture
-def isolated_config(monkeypatch, tmp_path):
+@pytest.fixture(autouse=True)
+def isolated_config(monkeypatch, tmp_path_factory):
     """
-    Keeps Settings() away from the developer's real configuration.
+    Keeps Settings() away from the developer's real configuration, in every test.
 
     Without this, any test that reads or writes settings passes or fails depending on
-    whose machine it runs on. Yields the config file's directory.
+    whose machine it runs on. Autouse, because opting in was forgotten more than once.
+    Yields the config file's directory.
     """
-    home = tmp_path / "home"
-    home.mkdir()
+    # Its own directory, so a test's `tmp_path` stays as empty as the test left it.
+    home = tmp_path_factory.mktemp("home")
     isolate_home(monkeypatch, home)
     monkeypatch.setenv(CONFIG_FILE_ENV_VAR, str(home / "settings.yaml"))
     get_settings.cache_clear()

@@ -14,11 +14,6 @@ from chronicler.core.sqlite import SQLiteTranscriptRepository
 from tests.projects import register_chronicle
 
 
-@pytest.fixture(autouse=True)
-def _defaults_not_the_developers_config(isolated_config):
-    """Handlers read the configured settings; see the shared fixture in conftest."""
-
-
 async def _noop(_progress: int) -> None:
     pass
 
