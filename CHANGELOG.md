@@ -1,31 +1,13 @@
-# Chronicler Roadmap
+# Changelog
 
-**Status legend**
+What landed, newest first. Open work is in [tickets/](tickets/README.md), and the longer
+direction in [ROADMAP.md](ROADMAP.md). The release number lives in
+`chronicler/__init__.py`.
 
-| Mark  | Meaning                                                                 |
-| ----- | ---------------------------------------------------------------------- |
-| `[x]` | Implemented and covered by tests                                       |
-| `[~]` | Partially implemented — see the note; do not assume it works end to end |
-| `[ ]` | Not started                                                            |
-
-## Where the project stands
-
-Last re-baselined **2026-11-10** against the source tree, after waves 1-4 of the code
-audit. **Open work lives in [tickets/](tickets/README.md)**, which also gives the order to
-take it in. This file records what landed and the longer-term direction. Ticket 062 splits
-it into a changelog and a roadmap.
-
-The core loop works end to end in all three deployment modes (full stack, server, thin
-client): create and manage Chronicles; import a text transcript or audio sources, or
-record one in the app; normalise and transcribe audio with faster-whisper; clean and edit
-the transcript line by line; summarise it with a local or remote language model; and
-export it as plain text, SRT, HTML, PDF or a portable zip. The web client was removed in
-ticket 012-S14.
-
-Measured 2026-11-10: 1436 tests pass and 3 skip (extras not installed), 90% coverage;
-ruff, ruff format and mypy are clean, and `scripts/thin_client_check.py` passes against a
-real server. Under `--cov`, as CI runs it, the suite reports 4 `ResourceWarning`s (ticket
-080).
+Entries up to the audit's wave 4 were written at the time, in the old `TODO.md`, and are
+kept as they were: a note that a later change superseded something says so in italics.
+A ticket number such as 063 refers to its file in [tickets/](tickets/README.md), which
+holds the problem and its evidence.
 
 | Sprint | Theme | Landed |
 | ------ | ----- | ------ |
@@ -43,28 +25,66 @@ real server. Under `--cov`, as CI runs it, the suite reports 4 `ResourceWarning`
 | 11 | Audit cleanup — explicit RPC exposure, full i18n with a guard, shared chronicle operations — then an editable transcript | 2026-09-03 |
 | 11.1 | Document exports over RPC, chronicle zip export, the embedded-runtime build | 2026-09-17 |
 | Audit 1-4 | The code audit's first four waves: tickets 001-028, 067 and 068, see below | 2026-11-10 |
+| Audit 5-11 | Quick fixes, safety and search, progress and restore, then a transcript editor that reads like the transcript: see below | 2026-11-17 |
 
+## The code audit, waves 5-11 (2026-11-10 to 2026-11-17)
 
+* **Wave 5, quick fixes.** A failed link no longer leaves a broken chronicle, and Link
+  works on a thin client (072). "Open folder" on a thin client no longer tries a server
+  path (049). Dismissing a dialog no longer leaves its action waiting, or a recording
+  running (073). A finished task's event survives a busy database (069). Config files are
+  read as UTF-8 and saved atomically (054). Workspace validation runs (055). Checking
+  extras no longer stalls startup (039). Slow imports are lazy (038). Version and status
+  agree (061). Dependabot covers the shared setup action (070).
+* **Wave 6, safety, then search.** A regex has a real timeout instead of a guard (035).
+  Project databases use `NullPool` (031) and one helper owns project database access
+  (032, closing 033). A chronicle records the schema it needs, so an older Chronicler
+  refuses a newer chronicle clearly (074). Full-text transcript search, in a chronicle and
+  across the workspace (063). CI runs the optional extras (044), and normalization
+  decodes the file once (057). Remote callers cannot point a chronicle at any path (076),
+  and the upload cap limits what is received (053).
+* **Wave 7, what users notice next.** The task list can be cleared (077). Transcription
+  reports real progress and can be cancelled (064). Service errors reach thin clients
+  with their explanation (046). The last 17 interface strings are translated (047). A
+  server is set up with flags instead of the console wizard (042). A snapshot can be
+  restored after a destructive action (065). Saving the edit dialog keeps a computed
+  duration (075). Archive search shows only the latest query's results (078). Odd model
+  replies no longer crash a summary (079). Only audio files count as tracks (048). The
+  summary recap is budgeted (050). Local models are kept and released sensibly (052).
+  Zip exports stream rather than holding everything in memory (037). The transcript
+  editor builds only the rows on screen (056).
+* **Wave 8, docs.** The top-level docs match the code (060), and `TODO.md` became this
+  changelog, [ROADMAP.md](ROADMAP.md) and [docs/live-updates.md](docs/live-updates.md)
+  (062).
+* **Wave 11, a transcript editor that reads like the transcript.** Clicking a picker no
+  longer empties it (086). Typing a speaker in different case reuses the speaker (083).
+  Edit mode shows the transcript as text and opens a control only where clicked (082).
+  A new speaker can be added from the picker (084). Alt+arrows move the open field to the
+  next or previous line (085).
+
+Waves 9, 10 and 12 are still open.
+
+## Sprints and earlier waves
 
 ### The code audit, waves 1-4 (2026-11-06 to 2026-11-10)
 
 Tickets 001-028, 067 and 068 from the audit of `b02421a`. Each ticket file in
 [tickets/](tickets/README.md) holds the problem and its evidence. In short:
 
-* [x] **A fresh install starts** (001), and tests can hold a database lock from a second
+* **A fresh install starts** (001), and tests can hold a database lock from a second
   connection (002).
-* [x] **CI runs on Windows too** (003, 005), and the CI and install files were trimmed
+* **CI runs on Windows too** (003, 005), and the CI and install files were trimmed
   (004).
-* [x] **Work is no longer lost.** Saving a speaker commits (006). The worker opens a short
+* **Work is no longer lost.** Saving a speaker commits (006). The worker opens a short
   session per step, so one lock timeout no longer stops all background work (007). One
   process per workspace, enforced by an OS lock (008), whose failures say why (068).
   Interrupted tasks are recovered at start (009). Transcribing a second track for a
   speaker no longer deletes the first, because lines record their source (010). Clean
   asks first and snapshots the database (011).
-* [x] **Security.** The web client is gone (012, closing 013, 014 and 026). API keys are
+* **Security.** The web client is gone (012, closing 013, 014 and 026). API keys are
   never logged, and secrets from the environment are never written to the config file
   (015). Released binaries can run as a server (016).
-* [x] **Correct output and robustness.** PDF export keeps every character (017). The
+* **Correct output and robustness.** PDF export keeps every character (017). The
   default importer accepts non-ASCII speakers (018). Thin-client calls have sensible
   timeouts (019). Text-imported timings are flagged explicitly, so the subtitle guard
   survives edits (020). Reading an unknown chronicle no longer creates it (021). Retries
@@ -75,64 +95,76 @@ Tickets 001-028, 067 and 068 from the audit of `b02421a`. Each ticket file in
 The review after wave 4 re-checked every open ticket, added tickets 072-081, and set the
 order of the open waves.
 
+### Sprint 11.1 — document exports over RPC, zip export, the embedded runtime (2026-09-17)
+
+* **Document exports work on a thin client.** Methods returning `bytes` are served as
+  `application/octet-stream`, so `export_html` and `export_pdf` could be exposed. See
+  [docs/deployment-and-rpc.md](docs/deployment-and-rpc.md).
+* **Chronicle zip export.** One chronicle packed as `project.db`, a `chronicle.json`
+  manifest, and its audio when asked for. See [docs/storage.md](docs/storage.md) and the
+  Export notes under [Notes by area](#notes-by-area).
+* **The embedded-runtime build**, a launcher around a trimmed CPython that downloads
+  optional components from hash-pinned locks. See
+  [docs/runtime-build.md](docs/runtime-build.md).
+
 ### Sprint 11 — the audit's cleanup, then editing (2026-09-03)
 
 Driven by the static-analysis pass; findings and rationale in the audit artifact and
 `docs/deployment-and-rpc.md`, `docs/transcript-editing.md`.
 
-* [x] **RPC exposure is explicit.** `@service(expose=[...])`, validated at import time.
+* **RPC exposure is explicit.** `@service(expose=[...])`, validated at import time.
   Publishing every public coroutine made the API a side effect of whether a method
   happened to be async — two internal helpers became endpoints that way and served the
   server's absolute paths. Surface went from 45 methods to 31, with a test asserting each
   service's exact count.
-* [x] **The interface is fully translated, and stays that way.** Four views plus the forms
+* **The interface is fully translated, and stays that way.** Four views plus the forms
   were hardcoded English while the catalogue already held their keys. A new AST guard
   fails on a bare literal in any user-facing position — it found three more cases the
   hand audit had missed. Orphaned keys: 32 → 0.
   *(2026-11-10: not fully. Ticket 047 lists 17 strings in positions the guard does not
   check.)*
-* [x] **Chronicle operations are shared.** `desktop/operations.py` holds clean, identify
+* **Chronicle operations are shared.** `desktop/operations.py` holds clean, identify
   speakers, import audio, import transcript, link, edit and delete; the archive card and
   the chronicle action row are both layout over it. They had already drifted.
-* [x] **SearchService deleted.** Five endpoints, two raising `NotImplementedError`, and no
+* **SearchService deleted.** Five endpoints, two raising `NotImplementedError`, and no
   view resolved it — both search boxes already called the owning services directly.
-* [x] **Dead code removed** — `update_line` stub, `mark_source_transcribed`,
+* **Dead code removed** — `update_line` stub, `mark_source_transcribed`,
   `list_audio_source_paths`, `get_summary`, `ModelInfo.display_name`, `DBProjectMetadata`
   (plus a migration dropping its table), and `TaskType.PROCESS` / `EXPORT` / `TEST`.
-* [x] **`model_error` wired rather than deleted.** An empty model list now says why; an
+* **`model_error` wired rather than deleted.** An empty model list now says why; an
   unreachable gateway used to look identical to a provider with no models.
-* [x] **`summary.max_tokens` → `chunk_token_budget`.** It never reached the model; the
+* **`summary.max_tokens` → `chunk_token_budget`.** It never reached the model; the
   output cap is `llm.max_tokens`. Two settings with one name did different things.
-* [x] **Tests for `queue_summarize` and `queue_normalize`**, which shaped task payloads
+* **Tests for `queue_summarize` and `queue_normalize`**, which shaped task payloads
   with nothing checking them. `importers.parse` split (McCabe 14 → 8).
 
 #### Editable transcript
 
-* [x] **Per-line editing** behind a read/edit toggle. Whole-blob editing would have to
+* **Per-line editing** behind a read/edit toggle. Whole-blob editing would have to
   guess where turns and timings belong; one control per line touches only what was typed
   into.
-* [x] **Timings are never touched by a text edit** — a corrected word must not shift the
+* **Timings are never touched by a text edit** — a corrected word must not shift the
   line off its audio.
-* [x] **Saves on blur, only when changed**, reverting and reporting on failure. Editing a
+* **Saves on blur, only when changed**, reverting and reporting on failure. Editing a
   line does not reload the list, which would drop the caret and scroll position.
-* [x] **Speakers come from the workspace-wide registry**, and a name typed while editing
+* **Speakers come from the workspace-wide registry**, and a name typed while editing
   joins it.
-* [x] **Per-line delete confirms, quoting the line.** Transcript text is the one thing in
+* **Per-line delete confirms, quoting the line.** Transcript text is the one thing in
   a chronicle that cannot be regenerated — a re-transcription produces different words.
 
 #### Shutdown
 
-* [x] **A session leaked for the life of the process.** `refresh_models` resolved
+* **A session leaked for the life of the process.** `refresh_models` resolved
   `SystemService` off the root container, whose cache is never emptied, so its
   repository's `AsyncSession` was held open - with a read transaction - until the garbage
   collector terminated the connection at interpreter exit
   (`RuntimeError: greenlet is being finalized`). Reproduced exactly, fixed by resolving
   through a scope, and covered by four regression tests.
-* [x] **`Container.cached()`** - checking whether a scope built a session must not build
+* **`Container.cached()`** - checking whether a scope built a session must not build
   one to find out.
-* [x] **The worker task is cancelled, not just flagged.** `stop()` only asks the loop to
+* **The worker task is cancelled, not just flagged.** `stop()` only asks the loop to
   finish its current sleep.
-* [x] **The test suite is warning-free**, down from three SAWarnings that were hiding
+* **The test suite is warning-free**, down from three SAWarnings that were hiding
   exactly this class of leak. *(2026-11-10: a plain run still is, but under `--cov` 4
   `ResourceWarning`s appear. Ticket 080.)*
 
@@ -144,86 +176,49 @@ no warnings; thin-client check passes.
 Nine pieces of feedback from running the app, grouped into what turned out to be seven
 changes. Full plan and rationale: `docs/optional-extras.md`, `docs/desktop.md`.
 
-* [x] **Optional components install on demand, after asking.** `core/extras.py` is one
+* **Optional components install on demand, after asking.** `core/extras.py` is one
   registry for all four extras — module, requirement, size, and any system package pip
   cannot supply — replacing four hand-written "install the extra" strings that had
   drifted. `ExtraInstaller` confirms, installs off the UI thread, and re-checks. The
   confirmation offers "install without asking", which writes `extras.auto_install`
   (default `false`, also editable in Settings).
-* [x] **`is_available()` imports rather than looking.** `sounddevice` is a 32 kB binding
+* **`is_available()` imports rather than looking.** `sounddevice` is a 32 kB binding
   with no bundled PortAudio: `find_spec` finds it and the import then raises `OSError`.
   The message tells the pip case and the apt case apart.
-* [x] **Chronicle actions live in the chronicle view too** — import audio, import
+* **Chronicle actions live in the chronicle view too** — import audio, import
   transcript, clean, identify speakers, generate summary, edit, delete. `ImportCoordinator`
   and the forms moved to `desktop/` so both views share them.
-* [x] **One file-dialog flow.** `desktop/picking.py` replaces the archive view's
+* **One file-dialog flow.** `desktop/picking.py` replaces the archive view's
   `picker_action` state machine rather than letting a second view copy it.
-* [x] **One transcribe button, one dialog.** Speaker, language, model, silence threshold
+* **One transcribe button, one dialog.** Speaker, language, model, silence threshold
   and normalize-first, all defaulting from Settings and applying to that run only.
   *Save speaker only* is now a labelled secondary action instead of a confirm button
   that said "Transcribe" while only assigning.
-* [x] **Settings stopped re-saving on every blur.** `SettingsEditor.would_change` compares
+* **Settings stopped re-saving on every blur.** `SettingsEditor.would_change` compares
   coerced values, so `0.60` over a stored `0.6`, or a trailing blank line in a list, is
   correctly no edit. `set()` shares the coercion, so the two cannot disagree.
-* [x] **The chronicle panel is a share of the window** (floor 260, ceiling 520), applied
+* **The chronicle panel is a share of the window** (floor 260, ceiling 520), applied
   on `page.on_resize`, with full filenames on hover.
-* [x] **AI actions grey out with an explanation** when no model is configured.
+* **AI actions grey out with an explanation** when no model is configured.
   `capabilities_for(settings)` reports `summarize`, `transcribe` and `normalize`; the
   desktop reads them from the *server* at startup, since in thin-client mode those are
   the server's extras and the server's model. An unreachable check leaves everything
   enabled rather than disabling the interface over a network hiccup.
-* [x] **Linking an external chronicle reads it.** `link_external_chronicle` creates and
+* **Linking an external chronicle reads it.** `link_external_chronicle` creates and
   hydrates in one service call: speaker count, duration, status, transcript tag, and every
   speaker name into the workspace registry.
-* [x] **Bug found on the way: a linked chronicle's audio was invisible.**
+* **Bug found on the way: a linked chronicle's audio was invisible.**
   `sources_dir()` always pointed into the workspace while `chronicle_directory()`
   resolved the external path. `DatabaseManager.sources_path_for` is now the one answer
   for both.
-* [x] **`isolated_config` is a shared fixture.** It was duplicated, and its absence made
+* **`isolated_config` is a shared fixture.** It was duplicated, and its absence made
   a transcribe-dialog default depend on the developer's own config file.
 
 1006 tests, 90% coverage; 976 + 2 skipped with the extras hidden; ruff and mypy clean.
 
-### Sprint 5 — structure and hygiene (2026-08-17)
-
-* [x] **No source file over ~370 lines.** `views/archive.py` (605) became a package
-  (`view` / `cards` / `forms` / `imports`), `views/transcript.py` (372) became
-  (`view` / `export` / `sources`), `processing/handlers.py` (332) became one module per
-  task type over a shared `HandlerBase`. *(2026-11-10: no longer holds.
-  `views/transcript/view.py` is 599 lines.)*
-* [x] **Import logic lifted out of the view.** `ImportCoordinator` decides what an audio
-  or transcript import does to the workspace, with no Flet dependency — so it's testable
-  without a page attached, and `ArchiveView` is left with layout plus event plumbing.
-* [x] **One dialog primitive.** The await-a-dialog-choice boilerplate was copy-pasted
-  three times across two views; it's now `chronicler/desktop/dialogs.py`
-  (`ask_choice` / `confirm` / `ask_text`).
-* [x] **Worker wiring shared between entry points.** `core/worker_wiring.py` — a handler
-  registered in only one of desktop/server was a task type that silently never ran in the
-  other.
-* [x] **mypy gates the whole package.** The `ignore_errors` override for
-  `desktop/app.py`, `components/sidebar.py` and `views/archive.py` is gone; the two real
-  Flet-API type errors behind it are fixed.
-* [x] **Tests mirror the package tree** (`tests/chronicler/core/processing/handlers/…`,
-  `tests/chronicler/desktop/views/archive/…`), the four copy-pasted `async_session`
-  fixtures are one shared fixture, and fixture-file paths are anchored in
-  `tests/paths.py` instead of `parents[n]`. Coverage 90% (CI floor 80%).
-* [x] **Dead code removed.** `perform_test_task` moved out of production into the test
-  that uses it; `RpcServer.register`/`_service_classes` double bookkeeping collapsed;
-  `SettingsView.setting_card`'s seven colour parameters replaced by the palette it
-  already had.
-* [x] **`SearchService` is no longer five stubs.** The three methods backed by existing,
-  tested repository queries (`search_chronicle_meta`, `search_tags`, `search_tasks`)
-  are implemented; the two that genuinely need new infrastructure now say so and why
-  (see Phase 3 search items).
-* [x] **`themeMockup/` retired.** It was a fork of Flet's `declarative_trolli` gallery
-  example, so half of it (`components/`, the Pacifico font) was another app's code
-  entirely. The Chronicler-specific parts have all been applied — see
-  [Theme mockup: what was and wasn't applied](#theme-mockup-what-was-and-wasnt-applied)
-  for the remaining gaps, which are now tracked as real items.
-
 ### Sprint 9.1 — fixes from first real run (2026-09-03)
 
-* [x] **Alembic migrations are serialised process-wide.** `TranscriptView.did_mount`
+* **Alembic migrations are serialised process-wide.** `TranscriptView.did_mount`
   fires three concurrent panel loads, each opening a project session, and
   `_project_engine`'s cache check was separated from the migration by awaits - so all
   three missed the cache and all ran Alembic on the same file
@@ -234,25 +229,25 @@ changes. Full plan and rationale: `docs/optional-extras.md`, `docs/desktop.md`.
   test that hung before the fix.
     * A database left half-migrated by the broken build needs recovery; see
       [docs/storage.md](docs/storage.md#migrations-are-serialised-process-wide).
-* [x] **PyAV is an explicit `normalization` extra.** It arrives free with
+* **PyAV is an explicit `normalization` extra.** It arrives free with
   `transcription`, but CI installs neither, so "zero new dependencies" was only true
   locally. Tests that decode real audio now skip via `pytest.importorskip("av")`, the
   same treatment faster-whisper gets, and a missing extra raises a `NormalizationError`
   naming the `pip install`. Verified green both with and without `av` present.
-* [x] **File dialogs report an actionable error.** A missing session bus surfaced as a
+* **File dialogs report an actionable error.** A missing session bus surfaced as a
   raw `SocketException` against `/run/user/1000/bus`. Chronicler now recognises the
   missing-bus and missing-portal cases and names the fix. See
   [docs/troubleshooting.md](docs/troubleshooting.md).
-* [x] **Wizard defaults tests isolate config.** They read the developer's real
+* **Wizard defaults tests isolate config.** They read the developer's real
   `~/.config/Chronicler/settings.yaml`, so they passed or failed depending on the
   machine - the same class of bug Sprint 6 fixed for the config tests.
 
 ### Sprint 9 — normalisation, summarisation, recording, wizard (2026-09-03)
 
-* [x] **Identify speakers backfills the workspace registry**, not just the count.
-* [x] **German locale**, alongside English and Dutch, in the interface and as a
+* **Identify speakers backfills the workspace registry**, not just the count.
+* **German locale**, alongside English and Dutch, in the interface and as a
   transcription language.
-* [x] **Audio normalisation.** New `NORMALIZE` task on a PyAV `loudnorm` chain, zero new
+* **Audio normalisation.** New `NORMALIZE` task on a PyAV `loudnorm` chain, zero new
   dependencies. Writes `<stem>.normalized.wav` beside the source and never touches the
   original. State, output filename and measured level are recorded per source. Verified on
   real under-gained audio: -39.5 -> -17.1 dBFS.
@@ -262,28 +257,28 @@ changes. Full plan and rationale: `docs/optional-extras.md`, `docs/desktop.md`.
     * Reported level is RMS dBFS, not LUFS - PyAV exposes no way to read filter metadata,
       so ffmpeg's internal LUFS figure cannot be read back. `loudnorm` still targets LUFS.
       See [docs/audio-normalization.md](docs/audio-normalization.md).
-* [x] **LLM pipeline.** One `LlmClient` interface: OpenAI-compatible over httpx (covers
+* **LLM pipeline.** One `LlmClient` interface: OpenAI-compatible over httpx (covers
   llama.cpp-server, Ollama, LM Studio, vLLM, hosted gateways) and an optional in-process
   `llama_cpp` provider. `ModelRegistry` discovers models once at startup and caches them,
   falling back to the configured model when a server has no `/models` endpoint.
   *(Later replaced by `discover_models()` with no cache, which returns models and error
   together - ticket 023.)*
-* [x] **`SUMMARIZE` task.** Two-stage chunk-then-recap with real context budgeting.
+* **`SUMMARIZE` task.** Two-stage chunk-then-recap with real context budgeting.
   Summaries are **numbered and accumulate**, each recording its model, provider, prompt,
   chunk count and token usage - so several models can be compared on one transcript.
   Prompts are configurable per task with defaults in settings. New project-db table
   (migration `d4a81c62f9e5`).
-* [x] **Reading and browsing.** Summaries panel with read/delete, a full-transcript
+* **Reading and browsing.** Summaries panel with read/delete, a full-transcript
   reader, and **Open the chronicle folder** in the native file manager - including the
   WSL2 `wslpath` translation.
-* [x] **Recording.** "Record a source" in a chronicle: device picker, start/stop, saved
+* **Recording.** "Record a source" in a chronicle: device picker, start/stop, saved
   into the chronicle. Needs **no new RPC** - the microphone is client-side, so the
   recording goes through the existing `FileStager`, uploading in thin-client mode exactly
   as a picked file does.
-* [x] **Setup wizard.** Now asks language first (en/nl/de, applied to both interface and
+* **Setup wizard.** Now asks language first (en/nl/de, applied to both interface and
   transcription) and offers an OS-aware workspace default under the user's Documents
   folder. A clean install writes every settings section with working defaults.
-* [x] **Character designer extracted** to `characterDesigner/` as a liftable subproject
+* **Character designer extracted** to `characterDesigner/` as a liftable subproject
   with its own `pyproject.toml`, no `chronicler` import, the 31-race table as data, a
   provider protocol, and a design document. Recommended name: **Dramatis**.
   *(Since moved out of this repository.)*
@@ -294,7 +289,7 @@ carries its server-resolved path instead.
 
 ### Sprint 8 — parameters, subtitles, thin-client handshake (2026-09-03)
 
-* [x] **Transcription parameters.** `language`, `no_speech_threshold`, `model_size`,
+* **Transcription parameters.** `language`, `no_speech_threshold`, `model_size`,
   `device` and `compute_type` all resolve task payload -> settings -> field default.
   Nothing is hardcoded; `DEFAULT_MODEL_SIZE` is gone. `auto` is a real selectable value
   so a task can override a configured language. The model cache keys on
@@ -302,31 +297,31 @@ carries its server-resolved path instead.
     * Fixed on the way: the "install the transcription extra" guard wrapped an import
       that could never fail (faster-whisper is imported lazily inside `_get_model`), so
       the helpful message never appeared. It now wraps the call.
-* [x] **Settings are editable and persist.** `SettingsView` is a package with a Flet-free
+* **Settings are editable and persist.** `SettingsView` is a package with a Flet-free
   `SettingsEditor` doing validate-then-save against the tracked config file. Editable:
   UI locale, transcription language/model/threshold/normalise-first, the cleaning phrase
   list, match mode, repeat window and strip patterns, LLM provider/URL/key/model/path,
   and the workspace folder (the previously disabled picker now works). Per-section
   "restore defaults". Invalid input is rejected without touching the stored value.
-* [x] **Language picker offers the available locales plus `auto`**, built from a
+* **Language picker offers the available locales plus `auto`**, built from a
   configurable `transcription.available_languages` merged with the UI locales.
-* [x] **SRT export.** Hand-written, no dependency. Refuses a text-imported transcript
+* **SRT export.** Hand-written, no dependency. Refuses a text-imported transcript
   whose timings are synthetic line indices rather than seconds, instead of silently
   writing meaningless subtitles.
-* [x] **Workspace-wide speaker registry.** New archive table `known_speakers`
+* **Workspace-wide speaker registry.** New archive table `known_speakers`
   (migration `c9f2a4e17b30`), case-insensitively deduplicated. The transcribe picker now
   offers every speaker used anywhere in the workspace, not just this chronicle's.
-* [x] **Thin-client handshake.** New `SystemService.get_server_info()` reports version,
+* **Thin-client handshake.** New `SystemService.get_server_info()` reports version,
   chronicle count and which optional extras the server actually has. On boot a thin
   client verifies the server is reachable, **requires an exact version match**, and pulls
   the chronicle list; a mismatch exits with a clear message instead of failing later.
-* [x] **Thin-client testing.** In-process integration tests drive a real
+* **Thin-client testing.** In-process integration tests drive a real
   `RemoteContainer` against the real server app (handshake, version mismatch,
   unreachable, wrong API key). `scripts/thin_client_check.py` runs a real server
   subprocess plus a real client and reports pass/fail. `--keep-running` leaves it up for
   another device; WSL2 `netsh portproxy` steps are documented.
-* [x] **`chronicler server --host/--port`**, needed for the LAN test and useful anyway.
-* [x] **`Container` resolves optional dependencies** (`T | None`), so a service can
+* **`chronicler server --host/--port`**, needed for the LAN test and useful anyway.
+* **`Container` resolves optional dependencies** (`T | None`), so a service can
   declare a dependency that is absent in some deployments.
 
 ### Sprint 7 — configurability foundation (2026-09-03)
@@ -334,18 +329,18 @@ carries its server-resolved path instead.
 Phases 01-04 of the post-prototype-salvage plan. See [docs/](docs/) for the reasoning
 behind each; the code itself no longer carries explanatory comments.
 
-* [x] **Comment sweep.** All 618 inline comments and 199 multi-line docstrings moved
+* **Comment sweep.** All 618 inline comments and 199 multi-line docstrings moved
   into a new `docs/` tree (10 pages). Code keeps one-line docstrings and functional
   comments (`type: ignore`, `noqa`) only. 1,514 lines removed, no behaviour change.
-* [x] **Nested settings sections** — `transcription`, `cleaning`, `normalization`,
+* **Nested settings sections** — `transcription`, `cleaning`, `normalization`,
   `llm`, `ui` on `Settings`, all defaulted so existing config files keep loading.
   `CHRONICLER_TRANSCRIPTION__LANGUAGE=nl` works via `env_nested_delimiter`. An invalid
   section falls back to defaults with a warning instead of failing startup.
-* [x] **i18n** — `chronicler/i18n/` with nested message maps, `t("path.in.map")`,
+* **i18n** — `chronicler/i18n/` with nested message maps, `t("path.in.map")`,
   `{named}` interpolation, and an `nl` catalogue alongside `en`. Four integrity tests:
   no orphan keys, every leaf a string, placeholders matching across locales, and every
   literal `t()` call site in the package resolving against the English catalogue.
-* [x] **Configurable cleaning pipeline** — eight single-purpose rules, each switchable
+* **Configurable cleaning pipeline** — eight single-purpose rules, each switchable
   and parameterised, replacing the merge-and-normalise-only cleaner. Configurable
   hallucination phrase list with `exact` / `normalized` / `regex` matching, repeat-loop
   detection, duplicate-segment removal, strip patterns (ReDoS-guarded), minimum line
@@ -355,53 +350,86 @@ behind each; the code itself no longer carries explanatory comments.
     * Defaults deliberately exclude `"Okay."`, `"Thank you."` and `"Bye."` — they are
       ordinary speech, and the repeat rule catches the looping case anyway. See
       [docs/cleaning.md](docs/cleaning.md).
-* [x] **Audio source records** — new `audio_sources` table in the project database
+* **Audio source records** — new `audio_sources` table in the project database
   (migration `b3c7e1d94a02`) carrying per-track transcription state, normalisation
   state, remembered speaker, and a content fingerprint. Filesystem owns existence, the
   database owns state; `list_audio_sources` reconciles them, so tracks copied in by
   hand are picked up with no import step. A deleted file is flagged `missing`, not
   dropped. Completion requires state `DONE` *and* a matching hash, so replacing a file
   re-offers the work. Closes the "no resumability" gap below.
-* [x] **Speaker quick-lookup** — the Sources panel shows per-track state and offers a
+* **Speaker quick-lookup** — the Sources panel shows per-track state and offers a
   searchable dropdown of known speakers with a free-text entry for a new one,
   pre-selected from the source record. Assigning a speaker is now its own action,
   separate from transcribing; transcribe only prompts when there is no speaker yet.
-* [x] `TaskType.NORMALIZE` and `TaskType.SUMMARIZE` reserved (handlers not built yet).
+* `TaskType.NORMALIZE` and `TaskType.SUMMARIZE` reserved (handlers not built yet).
 
-Still open from the plan: transcription language/threshold parameters, SRT export,
-audio normalisation, LLM summarisation, the settings panel, recording, and thin-client
-test tooling.
+Everything else from the plan landed in Sprints 8 and 9.
 
 ### Sprint 6 — low-hanging fruit (2026-08-17)
 
 Small items chosen for value per unit of effort; several turned out to be cheap because
 the mechanism already existed and simply wasn't exposed.
 
-* [x] **Search actually searches.** Chronicle search covered the title only, so a
+* **Search actually searches.** Chronicle search covered the title only, so a
   chronicle tagged `product` or described as "roadmap" was unfindable by either word. Now
   title + description + tag names.
-* [x] **LIKE wildcards are escaped** in all three searching repositories. Typing `%`
+* **LIKE wildcards are escaped** in all three searching repositories. Typing `%`
   matched every row before.
-* [x] **Failed tasks can be retried from the UI** — the repository support was already
+* **Failed tasks can be retried from the UI** — the repository support was already
   written and tested, just unreachable. Two adjacent bugs fixed on the way: a returned-to-
   PENDING task kept the previous run's `claimed_by`/`claimed_at` (so the row showed a stale
   start time), and FAILED shared PENDING's icon (so a failure looked like a queued task).
-* [x] **Task rows name their chronicle**, and show their error inline instead of only
+* **Task rows name their chronicle**, and show their error inline instead of only
   recording it in the database.
-* [x] **Chronicle listings have a deterministic order** (`created_at DESC`, matching the
+* **Chronicle listings have a deterministic order** (`created_at DESC`, matching the
   task list). Without an `ORDER BY` the archive could reshuffle between two refreshes that
   changed nothing.
-* [x] **`page.bgcolor` and the sidebar divider follow the theme.**
-* [x] **`--config PATH` / `CHRONICLER_CONFIG_FILE`** for running an isolated instance.
-* [x] **Config tests no longer depend on the developer's machine.** They isolated
+* **`page.bgcolor` and the sidebar divider follow the theme.**
+* **`--config PATH` / `CHRONICLER_CONFIG_FILE`** for running an isolated instance.
+* **Config tests no longer depend on the developer's machine.** They isolated
   `user_config_dir` but not `Path.home()`, so `Settings()` inside a test read the real
   `~/.chronicler_config.yaml` if one existed. This was masking a wrong assertion:
   `test_desktop_mode_requires_either` asserted that a thin client with no API key
   validates, which is false — it only passed because the real config supplied a key.
 
----
+### Sprint 5 — structure and hygiene (2026-08-17)
 
-## Theme mockup: what was and wasn't applied
+* **No source file over ~370 lines.** `views/archive.py` (605) became a package
+  (`view` / `cards` / `forms` / `imports`), `views/transcript.py` (372) became
+  (`view` / `export` / `sources`), `processing/handlers.py` (332) became one module per
+  task type over a shared `HandlerBase`. *(2026-11-10: no longer holds.
+  `views/transcript/view.py` is 599 lines.)*
+* **Import logic lifted out of the view.** `ImportCoordinator` decides what an audio
+  or transcript import does to the workspace, with no Flet dependency — so it's testable
+  without a page attached, and `ArchiveView` is left with layout plus event plumbing.
+* **One dialog primitive.** The await-a-dialog-choice boilerplate was copy-pasted
+  three times across two views; it's now `chronicler/desktop/dialogs.py`
+  (`ask_choice` / `confirm` / `ask_text`).
+* **Worker wiring shared between entry points.** `core/worker_wiring.py` — a handler
+  registered in only one of desktop/server was a task type that silently never ran in the
+  other.
+* **mypy gates the whole package.** The `ignore_errors` override for
+  `desktop/app.py`, `components/sidebar.py` and `views/archive.py` is gone; the two real
+  Flet-API type errors behind it are fixed.
+* **Tests mirror the package tree** (`tests/chronicler/core/processing/handlers/…`,
+  `tests/chronicler/desktop/views/archive/…`), the four copy-pasted `async_session`
+  fixtures are one shared fixture, and fixture-file paths are anchored in
+  `tests/paths.py` instead of `parents[n]`. Coverage 90% (CI floor 80%).
+* **Dead code removed.** `perform_test_task` moved out of production into the test
+  that uses it; `RpcServer.register`/`_service_classes` double bookkeeping collapsed;
+  `SettingsView.setting_card`'s seven colour parameters replaced by the palette it
+  already had.
+* **`SearchService` is no longer five stubs.** The three methods backed by existing,
+  tested repository queries (`search_chronicle_meta`, `search_tags`, `search_tasks`)
+  are implemented; the two that genuinely need new infrastructure now say so and why
+  *(Later deleted outright, in Sprint 11.)*
+* **`themeMockup/` retired.** It was a fork of Flet's `declarative_trolli` gallery
+  example, so half of it (`components/`, the Pacifico font) was another app's code
+  entirely. The Chronicler-specific parts have all been applied — see
+  [the theme mockup](#the-theme-mockup) below. The remaining gaps are in
+  [ROADMAP.md](ROADMAP.md).
+
+#### The theme mockup
 
 `themeMockup/` (added 2026-07-29, removed 2026-08-17) was a static Flet mockup of the
 desktop UI. Its structure, copy and layout **are** what shipped: the sidebar
@@ -412,59 +440,38 @@ description, date/duration/speakers row, tag line), the task rows, the settings 
 its right-hand Chronicle detail panel. The real views have since gone further than the
 mockup in every case.
 
-Still not applied — tracked below rather than lost with the directory:
-
-* [~] **App icon is only half wired up.** `assets/icon.png` (preserved from the mockup,
-  and genuinely Chronicler's, unlike the Pacifico font that came from the Trolli example)
-  is the PyInstaller executable's icon (`Chronicler.spec`). The window itself still shows
-  Flet's default, which needs `ft.run(..., assets_dir=...)`, and the embedded-runtime
-  build has no icon yet.
-* [ ] **No custom typography.** The mockup's font came from the gallery example and was
-  never Chronicler's; if a display font is wanted, it needs choosing deliberately and
-  registering via `page.fonts`.
-* [x] **`page.bgcolor` is never set.** Fixed 2026-08-17: `DesktopApp._apply_theme` is now
+* **`page.bgcolor` is never set.** Fixed 2026-08-17: `DesktopApp._apply_theme` is now
   the one place that paints everything the app owns directly (page background, content
   area, and the sidebar/content divider — which was coloured once at construction and
   never updated on a theme change).
-* [ ] **Light mode diverged from the mockup on purpose, and should be reviewed as a
-  whole.** The mockup's light theme was warm (`AMBER_50` page, `BROWN_50` sidebar,
-  `AMBER_100` borders/selection). Sprint 4 replaced it with white surfaces and
-  `BROWN_200` borders after `AMBER_100` proved nearly invisible as a border and the
-  amber sidebar read as an odd tint (see the comments in `desktop/theme.py`). Each
-  individual change was justified; nobody has since looked at the result as a designed
-  palette.
-* [~] **Task rows don't say which chronicle they belong to.** Fixed 2026-08-17 for the
-  chronicle half: `TasksView` resolves titles once per load and each row reads
-  `<chronicle title> · Status: X`, falling back to the status alone for a task whose
-  chronicle has been deleted. The mockup's "provider" half stays open — `Task` has no
-  `provider` field, and it only becomes meaningful once provider registration exists
-  (Phase 3).
 
----
+### Sprints 1-4 — from prototype to the core loop (2026-08-13)
 
-## Known blockers
+Sprint 4 delivered Chronicle CRUD, audio import, faster-whisper `TRANSCRIBE` and
+plain-text export, plus four rounds of UI fixes found by running the app; those are in
+[Notes by area](#notes-by-area).
 
-Fixed in Sprint 1 (2026-08-13):
+#### Sprint 1
 
-* [x] **Server mode cannot start.** `SQLiteTagRepository.search` implemented; server-build
+* **Server mode cannot start.** `SQLiteTagRepository.search` implemented; server-build
   smoke test added (`tests/chronicler/core/test_server_main.py`).
-* [x] **Web client leaks the API key.** Web client is now a true reverse proxy
+* **Web client leaks the API key.** Web client is now a true reverse proxy
   (`POST /api/{service}/{method}`, `POST /api/upload`); `GET /config` no longer returns
   `api_key`. Also fixed alongside: CORS `allow_credentials` was `True` with a wildcard
   origin (invalid/unsafe combo), API key comparison now uses `secrets.compare_digest`.
-* [x] **Path traversal in `/upload`.** On-disk filenames are now server-generated
+* **Path traversal in `/upload`.** On-disk filenames are now server-generated
   (`uuid4()` + whitelisted extension); a 500MB size cap is enforced with cleanup of
   partial files; `python-multipart` moved into `requirements.txt`.
-* [x] **Import tasks trust client input.** `file_path` is confined to the imports
+* **Import tasks trust client input.** `file_path` is confined to the imports
   directory in `handle_import` (`is_relative_to` check). User patterns are compiled with
   the `regex` package, capped at 500 characters, and every match has a timeout
   (`chronicler/core/processing/regex_guard.py`).
-* [x] **CI gates nothing.** `continue-on-error` removed from ruff/mypy; flake8 dropped
+* **CI gates nothing.** `continue-on-error` removed from ruff/mypy; flake8 dropped
   (100% overlap with ruff, confirmed by running both); `--cov-fail-under` added.
 
-Fixed in Sprint 2 (2026-08-13):
+#### Sprint 2
 
-* [x] **One `AsyncSession` shared everywhere.** UI, worker loop and every HTTP request used
+* **One `AsyncSession` shared everywhere.** UI, worker loop and every HTTP request used
   to share a single session — real crash risk (`IllegalStateChangeError`) under any
   concurrent use. `RpcServer` now resolves a fresh `Container` scope per request
   (`Container.create_scope()`); `DesktopApp`'s `WorkerManager` gets its own dedicated
@@ -472,9 +479,9 @@ Fixed in Sprint 2 (2026-08-13):
   navigation instead of holding one for the app's lifetime. Verified live: 30 concurrent
   requests against a real server, no errors.
 
-New known limitation (Sprint 2, 2026-08-13):
+Known limitation, accepted rather than fixed:
 
-* [ ] **No upgrade path from a pre-Alembic workspace.** Adopting Alembic (below) means any
+* **No upgrade path from a pre-Alembic workspace.** Adopting Alembic (see Schema management under Notes by area) means any
   workspace created before this sprint will fail to start (`table already exists`) —
   verified concretely against a real pre-existing `chronicler.db`. `alembic stamp head`
   clears the crash but doesn't verify schema compatibility, so a stamped-but-actually-old
@@ -486,187 +493,142 @@ New known limitation (Sprint 2, 2026-08-13):
   2026-08-13 at the user's request (disposable test data, not real content) — confirmed
   the fresh workspace stamps correctly at head with the full current schema.
 
-Fixed in Sprint 3 (2026-08-13), found by an actual live smoke test (a real running
+#### Sprint 3
+
+Found by an actual live smoke test (a real running
 `chronicler server`, driven over genuine HTTP — not `ASGITransport`, not mocks) that
 every `ASGITransport`-based test in the sprint had missed:
 
-* [x] **Thin Client mode was a `sys.exit(1)` stub.** `DesktopApp` now resolves services
+* **Thin Client mode was a `sys.exit(1)` stub.** `DesktopApp` now resolves services
   through `Container` (full-stack) or `RemoteContainer` (thin client) via
   `chronicler/desktop/runtime.py::build_runtime`, chosen from `Settings.mode`. Includes
   transcript viewing (`TranscriptService` redesigned to be project-scoped and reachable
   over RPC) and file import (`FileStager`: copy locally, upload via `/upload` remotely).
-* [x] **`RemoteServiceProxy` couldn't serialize `UUID` arguments at all.** Every argument is
+* **`RemoteServiceProxy` couldn't serialize `UUID` arguments at all.** Every argument is
   now serialized via `TypeAdapter(declared_param_type)` keyed off the method's real type
   hints, not guessed from the runtime value. `chronicle_id: UUID` is the single most common
   argument shape in this codebase; this silently broke almost any real remote call.
-* [x] **`RpcServer._add_route` made every optional parameter mandatory over RPC.** It wrapped
+* **`RpcServer._add_route` made every optional parameter mandatory over RPC.** It wrapped
   every parameter as `Body(..., ...)` unconditionally (Ellipsis = required in FastAPI),
   discarding the method's own default. Omitting an optional argument, or explicitly
   sending `null` for one, both 422'd — including from the desktop app's own existing
   calls (e.g. `create_chronicle` with only some optional kwargs set), the moment they ran
   in thin-client mode. Now preserves the method's actual default.
-* [x] **`TaskService.queue_import`/`queue_clean` had no return type annotation** — silently
+* **`TaskService.queue_import`/`queue_clean` had no return type annotation** — silently
   returned a raw `dict` instead of a `Task` to any `RemoteContainer` caller. Added `-> Task`
   to both.
 
----
+## Notes by area
 
-## Phase 0 — Project foundation
+The old `TODO.md` also tracked features by phase, with notes written as each landed.
+These are the done items and their notes, as they were. Open items moved to
+[ROADMAP.md](ROADMAP.md).
 
-* [x] Create repository structure
-* [x] Configure Python package
-* [x] Add development dependencies
-* [x] Add formatting tools
-* [x] Add linting
-* [~] Add GitHub Actions CI
-    * [x] Optimized multi-job workflow with caching
-    * [x] Make quality checks blocking (`continue-on-error` removed 2026-08-13)
-    * [x] Drop flake8 (redundant with ruff — removed 2026-08-13)
-    * [x] Enforce a coverage threshold (`--cov-fail-under=80`). Measured 90% as of
-      2026-08-17 (up from 86% before the Sprint 5 restructure — lifting import logic out
-      of the views made it reachable without a Flet page). The gate is deliberately left
-      at 80 rather than tracked up to the measurement: the untested surface still to come
-      (export formats, recording, diarization) lands before its tests do, and a gate that
-      trails the real figure by ten points fails on genuine regressions without failing on
-      every work-in-progress commit.
-    * [ ] Fix `.venv` cache reuse before re-enabling the macOS matrix entry
-    * [x] Run the tests on Windows too (tickets 003, 005)
-    * [x] Check that the runtime locks match `pyproject.toml`
-    * [x] Run the optional extras in CI (ticket 044)
-    * [ ] Run the tests before a release builds (ticket 081)
+### Project foundation
 
----
+* Create repository structure
+* Configure Python package
+* Add development dependencies
+* Add formatting tools
+* Add linting
 
-# Phase 1 — Application foundation
+### Application foundation
 
-## Configuration
+#### Configuration
 
-* [x] Create application settings system
-* [x] Store user configuration in OS config directory
-* [x] Create first-run wizard
-    * [ ] Server setup cannot run unattended: the console wizard needs a terminal, and
-      exits with `EOFError` under Docker or systemd (ticket 042)
-* [x] Select workspace location
-* [x] Validate workspace permissions — opening a workspace writes a probe file and reports
+* Create application settings system
+* Store user configuration in OS config directory
+* Create first-run wizard
+* Select workspace location
+* Validate workspace permissions — opening a workspace writes a probe file and reports
   an unwritable folder on the startup screen, and both setup wizards refuse an existing
   folder that cannot be written to (ticket 055)
-* [x] Automatic configuration validation for different run modes
+* Automatic configuration validation for different run modes
     * `Settings.mode` added 2026-08-13, set by `ConfigWizard` at every point it already
       knows which of the four concrete setups was chosen — "the active mode is
       determined by the configuration" is now true.
-* [x] Point Chronicler at a specific config file (2026-08-17). `chronicler --config PATH`
+* Point Chronicler at a specific config file (2026-08-17). `chronicler --config PATH`
   or `CHRONICLER_CONFIG_FILE`; `Settings.save()` writes back to the same place. A file that
   was explicitly requested but doesn't exist resolves to *no* config rather than falling
   through to the defaults - silently loading the developer's real config would defeat the
   point and, in a smoke test, point a throwaway run at their real workspace.
-* [x] Use argparse for command-line arguments and --verbose mode
-* [x] Persist the deployment mode in settings
-* [x] Stop generating an API key when the user leaves it blank in thin-client setup
+* Use argparse for command-line arguments and --verbose mode
+* Persist the deployment mode in settings
+* Stop generating an API key when the user leaves it blank in thin-client setup
     * Fixed 2026-08-13: `RemoteServerStep` now re-prompts with an explanation instead of
       generating a key that can't possibly match the server's.
-* [x] Surface config parse errors instead of swallowing them (`except: pass` in `config.py`)
+* Surface config parse errors instead of swallowing them (`except: pass` in `config.py`)
     * Fixed 2026-08-13: logs a warning naming the broken file; falls back to defaults
       the same way it did before (behavior-preserving, just no longer silent).
 
-## Architecture alignment
+#### Architecture alignment
 
-* [x] Implement DI container for service resolution
-* [x] Refactor DesktopApp to use DI container
+* Implement DI container for service resolution
+* Refactor DesktopApp to use DI container
     * Done 2026-08-13. `chronicler/desktop/runtime.py::build_runtime` builds a
       `Container` (full-stack) or `RemoteContainer` (thin client) from `Settings.mode`;
       `DesktopApp.update_view()` resolves services through it instead of constructing
       repositories by hand.
-* [x] Support switching between local and remote services based on settings
+* Support switching between local and remote services based on settings
     * Same mechanism as above — `build_runtime` is the switch.
-* [ ] Ensure all business logic is strictly in Services
 
----
+#### Backend abstraction
 
-## Backend abstraction
-
-* [x] Define repository interfaces
-* [x] Separate services from storage
-* [x] Create local storage backend
+* Define repository interfaces
+* Separate services from storage
+* Create local storage backend
     * Transcript search is `SQLiteTranscriptRepository.search`, over an FTS5 index in each
       chronicle (ticket 063, docs/search.md).
-* [ ] `Container.register_factory`'s generics don't fit the interface-to-implementation
-  registration pattern it's used for — mypy flags every
-  `register_factory(AbstractRepo, ConcreteImpl)` call as `[type-abstract]`. Worked around
-  with targeted `# type: ignore[type-abstract]` for now (`server/main.py`,
-  `test_server_main.py`); worth revisiting the container's type signature directly.
-  Ticket 030 removes the interfaces, and these ignores with them.
-* [x] `DatabaseManager._project_engines` cached a pooled engine per chronicle forever,
+* `DatabaseManager._project_engines` cached a pooled engine per chronicle forever,
   holding a thread and an open file each. Project engines now use `NullPool`, so the
   cache holds no connection.
-* [x] Prepare remote API backend interface — `RemoteContainer` / `RemoteServiceProxy`, tested
+* Prepare remote API backend interface — `RemoteContainer` / `RemoteServiceProxy`, tested
 
-Goal:
+The goal: the UI and services should not depend directly on SQLite.
 
-The UI and services should not depend directly on SQLite.
+### Chronicle storage
 
----
+#### Archive database
 
-# Phase 2 — Chronicle storage
-
-## Archive database
-
-* [x] Projects/Chronicles table
-* [x] Tags table
-* [~] Chronicle/tag relationship
-    * Written only for the system tags `Transcript` and `Summarized`. There is no way to
-      add, remove or filter by a tag of your own yet (ticket 066).
-* [x] Persistent task table
-* [x] Task claim columns (`claimed_by`, `claimed_at`) and `attempts` / `max_attempts`
+* Projects/Chronicles table
+* Tags table
+* Persistent task table
+* Task claim columns (`claimed_by`, `claimed_at`) and `attempts` / `max_attempts`
     * Added 2026-08-13 along with `SQLiteTaskRepository.claim_next()`, an atomic claim.
 
----
+#### Chronicle database
 
-## Chronicle database
+* Speakers
+* Transcript lines, each recording the audio source it came from (ticket 010)
+* Audio sources, with their transcription and normalization state (Sprint 7)
+* AI analysis results — numbered summaries (Sprint 9)
 
-* [~] Chronicle metadata
-    * Title, description, kind and tags live in the workspace database. A zip export
-      carries them in its `chronicle.json` manifest; a copied or linked `project.db`
-      arrives without them. `DBProjectMetadata` was dropped in Sprint 11.
-* [x] Speakers
-* [x] Transcript lines, each recording the audio source it came from (ticket 010)
-* [x] Audio sources, with their transcription and normalization state (Sprint 7)
-* [ ] Tags (in project.db for portability)
-* [x] AI analysis results — numbered summaries (Sprint 9)
-* [~] Cleanup state — a snapshot of the database before every clean (ticket 011).
-  Restoring one is ticket 065
-* [ ] A rule for opening a chronicle made by a newer version: today it is unreadable to
-  an older one (ticket 074, and docs/storage.md)
+#### Schema management
 
----
-
-## Schema management
-
-* [x] Replace `DatabaseManager._migrate_schema_sync` with Alembic
+* Replace `DatabaseManager._migrate_schema_sync` with Alembic
     * Done 2026-08-13. Two independent chains (`chronicler/migrations/archive`,
       `chronicler/migrations/project`), invoked programmatically (no static
       `alembic.ini` - the project chain runs against a different file per chronicle).
-      Known limitation: no upgrade path from a pre-Alembic workspace - see "Known
-      blockers" at the top of this file.
-* [x] Baseline migration for the archive database
-* [x] Baseline migration for the project database
+      Known limitation: no upgrade path from a pre-Alembic workspace - see Sprint 2
+      above.
+* Baseline migration for the archive database
+* Baseline migration for the project database
 
----
+### Worker framework
 
-# Phase 3 — Worker framework
-
-* [x] Create worker manager
-* [x] Create worker lifecycle
-* [x] Persistent task handling (store tasks in master database)
-* [x] **Task claiming**
+* Create worker manager
+* Create worker lifecycle
+* Persistent task handling (store tasks in master database)
+* **Task claiming**
     * Fixed 2026-08-13: `SQLiteTaskRepository.claim_next(worker_id)` does a conditional
       `UPDATE ... WHERE status='PENDING'` + rowcount check - atomic, safe under
       concurrent callers (two processes against one workspace no longer double-run a
       task).
-* [x] Task status tracking: WORKING, DONE, FAILED
+* Task status tracking: WORKING, DONE, FAILED
     * `WAITING` removed 2026-08-13 - confirmed unused anywhere in the codebase.
-* [x] Task progress tracking
-* [x] Error handling
-* [x] **Retry support**
+* Task progress tracking
+* Error handling
+* **Retry support**
     * Fixed 2026-08-13: `attempts`/`max_attempts` columns, `mark_failed_or_retry()`
       resets a task to PENDING (below max_attempts) instead of FAILED.
       `WorkerManager.process_tasks()` bounds each poll cycle to what was pending when
@@ -675,15 +637,7 @@ The UI and services should not depend directly on SQLite.
     * Since the audit: a failed task waits 30 seconds, then 5 minutes, before it can be
       claimed again (ticket 022); tasks found WORKING at start are recovered (009); each
       step uses its own short session (007).
-* [ ] Implement annotation-based provider registration — handlers are still registered
-  imperatively, now in one place (`core/worker_wiring.py::build_worker_runtime`) rather
-  than duplicated per entry point. A `Task` also has no `provider` field yet, so
-  "which provider ran this" isn't recorded anywhere; the docs and the Tasks view both
-  imply it exists.
-* [ ] Implement Scribe workers with concurrency configuration — the loop is strictly
-  sequential in a single coroutine, so the "concurrency configured per provider" model
-  in ARCHITECTURE.md is design intent, not current behaviour
-* [x] Run a worker manager in server mode
+* Run a worker manager in server mode
     * Fixed 2026-08-13: `server/main.py` builds a `WorkerManager` and runs it alongside
       `uvicorn.Server(...).serve()` via `asyncio.gather()`. Verified live: a queued task
       went PENDING -> DONE on a real server with no client polling it.
@@ -691,39 +645,30 @@ The UI and services should not depend directly on SQLite.
       `core/worker_wiring.py::build_worker_runtime`, so a newly added handler can't be
       registered in one mode and silently missing in the other (which is exactly how
       TRANSCRIBE nearly shipped desktop-only).
-* [ ] **Per-task CPU timeout.** Regex matching is bounded by its own timeout (see
-  `regex_guard.py`), but nothing bounds other CPU-heavy handlers. Build a general
-  per-task timeout in the worker loop if one is needed.
 
 Initial tasks:
 
-* [x] IMPORT — formatted text. Audio no longer takes this path at all: an audio import
+* IMPORT — formatted text. Audio no longer takes this path at all: an audio import
   is stored as a source and transcribed via TRANSCRIBE, which is what it was previously
   guaranteed to fail at (UTF-8 decode on a binary file).
-* [x] TRANSCRIBE — faster-whisper, one audio source at a time, with the speaker assigned
+* TRANSCRIBE — faster-whisper, one audio source at a time, with the speaker assigned
   by the user. No diarization: one source is treated as one speaker's track. The model is
   downloaded lazily on first real use, and the optional `transcription` extra being absent
   produces an explanatory error rather than a crash.
-* [x] CLEAN
-* [x] NORMALIZE (Sprint 9)
-* [x] SUMMARIZE (Sprint 9)
-* [x] EXPORT — not a task: exports are service calls, run off the event loop (ticket 028)
+* CLEAN
+* NORMALIZE (Sprint 9)
+* SUMMARIZE (Sprint 9)
+* EXPORT — not a task: exports are service calls, run off the event loop (ticket 028)
 
-Future:
+* AI_SUMMARIZE, planned as a future task, shipped as SUMMARIZE (Sprint 9)
 
-* [ ] AI_ANALYSIS
-* [x] AI_SUMMARIZE — shipped as SUMMARIZE
-* [ ] GRAPH_ANALYZE
+### Desktop application
 
----
+#### UI
 
-# Phase 4 — Desktop application
-
-## UI
-
-* [x] Application shell
-* [x] Navigation
-* [x] Theme support
+* Application shell
+* Navigation
+* Theme support
     * Fixed 2026-08-13: `Settings.dark_mode` persisted; startup respects it (was
       hardcoded `ft.ThemeMode.DARK`); the Settings toggle actually updates
       `page.theme_mode` and saves.
@@ -759,7 +704,7 @@ Future:
       `sidebar` is now the same `WHITE` as `surface` (matches the rest of the app, as
       asked, rather than introducing its own tint); `border` is `BROWN_200` - keeps
       the app's warm palette but is actually visible.
-* [x] Fix "Unknown control: FilePicker" client error
+* Fix "Unknown control: FilePicker" client error
     * Fixed 2026-08-13 (found in live use): `ft.FilePicker` is a `Service`
       (`flet.controls.services.service.Service`), not a visual control - adding it to
       `page.overlay` (which expects renderable widgets, same list `AlertDialog`/
@@ -769,28 +714,25 @@ Future:
       crash); `ArchiveView` never registered its `file_picker` *anywhere* (a
       pre-existing latent bug this also fixed) - both now use `page.services`.
 
----
+#### Archive view
 
-## Archive view
-
-* [x] Browse Chronicles
-* [x] Implement search in repositories and services
-    * [x] Workspace search — chronicle title, description and tag names (`ILIKE`), with
+* Browse Chronicles
+* Implement search in repositories and services
+    * Workspace search — chronicle title, description and tag names (`ILIKE`), with
       the user's own `%` and `_` escaped, and a chronicle with two matching tags listed
       once.
-    * [x] Transcript search, within a chronicle and across the workspace (ticket 063)
+    * Transcript search, within a chronicle and across the workspace (ticket 063)
     * `SearchService` was deleted in Sprint 11: no view used it, and both search boxes
       call the owning services directly.
-* [x] Search UI in Archive view
-* [ ] Filter by tags (ticket 066)
-* [x] Open Chronicle
-* [x] Import Transcript (via Header)
-* [x] Edit Chronicle metadata (title/description/kind/duration)
+* Search UI in Archive view
+* Open Chronicle
+* Import Transcript (via Header)
+* Edit Chronicle metadata (title/description/kind/duration)
     * Added 2026-08-13 (Sprint 4 UI fixes): `ChronicleService.update_chronicle` already
       worked end-to-end, there was just no UI calling it anywhere. Per-card "Edit"
       button opens a dialog pre-filled from the Chronicle, saves via the existing
       service method.
-* [x] Delete Chronicle
+* Delete Chronicle
     * Fixed 2026-08-13: `ChronicleService.delete_chronicle` worked but had no UI and
       no cascade (`DBTask.chronicle_id` and `chronicle_tags` have no
       `ondelete=CASCADE`, and SQLite doesn't enforce FKs by default here anyway - see
@@ -802,9 +744,9 @@ Future:
       data actually lives there (`project_path` unset); a linked chronicle's
       externally-located `project.db` is never touched. Per-card "Delete" button asks
       for confirmation via `page.show_dialog()`/`pop_dialog()` (the correct pattern -
-      see the overwrite/append dialog's regression note above for why the earlier
+      see the overwrite/append dialog's regression note under Import below for why the earlier
       raw-`page.overlay` approach silently failed to close).
-* [x] Consistent header button styling
+* Consistent header button styling
     * Fixed 2026-08-13: "New Chronicle" (`ElevatedButton`) and "Import" (a manually
       styled `Container`, since `PopupMenuButton` needs a custom `content` to look like
       a button) had different padding/shape/elevation. Gave `ElevatedButton` a matching
@@ -818,12 +760,12 @@ Future:
       guaranteed pixel-identical rather than independently tuned to look close. Also
       used for the transcript view's "Export" button. Bonus: drops the
       `ElevatedButton` deprecation warning (deprecated since Flet 0.80, removed in 1.0).
-* [x] Dropdown affordance on menu-opening buttons
+* Dropdown affordance on menu-opening buttons
     * Added 2026-08-13: "Import" and "Export" open a `PopupMenuButton` menu but looked
       identical to a plain action button, no visual hint they'd expand. `amber_button()`
       takes a `dropdown=True` flag that appends a thin separator + a small
       `EXPAND_MORE` chevron after the label.
-* [x] Fix un-awaited coroutines in card action callbacks (`clean_clicked`, per-card imports)
+* Fix un-awaited coroutines in card action callbacks (`clean_clicked`, per-card imports)
     * Fixed 2026-08-13 (Sprint 4 item 0): Flet's dispatcher only awaits a handler when
       `inspect.iscoroutinefunction(handler)` is true of the object assigned to
       `on_click` itself — a `lambda e, i=x: self.async_method(e, i)` fails that check,
@@ -833,38 +775,22 @@ Future:
       `test_card_action_controls_bind_async_handlers_directly` asserts
       `inspect.iscoroutinefunction` on every per-card `on_click` — the same predicate
       Flet uses — so this class of bug fails CI instead of surviving unnoticed again.
-* [x] Fix snackbars — `page.snack_bar = ...` is the pre-0.70 Flet API and no longer displays
+* Fix snackbars — `page.snack_bar = ...` is the pre-0.70 Flet API and no longer displays
     * Fixed 2026-08-13 (Sprint 4 item 0): `ArchiveView.show_snackbar` now calls
       `page.show_dialog(ft.SnackBar(...))`, verified against the installed flet 0.86.4
       API (`ft.Page` has no `snack_bar` attribute at all). Regression test:
       `test_show_snackbar_uses_page_show_dialog` uses a `spec=ft.Page` mock, so it fails
       if `show_dialog` is ever renamed/removed again.
 
----
+#### Create Chronicle wizard
 
-## Create Chronicle wizard
+* Select files
+* Create Chronicle (Basic implementation)
 
-* [x] Select files
-* [ ] Assign speakers
-* [ ] Enter metadata
-* [ ] Add tags
-* [x] Create Chronicle (Basic implementation)
+#### Task monitor
 
----
-
-## Task monitor
-
-* [x] View active tasks
-* [~] Show progress — rendered, and the tasks/archive/transcript views now refresh
-  automatically when a task *finishes* (see "Live refresh on task completion"
-  below), but a WORKING task's progress percentage still doesn't animate live
-  between start and finish - `TaskEventBus` only publishes on terminal states
-  (DONE/FAILED), not on every `update_progress()` call. Manual refresh still shows
-  the latest percentage; it just doesn't self-update while watching.
-    * A transcription jumps from 30% to 70% with nothing in between, and no task can be
-      cancelled. Both are ticket 064, which also has the Tasks view poll while a task
-      runs, so thin clients see progress too.
-* [x] Retry failures
+* View active tasks
+* Retry failures
     * Added 2026-08-17. The mechanism already existed and was tested - `update_status(id,
       PENDING)` clears the error and resets progress - it was simply never exposed.
       `TaskService.retry_task` plus a retry button on finished rows. One click buys one
@@ -874,22 +800,19 @@ Future:
       `update_status` now also clears `claimed_by`/`claimed_at` on the return to PENDING,
       which it should always have done - the row kept showing the previous run's start
       time until something claimed it again.
-    * [ ] Retry every failed task at once - currently one button per row.
-* [ ] Clear finished tasks. The list keeps every task ever run, and sends all of them on
-  each refresh (ticket 077)
-* [x] Show which Chronicle each task belongs to (2026-08-17)
-* [x] Hide completed tasks by default
+* Show which Chronicle each task belongs to (2026-08-17)
+* Hide completed tasks by default
     * Fixed 2026-08-13: the "Hide completed tasks" checkbox existed but defaulted to
       unchecked, so a growing pile of DONE tasks was the first thing shown. Now
       defaults to `True`.
-* [x] Order tasks newest first; show started/completed timestamps
+* Order tasks newest first; show started/completed timestamps
     * Fixed 2026-08-13: `get_all()`/`search()` had no `ORDER BY` at all (whatever order
       SQLite happened to return). Added `ORDER BY created_at DESC`. No schema change
       needed for the timestamps either - `claimed_at` (set by `claim_next()`) is
       "started", and `updated_at` (bumped by `onupdate=datetime.now` on every write,
       including the final `update_status(..., DONE)`) is "completed" once the task
       reaches a terminal state. Each task row now shows Created/Started/Completed.
-* [x] More task logging
+* More task logging
     * Fixed 2026-08-13 (reported: "I only see the transcript started, not finished or
       intermediate states"): `WorkerManager._execute_task` now logs the claim, every
       `update_progress()` call, and completion generically for every task type,
@@ -897,7 +820,7 @@ Future:
       `handle_clean` additionally log line/speaker counts at parse and finish, so a
       real import's log trail now reads claim → parsed N lines → progress 50% →
       finished: N lines, M speakers → completed, not just the one start line.
-* [x] Live refresh on task completion (desktop mode)
+* Live refresh on task completion (desktop mode)
     * Added 2026-08-13 (reported: "the chronicle does not update when a task
       finishes"): `chronicler/core/task_events.py` adds `TaskEventBus` - a small
       in-process publish/subscribe. `WorkerManager` takes an optional `event_bus` and
@@ -925,42 +848,35 @@ Future:
       mode's `WorkerManager` (`server/main.py`) doesn't get an `event_bus` yet since
       nothing would consume the events.
     * Follow-up planned 2026-08-13, not yet implemented: **Server-Sent Events**,
-      decided over WebSocket - see Phase 7's "Task event stream" entry for the full
-      analysis and concrete server/desktop-thin-client design, and Phase 8's "Live
-      updates in the browser" for the web client half.
+      decided over WebSocket - see [docs/live-updates.md](docs/live-updates.md) for the
+      analysis and the server and thin-client design.
 
----
+#### Settings view
 
-## Settings view
-
-* [x] Replace the static mock with real settings
+* Replace the static mock with real settings
     * Fixed 2026-08-13: workspace path/connection mode/theme all reflect real
       `Settings`. Editing settings from within the running app is still out of scope
       (connection mode isn't switchable at runtime).
-* [x] Edit settings in the app (Sprint 8): language, transcription, cleaning, language
+* Edit settings in the app (Sprint 8): language, transcription, cleaning, language
   model and workspace folder, validated before anything is saved. The connection mode is
   still not switchable at runtime, and a new workspace folder applies after a restart.
 
----
+### Processing
 
-# Phase 5 — Processing
+#### Import
 
-## Import
-
-* [x] Audio importer — audio is stored as one of a chronicle's sources, then transcribed
+* Audio importer — audio is stored as one of a chronicle's sources, then transcribed
   (Sprint 4). Recording in the app adds one too (Sprint 9)
-* [~] File validation — a text import must be UTF-8 inside `imports/`, but any file in a
-  chronicle's `sources/` counts as a track (ticket 048)
-* [x] Import worker
-* [x] Regex importer
-* [x] Confine import paths to the workspace
+* Import worker
+* Regex importer
+* Confine import paths to the workspace
     * Fixed 2026-08-13: enforced in `handle_import` (resolve + `is_relative_to` against
       the imports directory), at the point of file access, so it covers any caller.
-* [x] Bound regex execution (ReDoS)
+* Bound regex execution (ReDoS)
     * Replaced the static pre-filter with the `regex` package: patterns over 500 chars
       are rejected, and every match has a timeout and releases the GIL, so a slow
       pattern fails its task and the event loop keeps running.
-* [x] Overwrite/append confirmation
+* Overwrite/append confirmation
     * Fixed 2026-08-13 (Sprint 4 UI fixes): `handle_import` unconditionally called
       `delete_all_lines()` before writing the new file's lines — importing a second
       transcript into a chronicle that already had one silently destroyed it, no
@@ -987,7 +903,7 @@ Future:
       once, never removed, only `open` toggles) rather than a fresh instance per call
       - not hit by this specific bug, but the same underlying risk if that ever
       changes; worth a look if any of them are ever reported not closing.
-* [x] Tag imported chronicles + backfill speaker count
+* Tag imported chronicles + backfill speaker count
     * Fixed 2026-08-13 (Sprint 4 UI fixes): two dead-data-model items reopened in the
       2026-08-13 re-baseline are now live for the import/clean path specifically.
       `handle_import` already built a full `speaker_map` as a side effect of parsing —
@@ -1001,7 +917,7 @@ Future:
       imported before this existed, or hand-edited since. `chronicle_tags` and
       `speakers_count` are no longer fully dead — see the still-open items below for
       what's left (tag *creation*/*management* UI, tags beyond "Transcript").
-* [x] Import transcript with timestamps
+* Import transcript with timestamps
     * Added 2026-08-13: `RegexImporter` takes an optional `timestamp_group` - when
       given, that capture group is parsed (`chronicler/core/formatting.py::
       parse_timestamp`, accepts `H:MM:SS`/`HH:MM:SS`/`MM:SS` and an optional
@@ -1018,11 +934,9 @@ Future:
       "this content comes after what's already there" is the same operation whether
       the shifted values are synthetic indices or real seconds.
 
----
+#### Transcription
 
-## Transcription
-
-* [x] Whisper integration
+* Whisper integration
     * Added 2026-08-13 (Sprint 4 close-out): `chronicler/core/processing/transcriber.py`
       wraps `faster_whisper.WhisperModel`. `WhisperModel` is only constructed inside
       `_get_model()`, called only from `transcribe_audio()`, called only from
@@ -1033,7 +947,7 @@ Future:
       `model_size` isn't a `Settings` field yet (hardcoded `DEFAULT_MODEL_SIZE =
       "base"` in `transcriber.py`) - nobody's asked to tune it; trivial to add if
       needed later.
-* [x] Transcription worker
+* Transcription worker
     * `WorkerHandlers.handle_transcribe` registered in both `desktop/app.py` and
       `server/main.py` alongside IMPORT/CLEAN. `transcribe_audio()` is synchronous and
       CPU-bound (real transcription can take minutes) - run via `asyncio.to_thread()`
@@ -1041,11 +955,11 @@ Future:
       full-stack mode. A missing `transcription` extra raises a clear failed-task
       message (`RuntimeError` with the `pip install` hint) instead of crashing the
       whole worker loop.
-* [x] Timestamp handling — faster-whisper's segment `start`/`end` (real seconds) are
+* Timestamp handling — faster-whisper's segment `start`/`end` (real seconds) are
   used directly as `TranscriptLine.start_time`/`end_time`, giving `get_lines()`'s
   `ORDER BY start_time` real, meaningful values for once (text imports only ever had
   synthetic per-line indices - see the append/overwrite entry above).
-* [x] Real audio import
+* Real audio import
     * Fixed 2026-08-13: `ArchiveView`'s "Import Audio" used to call
       `TaskService.queue_import()` (the text path, which opened the audio file as
       UTF-8 and failed every time) or, briefly mid-Sprint-4, immediately queued a
@@ -1054,7 +968,7 @@ Future:
       actions: `ChronicleService.add_audio_source()` just moves the staged file into
       a durable `chronicles/<id>/sources/` and returns - no task, no transcription -
       so a user can gather every track for a session before transcribing any of them.
-* [x] Multi-track / per-speaker transcription
+* Multi-track / per-speaker transcription
     * Redesigned 2026-08-13 after real usage clarified the actual recording setup:
       each "chronicle" (podcast episode) is recorded as *separate single-speaker
       audio tracks* (one per Discord participant, via a per-user recording bot) plus
@@ -1079,12 +993,7 @@ Future:
       given any special handling either - it's just not one anyone would click
       "Transcribe" on; mixing tracks into one podcast file is a distinct, larger,
       not-yet-scoped feature.
-* [~] Retry support — inherited for free from the existing task retry mechanism
-  (`mark_failed_or_retry`), but a transient failure partway through a multi-minute
-  transcription re-runs the whole thing from scratch; no resumability.
-    * Retries back off (ticket 022) and interrupted tasks are recovered at start (009). A
-      retry still starts the track over.
-* [x] Chronicle duration and status backfill
+* Chronicle duration and status backfill
     * Fixed 2026-08-13 (reported: "after transcribing the duration is not updated";
       "the state of the chronicle should not be [stuck at] 'Imported' after audio
       transcription"): `Chronicle.duration` was never computed anywhere - always
@@ -1099,33 +1008,26 @@ Future:
       only if it's still the untouched default (won't stomp a chronicle whose status
       was already something else on purpose).
 
----
+#### Cleanup
 
-## Cleanup
-
-* [x] Cleanup worker
-* [x] Text normalization
-* [x] Segment merging
-* [ ] Cleanup markers
-* [x] Confirm before cleaning, and snapshot the database first (ticket 011)
-* [ ] Restore a snapshot, and snapshot before an overwriting import or a re-transcription
-  too (ticket 065)
-* [x] Make import/clean transactional
+* Cleanup worker
+* Text normalization
+* Segment merging
+* Confirm before cleaning, and snapshot the database first (ticket 011)
+* Make import/clean transactional
     * Fixed 2026-08-13: repository methods no longer commit internally; `handle_import`/
       `handle_clean` commit once at the end, rollback + re-raise on any exception.
-* [x] Stop recreating speaker rows on every clean (speaker IDs change each run)
+* Stop recreating speaker rows on every clean (speaker IDs change each run)
     * Fixed 2026-08-13: `delete_all()` renamed to `delete_all_lines()` and no longer
       touches `DBSpeaker` - `get_or_create_speaker()`'s lookup-by-name now naturally
       reuses the same row across re-imports/cleans.
 
----
+### Editing and export
 
-# Phase 6 — Editing and export
+#### Transcript viewer
 
-## Transcript viewer
-
-* [x] Display transcript
-* [x] Show line timestamps (optional)
+* Display transcript
+* Show line timestamps (optional)
     * Added 2026-08-13: a "Show timestamps" checkbox in the transcript panel prefixes
       each line with `[HH:MM:SS]` (`chronicler/core/formatting.py::format_timestamp`,
       the same helper used by timestamped export, so the two always agree). Toggling
@@ -1137,23 +1039,16 @@ Future:
       chronicle without real timestamps will show small ascending values
       (`00:00:00`, `00:00:01`, ...), not a claim of precision that isn't there, but
       also not hidden behind a "is this real" flag that doesn't exist in the schema.
-* [x] **Edit text** — done in Sprint 11, per line rather than as one blob. The read view
+* **Edit text** — done in Sprint 11, per line rather than as one blob. The read view
   stays read-only on purpose; the edit toggle swaps in one row per line. See
   [docs/transcript-editing.md](docs/transcript-editing.md).
-* [x] Search within Chronicle (ticket 063)
+* Search within Chronicle (ticket 063)
 
-Future:
-
-* [ ] Audio synchronization
-* [ ] Timestamp editing
-
----
-
-## Export
+#### Export
 
 Initial:
 
-* [x] Plain text export
+* Plain text export
     * Added 2026-08-13 (Sprint 4 UI fixes): `TranscriptService.export_plaintext`
       wraps each line at 140 columns with a hanging indent under `"Speaker: "` (width
       varies per speaker name), dropping lines with no real text. Verified against a
@@ -1181,7 +1076,7 @@ Initial:
       to need it. Old fixture-diff test replaced with one pinned to a real excerpt of
       `example_transcript_001.txt` (the Windrider/Maldal exchange) plus targeted unit
       tests for padding, wrapping, and blank-line handling.
-* [x] Export with timestamps
+* Export with timestamps
     * Added 2026-08-13: `export_plaintext(chronicle_id, include_timestamps=False)` -
       when true, prefixes each line with `[HH:MM:SS]` (same `format_timestamp` helper
       the transcript view's timestamp toggle uses) ahead of the padded speaker
@@ -1189,21 +1084,19 @@ Initial:
       timestamp prefix is a fixed 11 characters (`"[HH:MM:SS] "`), so it just widens
       the continuation-line indent, nothing about the alignment logic itself changed.
       Export dropdown gained a second item, "Plain text with timestamps (.txt)".
-* [ ] Markdown export
-* [x] Wire up the Export button in the transcript view (currently has no handler)
+* Wire up the Export button in the transcript view (currently has no handler)
     * Fixed 2026-08-13: replaced with a dropdown (`PopupMenuButton`) — "Plain text" is
       live (`FilePicker.save_file` + write); HTML/PDF/"Chronicle .zip" are listed but
       `disabled=True` ("coming soon") rather than silently absent, so it's honest about
       what's not built yet instead of just missing.
 
-Future:
+Later:
 
-* [x] PDF — fpdf2 with bundled DejaVu fonts, so every script and every `?` survives
+* PDF — fpdf2 with bundled DejaVu fonts, so every script and every `?` survives
   (ticket 017). See [docs/pdf-export.md](docs/pdf-export.md).
-* [ ] DOCX
-* [x] HTML
-* [x] SRT subtitles (Sprint 8), refused for a text import, which has no real timings
-* [x] Chronicle export (zip the chronicle's workspace directory to a chosen location)
+* HTML
+* SRT subtitles (Sprint 8), refused for a text import, which has no real timings
+* Chronicle export (zip the chronicle's workspace directory to a chosen location)
     * Done 2026-09-15: `TranscriptService.export_zip` packs one chronicle into a `.zip`
       under a single folder named after it — `project.db` plus a `chronicle.json`
       manifest, and `sources/` only when asked for. The database is snapshotted with
@@ -1220,7 +1113,7 @@ Future:
       See docs/storage.md.
     * Done 2026-09-15: the Export menu's last `disabled=True` item is gone — every
       format in the dropdown now does something.
-* [x] Document exports work in thin-client mode
+* Document exports work in thin-client mode
     * Fixed 2026-09-15: `export_html`, `export_pdf` and `export_zip` are now exposed over
       RPC. They were not reachable remotely at all, and not in a way that failed politely:
       `RemoteServiceProxy` only installs *exposed* methods, so a thin client's Export menu
@@ -1230,250 +1123,44 @@ Future:
       `response.content`, since JSON cannot carry bytes. HTML was only ever unexposed
       because it sat next to the two that could not be. See docs/deployment-and-rpc.md.
 
----
+### Chronicler Server
 
-# Phase 7 — Chronicler Server
-
-* [x] Add server application mode
-* [x] Add first run CLI wizard
-    * [x] Add option to generate or set API key
-* [x] Add API layer
-* [x] Add authentication
+* Add server application mode
+* Add first run CLI wizard
+    * Add option to generate or set API key
+* Add API layer
+* Add authentication
     * Fixed 2026-08-13: key comparison uses `secrets.compare_digest`; CORS
       `allow_credentials` set to `False` (was `True` alongside a wildcard origin — an
       invalid, unsafe combination, and unnecessary since auth is a header, not a cookie).
-* [ ] Add server storage management
-* [x] Confine the linked-chronicle paths a remote caller can name (ticket 076)
-* [x] Enforce the upload cap before the body is received (ticket 053)
-* [ ] Pass service errors to thin clients with their explanation (ticket 046)
-* [ ] Set up a server unattended, with flags instead of the console wizard (ticket 042)
+* Confine the linked-chronicle paths a remote caller can name (ticket 076)
+* Enforce the upload cap before the body is received (ticket 053)
 * TLS is left to a reverse proxy or a tunnel. See
   [docs/security.md](docs/security.md#transport).
-* [x] Add remote repository implementation
-* [x] Connect desktop client to server
+* Add remote repository implementation
+* Connect desktop client to server
     * Fixed 2026-08-13: Thin Client mode (`chronicler/desktop/runtime.py`). Verified
       live against a real running server, not just `ASGITransport` — which is what
-      surfaced the three RPC-layer bugs listed under "Known blockers" above.
-* [x] Fix server startup (see Known blockers)
-* [x] Harden `/upload` — filename sanitisation, size limit, collision handling
+      surfaced the three RPC-layer bugs listed under Sprint 3 above.
+* Fix server startup (Sprint 1)
+* Harden `/upload` — filename sanitisation, size limit, collision handling
     * Fixed 2026-08-13: server-generated `uuid4()` filenames (whitelisted extension
       only), 500MB size cap with partial-file cleanup on overflow, collisions are
       statistically impossible by construction.
-* [x] Move `python-multipart` into base dependencies (`/upload` 500s without it)
-* [ ] Task event stream — push `TaskCompletedEvent` to remote clients (SSE)
-    * Interim: ticket 064 has the Tasks view poll while a task runs, which works on a thin
-      client without a stream.
-    * Planned 2026-08-13 (analysis below), not yet implemented. Follows on from
-      "Live refresh on task completion" (Transcription section) landing
-      desktop-full-stack-only, with `TaskEventBus`'s subscribe/publish shape
-      deliberately left transport-agnostic for exactly this.
-    * **Decision: Server-Sent Events, not WebSocket.** Both were considered (the
-      user had no strong preference - WebSocket "aligns with the current RPC
-      mindset", SSE "is more fitting, read only"). Concrete reasons SSE wins for
-      *this* codebase specifically, not in the abstract:
-        - The data flow is 100% one-directional (server → client task-completion
-          events). Every client-initiated action already has a channel - the
-          existing `POST /api/{service}/{method}` RPC routes. Nothing needs to ride
-          a bidirectional connection; WebSocket's extra capability (client → server
-          messages) would be unused surface area, not a feature this needs.
-        - Zero new dependencies either way on the server (`StreamingResponse` with
-          `media_type="text/event-stream"` is plain Starlette, already a dependency
-          via FastAPI - no need for `sse-starlette`) *or* for WebSocket (`websockets`
-          is already present transitively via `uvicorn[standard]`). But on the
-          **desktop thin client**, which only depends on `httpx` (not
-          `uvicorn[standard]` - that's the `[server]` extra, not installed for a
-          thin-client-only install), consuming SSE needs nothing beyond
-          `httpx.AsyncClient.stream()` and parsing a trivial `data: ...\n\n` format
-          by hand. Consuming WebSocket would need adding `websockets` (or
-          `httpx-ws`) as a new **base** dependency just for this. Checked directly,
-          not assumed: `pip show websockets` in this venv resolves it only via the
-          `uvicorn[standard]` server extra today.
-        - The browser side has one well-known SSE wrinkle - the native
-          `EventSource` object can't set custom headers, so it can't carry
-          `X-API-Key` the way every other request in this app does. It doesn't
-          matter here: per the existing proxy design, the browser never talks to
-          the real API-key-protected server directly, only to the web client's own
-          local proxy (see Phase 8). That hop's auth is whatever "Shared-password
-          login with a signed session cookie" (Phase 8, still open) ends up being -
-          and `EventSource` *does* send cookies automatically, so native
-          `EventSource` is actually the right fit for the browser once that lands,
-          not a workaround.
-        - SSE gets native auto-reconnect in the browser (`EventSource`) for free;
-          WebSocket reconnect is hand-rolled either way. The thin client needs a
-          hand-rolled reconnect-with-backoff loop regardless of which is chosen (SSE
-          or WS), since httpx has no built-in client for either.
-    * **Server side** (`chronicler/core/rpc.py`, `chronicler/server/main.py`):
-        - `RpcServer` gains an optional `event_bus: TaskEventBus | None` constructor
-          param (mirrors `WorkerManager`'s). `server/main.py::run_server` constructs
-          one `TaskEventBus`, passes it to *both* `_build_worker_manager` (so
-          `WorkerManager` actually publishes) and `RpcServer` (so the route below
-          can subscribe to it) - today `_build_worker_manager` takes no `event_bus`
-          at all, since nothing consumed it yet.
-        - New route in `RpcServer.build()`, alongside `/upload` (not a `@service`
-          method - `_register_service` only picks up coroutine functions meant as
-          request/response RPC, and a stream doesn't fit that shape):
-          `GET /events`, protected by the same `verify_api_key` dependency every
-          other route already has (it's applied app-wide via `FastAPI(dependencies=
-          [Depends(verify_api_key)])`, so this needs no special-casing). Handler:
-          create an `asyncio.Queue`, subscribe a listener that does
-          `queue.put_nowait(event)` to `self.event_bus`, return a
-          `StreamingResponse` whose generator does `while True: event =
-          await queue.get(); yield f"data: {json}\n\n"` - unsubscribing (the
-          `TaskEventBus.subscribe()` return value already *is* the unsubscribe
-          callable) in a `finally` block when the client disconnects.
-        - `TaskCompletedEvent` → JSON: it's a plain frozen dataclass, but pydantic
-          v2's `TypeAdapter` handles plain dataclasses natively (UUID/Enum → str
-          included) - reuse the exact same
-          `TypeAdapter(...).dump_python(event, mode="json")` pattern
-          `RemoteServiceProxy` already uses for arguments, no new serialization code
-          needed.
-        - Server mode already runs `WorkerManager.run_forever()` and uvicorn's
-          `Server.serve()` concurrently on *one* event loop
-          (`server/main.py::_serve_and_work`, `asyncio.gather`) - so
-          `TaskEventBus.publish()` (called from the worker loop) and an SSE route's
-          queue (awaited from a request handler) are already on the same loop with
-          no cross-process signaling to design.
-    * **Desktop thin client side** (`chronicler/core/remote.py`,
-      `chronicler/desktop/app.py`):
-        - New class in `remote.py`, e.g. `RemoteTaskEventSource` - not a
-          `RemoteServiceProxy` (this isn't a request/response method call). Opens
-          `client.stream("GET", f"{base_url}/events", headers={"X-API-Key":
-          api_key})`, reads and parses the `data: ...\n\n` lines, deserializes each
-          via `TypeAdapter(TaskCompletedEvent).validate_python(json.loads(data))`,
-          and `.publish()`es into a `TaskEventBus`. Runs as a background
-          `asyncio.create_task()` loop with reconnect-with-backoff around the
-          stream (a dropped connection - server restart, network blip - must not
-          silently stop live updates forever).
-        - `DesktopApp` in thin-client mode constructs its *own* local
-          `TaskEventBus` (today only full-stack mode does, inside
-          `_maybe_start_worker_manager`) and subscribes `_on_task_completed` to it
-          exactly as full-stack mode does, then starts a `RemoteTaskEventSource`
-          feeding that bus instead of a local `WorkerManager`. Net effect:
-          `_on_task_completed` and the refresh logic become **identical code for
-          both desktop modes** - only where events originate differs (local
-          `WorkerManager` vs. a remote SSE stream). This is the actual payoff of
-          having built `TaskEventBus` as a transport-agnostic interface rather than
-          wiring `WorkerManager` straight to `DesktopApp`.
+* Move `python-multipart` into base dependencies (`/upload` 500s without it)
 
----
+### Testing
 
-# Phase 8 — Web Client
-
-> Removed by ticket 012-S14: it exposed the whole API with no login, for three
-> operations. The notes below are history; ticket 062 decides what to keep.
-
-It had a static file server, an API proxy that added the server's key itself, a wizard
-option to set it up, and pages for browsing and creating chronicles and uploading audio.
-There was never a page for viewing one. The two design notes below are kept for whenever
-browser access comes back; `docs/deployment-and-rpc.md` suggests Flet's web mode over the
-thin client as the first thing to try.
-
-* **Design note, not queued: browser-facing auth for a web client.**
-    * Re-planned 2026-08-13: the web client as a whole is a "much later" concern,
-      so this moved from "next thing to design" to "direction captured, not
-      queued" - written down here so the reasoning isn't lost before it's picked
-      back up, not because it's about to be built.
-    * **Unchanged and not part of this item:** server ↔ (thin-client desktop | web
-      client proxy) keeps using the existing `X-API-Key` header exactly as today -
-      one uniform communication strategy for both remote-client shapes, API key
-      only. This item is only about the separate, currently-unauthenticated
-      *browser* ↔ *web client* hop (`chronicler/webclient/main.py` has zero auth
-      dependencies on any route today).
-    * First direction explored: HTTP Basic Auth (FastAPI's built-in `HTTPBasic`,
-      a bcrypt-hashed shared password in `Settings`, applied app-wide the same way
-      `RpcServer.build()` already gates every route with `verify_api_key`). Simple
-      - a few lines, no session store, no CSRF surface - and it incidentally
-      solves `EventSource`'s "can't set custom headers" limitation for the live
-      updates item below, since the browser auto-reattaches
-      `Authorization: Basic ...` to every request to the origin once challenged
-      once, `EventSource` included.
-    * **Reconsidered:** Basic Auth sends the password (base64-encoded, not
-      encrypted) on every single request, so it's only meaningfully safe over
-      TLS - and Chronicler has no built-in TLS story today, so this would make
-      "protect the web client" and "stand up TLS" the same prerequisite. Current
-      preference is a simple client-side-hashed login instead, specifically to
-      avoid that hard coupling to TLS.
-    * **Caveat worth remembering when this is actually designed:** naively
-      hashing the password in the browser before sending it
-      (`sha256(password)`, sent as-is as the credential) does *not* by itself
-      remove the need for TLS. An eavesdropper who captures that hash can just
-      replay it - from the network's point of view the hash *becomes* the
-      password, no more protected than sending it in the clear, since the server
-      still accepts that exact value every time. Getting a genuine improvement
-      out of client-side hashing needs a per-attempt challenge: the server issues
-      a random single-use nonce, the client sends `hash(password + nonce)` (or an
-      HMAC over the nonce), and the server checks it against a hash it computes
-      the same way with that nonce - a captured value is useless on replay
-      because the nonce won't be accepted twice. This is essentially what HTTP
-      Digest Auth (RFC 7616) already standardizes; a small hand-rolled
-      nonce+HMAC exchange for a single login page would work too and is simpler
-      to reason about than adopting Digest wholesale. Whichever it ends up being,
-      the open question to resolve later is "recommend/require TLS and keep
-      Basic Auth's simplicity" vs. "take on nonce-challenge complexity to reduce
-      the TLS dependency" - genuinely a trade-off, not resolved here.
-* **Design note, not queued: live updates in the browser** (proxy the SSE task event
-  stream), deferred for the same reason as browser-facing auth above.
-    * Planned 2026-08-13 - see Phase 7's "Task event stream" entry for the full
-      SSE-vs-WebSocket analysis and server-side design; this is the browser-facing
-      half of the same feature.
-        - `chronicler/webclient/main.py` gains `GET /events`, proxied the same way
-          `/api/upload` and `/api/{service}/{method}` already are: open
-          `httpx.AsyncClient().stream("GET", f"{settings.server_url}/events",
-          headers={"X-API-Key": settings.api_key})` and re-stream each chunk to the
-          browser via a `StreamingResponse` with `media_type="text/event-stream"`.
-          Same "upstream unreachable → 502" handling as the other two proxy routes.
-        - Browser JS (`chronicler/webclient/src/app.js`, currently plain `fetch()`
-          calls, no live-update mechanism yet): `new EventSource('/events')`, same
-          origin as the page itself. Works with zero browser-facing auth today,
-          matching the web client's current state - whatever auth scheme "Browser-
-          facing auth for the web client" (above) eventually lands with, the
-          browser will already be attaching it (a header the browser caches and
-          re-sends, or a cookie) to every same-origin request automatically,
-          `EventSource` included, with no extra plumbing needed here regardless of
-          which direction that item settles on. On each message, re-fetch whatever
-          the current view depends on (chronicle list, or the open chronicle's
-          detail) rather than trying to patch the DOM from the event payload
-          directly - simplest thing that works, matches "Basic UI for viewing a
-          Chronicle" not existing yet either.
-        - Depends on "Basic UI for viewing a Chronicle" existing first for the
-          "refresh the open chronicle" half to have anywhere to land; the "refresh
-          the chronicle list" half doesn't. Does *not* depend on "Browser-facing
-          auth" landing first - works with zero auth today (matching the web
-          client's current state), and picks up whatever that item lands with for
-          free whenever it does, same as every other route.
-
----
-
-# Phase 9 — Distribution
-
-* [x] GitHub Actions builds
-* [x] Automated releases — publishing a GitHub release builds both packages and attaches
-  them
-* [x] Windows package
-* [ ] macOS package
-* [x] Linux package
-* [ ] Run the tests before a release builds (ticket 081)
-
-Two builds ship side by side: a PyInstaller one-file executable (`Chronicler.spec`, see
-[docs/packaging.md](docs/packaging.md)) and the embedded-runtime build, a launcher around a
-trimmed CPython that downloads optional components from hash-pinned locks
-([docs/runtime-build.md](docs/runtime-build.md)). Ticket 059 retires PyInstaller once a
-runtime release has been used.
-
----
-
-# Testing
-
-* [x] Repository tests (chronicle, task, tag)
-* [x] Container tests
-* [x] RPC round-trip tests (server + remote proxy)
-* [x] Importer and cleaner tests
-* [x] Consolidate the duplicated flat and mirrored test layouts under `tests/chronicler/`
+* Repository tests (chronicle, task, tag)
+* Container tests
+* RPC round-trip tests (server + remote proxy)
+* Importer and cleaner tests
+* Consolidate the duplicated flat and mirrored test layouts under `tests/chronicler/`
     * Done 2026-08-13. This was also a live break, not just duplication: two files
       named `test_importers.py` with no `__init__.py` anywhere under `tests/` made
       pytest's rootless collection abort with `import file mismatch` — a plain `pytest`
       invocation couldn't run the suite at all.
-* [x] Investigate six deleted tests whose stale `.pyc` remain on disk — `test_server_routes`,
+* Investigate six deleted tests whose stale `.pyc` remain on disk — `test_server_routes`,
   `test_config_validation`, `test_wizard_api_key`, `test_wizard_partial`, `repro_issue`,
   `repro_404`.
     * Investigated 2026-08-13: none are in git history (`git log --all --diff-filter=D`
@@ -1483,55 +1170,28 @@ runtime release has been used.
       reconstructed as real coverage from their names' evident intent.
       `repro_issue`/`repro_404` were not — no surviving signal (docstring, linked issue,
       commit) of what they targeted, so reconstructing them would just be guessing.
-* [x] Server startup smoke test
-* [x] Web client auth / proxy tests
-* [x] Worker claiming and retry tests (added 2026-08-13)
-* [x] Migration tests (added 2026-08-13 — `alembic_version` stamped at head, idempotent
+* Server startup smoke test
+* Web client auth / proxy tests
+* Worker claiming and retry tests (added 2026-08-13)
+* Migration tests (added 2026-08-13 — `alembic_version` stamped at head, idempotent
   re-init/re-open)
-* [x] `SQLiteTagRepository` tests (was zero coverage, fixed 2026-08-13)
-* [x] Thin Client end-to-end tests (added 2026-08-13) — `RemoteContainer` round-trips
+* `SQLiteTagRepository` tests (was zero coverage, fixed 2026-08-13)
+* Thin Client end-to-end tests (added 2026-08-13) — `RemoteContainer` round-trips
   through a real `RpcServer`, plus one actual live smoke test against a real running
   `chronicler server` process (not `ASGITransport`), which is what caught the three RPC
-  bugs under "Known blockers" that every `ASGITransport`-based test had missed. Worth
+  bugs under Sprint 3 that every `ASGITransport`-based test had missed. Worth
   remembering as a general lesson: in-process ASGI transport tests don't exercise real
   JSON (de)serialization the same way a genuine HTTP round-trip does.
-* [x] Mirror the test tree to the package tree (2026-08-17). `tests/chronicler/` now
+* Mirror the test tree to the package tree (2026-08-17). `tests/chronicler/` now
   matches `chronicler/` module for module, as real packages — the mirrored layout repeats
   module names (`views/archive/test_view.py` and `views/transcript/test_view.py`), which
   pytest's default import mode can only disambiguate for packages.
-* [x] De-duplicate test fixtures (2026-08-17). The `async_session` fixture was copy-pasted
+* De-duplicate test fixtures (2026-08-17). The `async_session` fixture was copy-pasted
   identically into four modules; it lives in `tests/conftest.py` now. `attach_page`
   (`tests/chronicler/desktop/conftest.py`) replaces the try/finally `patch.object(...,
   "page")` block every desktop test hand-rolled, and fixture-file paths come from
   `tests/paths.py` instead of `Path(__file__).parents[n]` — which silently pointed at the
   wrong directory the moment a test module moved.
-* [x] Tests run on Windows in CI, and hold up there (tickets 003, 005)
-* [x] A fixture for a second connection holding the write lock (ticket 002)
-* [x] Optional extras in CI (ticket 044)
-* [ ] Warning-free under coverage (ticket 080)
-* [ ] Two tests that pass for the wrong reason (ticket 071)
-* [ ] No tests exercise the desktop app against a real Flet page. Views are unit-tested by
-  building them and inspecting the control tree, which is why four rounds of Sprint 4 UI
-  fixes were needed for things only visible when actually running the app (a
-  client-crashing `FilePicker` registration, a dialog that resolved but never visually
-  closed). Worth investigating whether Flet's own test helpers can close that gap.
-  Ticket 058. Dismissing a dialog (ticket 073) is one more bug of that kind.
-
----
-
-# Future ideas
-
-## Collaboration
-
-* [ ] Multiple users
-* [ ] Permissions
-* [ ] Shared Chronicles
-* [ ] Conflict handling
-
-## Intelligence
-
-* [x] Summaries (SUMMARIZE, Sprint 9)
-* [ ] Action items
-* [ ] Topic extraction
-* [ ] Semantic search
-* [ ] Embeddings
+* Tests run on Windows in CI, and hold up there (tickets 003, 005)
+* A fixture for a second connection holding the write lock (ticket 002)
+* Optional extras in CI (ticket 044)

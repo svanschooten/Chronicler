@@ -307,6 +307,8 @@ More detailed documentation is available in:
 
 * **[ARCHITECTURE.md](ARCHITECTURE.md)** – service architecture, storage model, task system, deployment modes, and extension points.
 * **[HOWTO.md](HOWTO.md)** – practical guides for configuring providers, remote servers, GPU support, backups, and future integrations.
+* **[CHANGELOG.md](CHANGELOG.md)** – what has landed.
+* **[ROADMAP.md](ROADMAP.md)** – where Chronicler goes next, and the [tickets](tickets/README.md) for open work.
 
 ## Technology stack
 

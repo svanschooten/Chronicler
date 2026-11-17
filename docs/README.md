@@ -38,6 +38,7 @@ below and leave the code clean.
 | [troubleshooting.md](troubleshooting.md) | File dialogs, the session bus on WSL, and migration recovery |
 | [superpowers/specs/](superpowers/specs/) | Agreed designs for work not yet built, each linked from its tickets |
 | [thin-client-testing.md](thin-client-testing.md) | Handshake, the two-process check, and LAN exposure from WSL2 |
+| [live-updates.md](live-updates.md) | Not built: pushing task events to thin clients over Server-Sent Events |
 
 ## Design notes
 
@@ -48,4 +49,5 @@ Proposals that are not yet built are tickets, in [tickets/](../tickets/README.md
 * [README.md](../README.md) — what Chronicler is, and how to run it
 * [ARCHITECTURE.md](../ARCHITECTURE.md) — the service architecture at a high level
 * [HOWTO.md](../HOWTO.md) — practical operator guides
-* [TODO.md](../TODO.md) — roadmap and current state of each feature
+* [CHANGELOG.md](../CHANGELOG.md) — what landed, sprint by sprint and wave by wave
+* [ROADMAP.md](../ROADMAP.md) — open direction, pointing at the tickets
