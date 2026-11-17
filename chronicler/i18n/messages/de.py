@@ -196,6 +196,8 @@ MESSAGES = {
     "transcript": {
         "edit": "Transkript bearbeiten",
         "done": "Bearbeitung beenden",
+        "add_speaker": "Sprecher '{name}' hinzufügen",
+        "empty_line": "(leere Zeile)",
         "delete_line": "Diese Zeile loeschen",
         "line_window": "Zeilen {first}-{last} von {total}",
         "line_window_timed": "Zeilen {first}-{last} von {total} · {start}-{end}",

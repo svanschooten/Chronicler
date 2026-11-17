@@ -10,6 +10,7 @@ from chronicler.core.models import Chronicle, Tag, TranscriptLine
 from chronicler.core.services.transcript_service import FIND_LIMIT
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.transcript import TranscriptView
+from chronicler.desktop.views.transcript.style import TRANSCRIPT_LINE_HEIGHT
 from chronicler.desktop.views.transcript.view import (
     DEFAULT_PAGE_HEIGHT,
     DEFAULT_PAGE_WIDTH,
@@ -19,7 +20,6 @@ from chronicler.desktop.views.transcript.view import (
     READER_MARGIN_Y,
     READER_MIN_HEIGHT,
     READER_MIN_WIDTH,
-    TRANSCRIPT_LINE_HEIGHT,
     detail_panel_width,
 )
 from chronicler.i18n import t
@@ -466,11 +466,11 @@ class TestEditMode:
         attach_page(TranscriptView)
         calls = []
         view.editor.load = AsyncMock()
-        view.editor.save_unsaved = AsyncMock(side_effect=lambda: calls.append("save"))
+        view.editor.finish_editing = AsyncMock(side_effect=lambda: calls.append("save"))
         view.load_transcript = AsyncMock(side_effect=lambda: calls.append("reload"))
 
         await view.edit_toggled(MagicMock())
-        view.editor.save_unsaved.assert_not_awaited()
+        view.editor.finish_editing.assert_not_awaited()
         await view.edit_toggled(MagicMock())
 
         assert calls == ["save", "reload"]

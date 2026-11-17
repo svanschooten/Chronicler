@@ -25,8 +25,15 @@ Names are matched case-insensitively and whitespace-normalised through
 `normalized_name`, so `Alice`, `alice` and `  Alice  ` are one speaker. The first
 spelling seen is the one kept and displayed.
 
+Inside a chronicle, `get_or_create_speaker` matches the same way, so typing `gm` on a line
+in a chronicle that has `GM` reuses `GM` instead of creating a second speaker, and the
+line, the registry and the picker all show `GM`. A new name has its spacing tidied before
+it is stored. Rows that already differ only in case (written before ticket 083) are left
+alone; the oldest of them is the one matched.
+
 `TranscriptService.speaker_suggestions` merges the registry with the chronicle's own
-speakers and sorts case-insensitively — the registry is authoritative for breadth, the
+speakers, offers each name once whatever its case or spacing (the registry's spelling
+wins), and sorts case-insensitively — the registry is authoritative for breadth, the
 chronicle for anything registered before the registry existed.
 
 Registration is best-effort: if the registry write fails, the assignment still succeeds
@@ -36,6 +43,15 @@ block attributing a track.
 `register` commits its own write and rolls back on failure. A bare flush would hold the
 workspace write lock until something else committed the session, and the name was lost
 when nothing did.
+
+## NPCs and other voiced characters
+
+A character someone voices, such as an NPC played by the GM, is an ordinary speaker. There
+is deliberately no separate character model. Adding the name on a line creates the speaker
+and registers it in the workspace, like any other name. The line's `source_id` still
+records which track, and so which person, it came from. In the transcript editor a new
+name is added through the picker's "Add speaker" option (ticket 084). Because names match
+case-insensitively, `Gundren` and `gundren` are one speaker.
 
 ## Why not fan out across project databases
 

@@ -54,4 +54,5 @@ See `docs/transcript-editing.md`.
 
 ### related tickets
 
-- none
+- (BLOCKS) [082-F5_inline_transcript_editor](082-F5_inline_transcript_editor.md): built on this ticket's window, pager and save handling (PR #92). Rows become plain text and speaker options are built only for the picker that is open, which removes the per-row option lists this ticket left in place
+- (RELATED) [086-L19_dropdown_clears_on_click](086-L19_dropdown_clears_on_click.md): uses this ticket's finding that a click on a dropdown's arrow does not focus it

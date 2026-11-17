@@ -193,3 +193,49 @@ class TestChronicleMetadata:
         finally:
             await session.close()
             await db_manager.close_all()
+
+
+class TestSpeakerSpelling:
+    """Ticket 083: a name typed in another case or spacing is the speaker that exists."""
+
+    @pytest.mark.asyncio
+    async def test_a_name_in_another_case_reuses_the_existing_speaker(self, tmp_path):
+        db_manager, session, service, chronicle = await _service(tmp_path)
+        try:
+            lines = await service.get_transcript(chronicle.id)
+
+            saved = await service.update_line(chronicle.id, lines[1].id, speaker_name="  nyx ")
+
+            assert saved.speaker_name == "Nyx"
+            assert await service.list_speaker_names(chronicle.id) == ["Nyx"]
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_new_name_is_stored_with_its_spacing_tidied(self, tmp_path):
+        db_manager, session, service, chronicle = await _service(tmp_path)
+        try:
+            lines = await service.get_transcript(chronicle.id)
+
+            saved = await service.update_line(
+                chronicle.id, lines[1].id, speaker_name=" Gundren  Rockseeker "
+            )
+
+            assert saved.speaker_name == "Gundren Rockseeker"
+            assert "Gundren Rockseeker" in await _registry_names(db_manager)
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_suggestions_offer_a_name_once_in_the_registry_spelling(self, tmp_path):
+        db_manager, session, service, chronicle = await _service(tmp_path)
+        try:
+            await SQLiteKnownSpeakerRepository(session).register("NYX")
+            await session.commit()
+
+            assert await service.speaker_suggestions(chronicle.id) == ["NYX"]
+        finally:
+            await session.close()
+            await db_manager.close_all()

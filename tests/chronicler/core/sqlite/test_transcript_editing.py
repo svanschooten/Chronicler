@@ -117,3 +117,26 @@ class TestDeletingALine:
         await repository.delete_line(lines[0].id)
 
         assert [speaker.name for speaker in await repository.get_speakers()] == ["Speaker 0"]
+
+
+class TestMatchingASpeaker:
+    @pytest.mark.asyncio
+    async def test_case_and_spacing_do_not_make_a_new_speaker(self, repository):
+        first = await repository.get_or_create_speaker("GM")
+
+        again = await repository.get_or_create_speaker(" gm ")
+
+        assert again.id == first.id
+        assert again.name == "GM"
+        assert len(await repository.get_speakers()) == 1
+
+    @pytest.mark.asyncio
+    async def test_existing_near_duplicates_resolve_to_the_oldest(self, repository):
+        from chronicler.core.project_database import DBSpeaker
+
+        repository.session.add(DBSpeaker(name="GM"))
+        await repository.session.flush()
+        repository.session.add(DBSpeaker(name="gm"))
+        await repository.session.flush()
+
+        assert (await repository.get_or_create_speaker("Gm")).name == "GM"

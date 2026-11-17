@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chronicler.core.models import Speaker, TranscriptLine
 from chronicler.core.project_database import DBSpeaker, DBTranscriptLine
 from chronicler.core.repositories import TranscriptRepository
+from chronicler.core.sqlite.known_speaker_repository import normalize_speaker_name
 from chronicler.core.sqlite.patterns import fts_query
 
 SEARCH_LIMIT = 200
@@ -22,10 +23,24 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         return [Speaker.model_validate(s) for s in db_speakers]
 
     async def get_or_create_speaker(self, name: str) -> Speaker:
-        result = await self.session.execute(select(DBSpeaker).where(DBSpeaker.name == name))
-        db_speaker = result.scalar_one_or_none()
-        if not db_speaker:
-            db_speaker = DBSpeaker(name=name)
+        """
+        The speaker this name means in this chronicle, matched the way the workspace
+        registry matches: whitespace collapsed and case folded, so typing `gm` where `GM`
+        exists reuses `GM` instead of creating a second speaker. The first spelling seen
+        is kept. Rows that already differ only in case are left alone; the oldest of them
+        is the one matched. See docs/speakers.md.
+        """
+        cleaned = " ".join(name.split())
+        wanted = normalize_speaker_name(cleaned)
+        result = await self.session.execute(
+            select(DBSpeaker).order_by(literal_column("speakers.rowid"))
+        )
+        db_speaker = next(
+            (row for row in result.scalars() if normalize_speaker_name(row.name) == wanted),
+            None,
+        )
+        if db_speaker is None:
+            db_speaker = DBSpeaker(name=cleaned)
             self.session.add(db_speaker)
             await self.session.flush()
             await self.session.refresh(db_speaker)

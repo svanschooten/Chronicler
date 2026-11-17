@@ -36,6 +36,7 @@ below and leave the code clean.
 | [runtime-build.md](runtime-build.md) | The embedded-runtime (PyApp) build, hash-pinned locks, downloadable components |
 | [testing.md](testing.md) | Test layout, shared fixtures, how views are tested |
 | [troubleshooting.md](troubleshooting.md) | File dialogs, the session bus on WSL, and migration recovery |
+| [superpowers/specs/](superpowers/specs/) | Agreed designs for work not yet built, each linked from its tickets |
 | [thin-client-testing.md](thin-client-testing.md) | Handshake, the two-process check, and LAN exposure from WSL2 |
 
 ## Design notes

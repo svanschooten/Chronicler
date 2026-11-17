@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock
 
 import flet as ft
@@ -90,10 +91,57 @@ class TestSearchableDropdown:
 
         assert dropdown.value == "provider/model-3"
 
+    def test_the_emptied_field_shows_what_it_held_as_a_hint(self):
+        """A click must not make the current choice look deleted."""
+        dropdown = searchable_dropdown(MODELS, value="provider/model-3")
+
+        dropdown.on_focus(MagicMock(control=dropdown))
+
+        assert dropdown.hint_text == "provider/model-3"
+
+    def test_leaving_clears_the_hint(self):
+        dropdown = searchable_dropdown(MODELS, value="provider/model-3")
+        dropdown.on_focus(MagicMock(control=dropdown))
+
+        dropdown.on_blur(MagicMock(control=dropdown))
+
+        assert dropdown.hint_text is None
+
+    def test_an_earlier_report_of_text_does_not_stop_the_restore(self):
+        """
+        `text` keeps whatever the client last reported. A field typed into on an earlier
+        visit, cleared on this one and left alone, must still get its selection back.
+        """
+        dropdown = searchable_dropdown(MODELS, value="provider/model-3")
+        dropdown.text = "provider/model-3"  # reported on an earlier visit
+
+        dropdown.on_focus(MagicMock(control=dropdown))
+        dropdown.on_blur(MagicMock(control=dropdown))
+
+        assert dropdown.value == "provider/model-3"
+        assert chosen_value(dropdown) == "provider/model-3"
+
+    def test_typing_then_erasing_it_still_restores(self):
+        dropdown = searchable_dropdown(MODELS, value="provider/model-3")
+        dropdown.on_focus(MagicMock(control=dropdown))
+        self._type(dropdown, "mod")
+        self._type(dropdown, "")
+
+        dropdown.on_blur(MagicMock(control=dropdown))
+
+        assert dropdown.value == "provider/model-3"
+
+    @staticmethod
+    def _type(dropdown: ft.Dropdown, text: str) -> None:
+        """As the client reports typing: `text` first, then the event."""
+        dropdown.text = text
+        handler: Any = dropdown.on_text_change
+        handler(MagicMock(control=dropdown, data=text))
+
     def test_leaving_with_something_typed_keeps_the_typing(self):
         dropdown = searchable_dropdown(MODELS, value="provider/model-3")
         dropdown.on_focus(MagicMock(control=dropdown))
-        dropdown.text = "someone new"
+        self._type(dropdown, "someone new")
 
         dropdown.on_blur(MagicMock(control=dropdown))
 
