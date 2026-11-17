@@ -60,6 +60,23 @@ before pushing to clear a formatting failure.
 Every job sets up through `.github/actions/setup`, so a new job or platform reuses that
 one step instead of repeating the install.
 
+## Leaked connections fail the run
+
+`ResourceWarning` is an error in `filterwarnings`, and so is the warning pytest raises
+when one comes out of a destructor. A database connection or file left open is a test
+failure rather than a line in the warnings summary: before this, a session leak hid in
+that summary for a whole sprint.
+
+The failure lands in whichever test the garbage collector happens to collect the object
+in, which is usually not the test that leaked it. To find the real one, record where each
+connection is opened, for example by wrapping `aiosqlite.core.Connection.__init__` in a
+throwaway plugin that saves `traceback.format_stack()` and prints it from `__del__`.
+`PYTHONTRACEMALLOC=20` does the same for plain files.
+
+The usual causes: a `DatabaseManager` with no `close_all()` (give it a fixture that
+closes it), and `with sqlite3.connect(...)`, which commits but does not close. Use
+`with closing(sqlite3.connect(...)) as connection, connection:` for both.
+
 `faster-whisper` is deliberately **not** installed in CI. It is an optional extra,
 imported lazily, and ships no `py.typed` marker, so mypy has an `ignore_missing_imports`
 override for it.
