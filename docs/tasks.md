@@ -175,7 +175,8 @@ today's only real subscriber is the desktop UI in the same process. The shape is
 transport-agnostic on purpose though: a future websocket or SSE-backed bus for
 thin-client and web could implement the same interface and be handed to `WorkerManager`
 unchanged. Today's RPC is request/response only and has no server-push mechanism to
-build that on; this class does not solve that, it just avoids closing the door on it.
+build that on; this class does not solve that, it just avoids closing the door on it. The
+design for that push is in [live-updates.md](live-updates.md).
 
 The event bus is optional. Only the desktop app passes one; `None` is a legitimate
 default in server mode and in tests.
