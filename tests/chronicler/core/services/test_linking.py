@@ -1,6 +1,7 @@
 """Tests for linking a project database that lives outside the workspace."""
 
 import sqlite3
+from contextlib import closing
 from unittest.mock import patch
 
 import pytest
@@ -315,7 +316,7 @@ class TestFailedLink:
     async def test_another_apps_sqlite_file_is_refused_and_left_untouched(self, tmp_path):
         foreign = tmp_path / "other-app" / "project.db"
         foreign.parent.mkdir()
-        with sqlite3.connect(foreign) as connection:
+        with closing(sqlite3.connect(foreign)) as connection, connection:
             connection.execute("CREATE TABLE notes (body TEXT)")
         before = foreign.read_bytes()
 
@@ -339,7 +340,7 @@ class TestFailedLink:
     async def test_a_database_from_a_newer_chronicler_is_refused(self, tmp_path):
         newer = tmp_path / "future" / "project.db"
         newer.parent.mkdir()
-        with sqlite3.connect(newer) as connection:
+        with closing(sqlite3.connect(newer)) as connection, connection:
             connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32))")
             connection.execute("INSERT INTO alembic_version VALUES ('ffffffffffff')")
 

@@ -47,7 +47,7 @@ an existing folder that cannot be written to. A folder that does not exist yet i
 accepted there and created at startup.
 
 `init_archive` releases the lock again if anything after taking it fails, including
-creating `imports/`. After `close_all` the manager no longer holds the lock, but its
+creating `imports/`, and closes the connection it opened to migrate. After `close_all` the manager no longer holds the lock, but its
 engines would reconnect if used; nothing reuses a closed manager today.
 
 Sharing a workspace between processes would need task leases and heartbeats so a crashed
