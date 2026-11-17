@@ -109,9 +109,11 @@ editor.
 
 ## Planned: click-to-edit lines
 
-Wave 11 of [tickets/README.md](../tickets/README.md) (tickets 082-085) replaces the rows of
-form controls described above. Edit mode stays a separate view, but each line is shown as
-text in the reading view's style, the row highlights on hover, and clicking the speaker or
-the text opens that part's control in place. The design is in
+Wave 11 of [tickets/README.md](../tickets/README.md) (tickets 082-086) replaces the rows of
+form controls described above, on top of 056's window of rows. Edit mode stays a separate
+view, but each line is shown as `Speaker: text` in the reading view's style, the row
+highlights on hover, and clicking the speaker or the text opens that part's control in
+place. A speaker picker opens empty with the current name as a hint, so clicking it no
+longer makes the name disappear (086), and leaving it without picking saves nothing. The design is in
 [superpowers/specs/2026-11-13-inline-transcript-editor-design.md](superpowers/specs/2026-11-13-inline-transcript-editor-design.md).
 Update this page in the same PR as each of those tickets.

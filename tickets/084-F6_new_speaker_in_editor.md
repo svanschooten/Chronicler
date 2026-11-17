@@ -27,11 +27,23 @@ keeps its `source_id`, so which track, and so which person, it came from is stil
 
 ### proposed fix
 
-In the speaker control that 082 opens: when the typed text matches no suggestion under
+In the speaker picker that 082 opens: when the typed text matches no suggestion under
 the registry's normalisation, show one option, "Add speaker '{name}'". Picking it, or
-pressing Enter, saves the line with that name. When the typed text matches a suggestion
-apart from case or spacing, save the existing spelling (083 does this at the service
-level as well).
+pressing Enter while it is highlighted, saves the line with that name. When the typed
+text matches a suggestion apart from case or spacing, save the existing spelling (083
+does this at the service level as well).
+
+The picker learns what is typed through `Dropdown.on_text_change`. On each change, the
+editor replaces one extra option at the end of the list (key: the typed name, text: the
+"Add speaker" label) or removes it when the text matches a suggestion or is empty. With
+`enable_filter` the add option must still pass the filter, so its text has to contain the
+typed name. Check by hand that rebuilding `options` while the menu is open keeps the
+menu open and the caret in place. If it does not, show the add option as a button next
+to the picker instead, and record why in `docs/transcript-editing.md`.
+
+This option is the only way a new name is saved. Leaving the picker without picking saves
+nothing, even with a name typed (082), because a half-typed filter must not become a
+speaker.
 
 Done when typing a name that does not exist shows the add option, choosing it labels the
 line, and the new name is offered on the next line's speaker picker without reopening edit

@@ -40,10 +40,10 @@ when nothing did.
 ## NPCs and other voiced characters
 
 A character someone voices, such as an NPC played by the GM, is an ordinary speaker. There
-is deliberately no separate character model. Typing the name on a line creates the speaker
+is deliberately no separate character model. Adding the name on a line creates the speaker
 and registers it in the workspace, like any other name. The line's `source_id` still
-records which track, and so which person, it came from. Ticket 084 makes adding a name
-from the editor discoverable. Ticket 083 makes the per-chronicle lookup use the
+records which track, and so which person, it came from. Ticket 084 adds an explicit "Add speaker" option to the editor's picker, which is how a new name
+is saved there. Ticket 083 makes the per-chronicle lookup use the
 registry's case-insensitive matching, so `Gundren` and `gundren` are not two speakers.
 
 ## Why not fan out across project databases
