@@ -293,7 +293,7 @@ nothing else, so it can be taken now.
 
 - [x] [086-L19 Clicking a speaker or model picker empties it, and leaving does not always put it back](086-L19_dropdown_clears_on_click.md) · medium · XS
 
-- [ ] [083-L18 Typing a speaker in different case creates a second speaker in the chronicle](083-L18_speaker_case_duplicates.md) · low · S · after 040
+- [x] [083-L18 Typing a speaker in different case creates a second speaker in the chronicle](083-L18_speaker_case_duplicates.md) · low · S · after 040
 
 - [ ] [082-F5 The transcript editor looks like a form, not like the transcript](082-F5_inline_transcript_editor.md) · medium · M · after 056, 086, 036, 041
 

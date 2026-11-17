@@ -35,6 +35,7 @@ from chronicler.core.sqlite import (
     SQLiteSummaryRepository,
     SQLiteTranscriptRepository,
 )
+from chronicler.core.sqlite.known_speaker_repository import normalize_speaker_name
 from chronicler.core.sqlite.transcript_repository import SEARCH_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -169,8 +170,10 @@ class TranscriptService:
                 speaker_id = (await repo.get_or_create_speaker(speaker_name)).id
             line = await repo.update_line(line_id, text=text, speaker_id=speaker_id)
 
-        if speaker_name:
-            await self._remember_speaker(speaker_name)
+        if speaker_name and line.speaker_name:
+            # The spelling the chronicle already uses, which may differ in case from what
+            # was typed.
+            await self._remember_speaker(line.speaker_name)
         return line
 
     async def delete_line(self, chronicle_id: UUID, line_id: UUID) -> None:
@@ -381,10 +384,16 @@ class TranscriptService:
         return await self.known_speakers.list_names()
 
     async def speaker_suggestions(self, chronicle_id: UUID) -> list[str]:
-        """Workspace-wide names first-class, with this chronicle's own folded in."""
-        names = set(await self.list_known_speakers())
-        names.update(await self.list_speaker_names(chronicle_id))
-        return sorted(names, key=str.casefold)
+        """
+        Workspace-wide names first-class, with this chronicle's own folded in. Names that
+        differ only in case or spacing are offered once, in the registry's spelling.
+        """
+        names: dict[str, str] = {}
+        for name in await self.list_known_speakers():
+            names.setdefault(normalize_speaker_name(name), name)
+        for name in await self.list_speaker_names(chronicle_id):
+            names.setdefault(normalize_speaker_name(name), name)
+        return sorted(names.values(), key=str.casefold)
 
     async def list_speaker_names(self, chronicle_id: UUID) -> list[str]:
         async with await self._project_session(chronicle_id) as session:
