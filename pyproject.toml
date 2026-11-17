@@ -109,6 +109,15 @@ line-ending = "auto"
 
 [tool.mypy]
 python_version = "3.12"
+# Without this mypy skips the body of every function with no annotations, which is most
+# Flet event handlers.
+check_untyped_defs = true
+
+# The tests are left out: they lean on mocks and on narrowing `Optional`s by assertion,
+# which this flags about 225 times without finding bugs.
+[[tool.mypy.overrides]]
+module = "tests.*"
+check_untyped_defs = false
 
 # faster-whisper is an optional dependency (the "transcription" extra), imported
 # lazily inside transcriber._get_model() - it is intentionally NOT installed in CI.

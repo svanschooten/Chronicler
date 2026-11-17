@@ -76,7 +76,9 @@ class RecordingDialog:
 
         async def toggle(_event):
             if self.recorder is None or not self.recorder.is_recording:
-                await self._start(int(device_field.value), status, record_button, device_field)
+                await self._start(
+                    int(device_field.value or devices[0].index), status, record_button, device_field
+                )
             else:
                 await self._stop(status, record_button)
 
