@@ -3,17 +3,15 @@
 import asyncio
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 import flet as ft
 
 from chronicler.i18n import t
 
-T = TypeVar("T")
-
 
 @dataclass(frozen=True)
-class Choice(Generic[T]):
+class Choice[T]:
     """One action button on a choice dialog."""
 
     label: str
@@ -21,7 +19,7 @@ class Choice(Generic[T]):
     primary: bool = False
 
 
-async def await_dialog(
+async def await_dialog[T](
     page: ft.Page,
     dialog_factory: Callable[[Callable[[Callable[[], T]], Any]], ft.AlertDialog],
     dismissed: T | None = None,
@@ -54,7 +52,7 @@ async def await_dialog(
     return await future
 
 
-async def ask_choice(
+async def ask_choice[T](
     page: ft.Page,
     title: str,
     message: str,

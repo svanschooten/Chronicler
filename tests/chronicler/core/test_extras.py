@@ -2,11 +2,11 @@
 
 import importlib
 import sys
+import tomllib
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import tomllib
 
 from chronicler.core import extras
 

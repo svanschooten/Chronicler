@@ -86,7 +86,7 @@ addopts = "-ra"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 # Alembic-generated migration files use its own script.py.mako boilerplate style
 # (Union/Sequence, unsorted imports) - every future `alembic revision --autogenerate`
 # produces the same, so excluding rather than hand-fixing each one.

@@ -1,9 +1,9 @@
-from enum import Enum
+from enum import StrEnum
 
 from chronicler.core.models import Chronicle
 
 
-class ViewType(str, Enum):
+class ViewType(StrEnum):
     ARCHIVE = "archive"
     TASKS = "tasks"
     SETTINGS = "settings"
