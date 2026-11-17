@@ -242,7 +242,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 - [ ] [060-D2 Top-level docs have drifted from the code](060-D2_fix_doc_drift.md) · medium · S
 
-- [ ] [062-D1 TODO.md is a changelog, a roadmap and a design archive at once](062-D1_split_todo.md) · low · S · after 012
+- [x] [062-D1 TODO.md is a changelog, a roadmap and a design archive at once](062-D1_split_todo.md) · low · S · after 012
 
 ### Wave 9: CI and test hygiene
 
