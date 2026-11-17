@@ -42,3 +42,11 @@ instead, and record why in `docs/transcript-editing.md`.
 ### related tickets
 
 - (BLOCKER) [082-F5_inline_transcript_editor](082-F5_inline_transcript_editor.md)
+
+### outcome
+
+Built with the fallback keys, **Alt+↓** and **Alt+↑**. Tab does not work in Flet 0.86
+(checked in the web client under Playwright): it moves the focus to the row's delete
+button before the next field is built, so that field's `autofocus` does not apply, and
+`TextField.focus()` had no effect even after a 0.4 s delay. Recorded in
+`docs/transcript-editing.md`.

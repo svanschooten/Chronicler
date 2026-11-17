@@ -299,7 +299,7 @@ nothing else, so it can be taken now.
 
 - [x] [084-F6 Adding a new speaker from the editor works but cannot be discovered](084-F6_new_speaker_in_editor.md) · low · S · after 082, 083
 
-- [ ] [085-F7 Correcting a run of lines needs the mouse for every line](085-F7_editor_keyboard_flow.md) · low · S · after 082
+- [x] [085-F7 Correcting a run of lines needs the mouse for every line](085-F7_editor_keyboard_flow.md) · low · S · after 082
 
 ### Wave 12: waiting on a decision
 

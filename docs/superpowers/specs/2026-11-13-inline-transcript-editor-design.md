@@ -176,12 +176,14 @@ open, so Esc elsewhere on the page keeps its meaning.
 
 ### Keyboard (085)
 
-While a text field is open, **Tab** and **Shift+Tab** save it and open the next or
-previous line's text. The newly opened row is brought into view with
-`line_list.scroll_to(scroll_key=<line id>)`. That only reaches rows the client has built,
-which the next and previous row are. At the first or last line of the window the field
-closes and the pager takes over. If Flet does not let the field handle Tab, **Alt+↓** and
-**Alt+↑** are used instead.
+While a text field is open, **Alt+↓** and **Alt+↑** save it and open the next or previous
+line's text, scrolling it into view with `line_list.scroll_to(scroll_key=<line id>)`.
+That only reaches rows the client has built, which the next and previous row are. At the
+first or last line of the window the field closes and the pager takes over.
+
+Tab and Shift+Tab were the first plan, with Alt+arrows as the fallback. The fallback was
+needed: in the Flet web client, Tab moves the focus to the row's delete button before the
+next field exists, so its `autofocus` does not apply, and `focus()` had no effect.
 
 ## Constraints
 

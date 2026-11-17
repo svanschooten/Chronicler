@@ -38,6 +38,9 @@ WINDOW_SIZE = 100
 SPEAKER_PICKER_WIDTH = 180
 DELETE_BUTTON_SIZE = 20
 OPEN_BAR_WIDTH = 2
+STEP_SCROLL_MS = 150
+# With Alt held, while a line's text is open. See `TranscriptEditor._step`.
+STEP_KEYS = {"Arrow Down": 1, "Arrow Up": -1}
 
 
 def describe_transcript_error(error: BaseException) -> str:
@@ -693,8 +696,8 @@ class TranscriptEditor(ft.Column):
 
     def _listen_for_keys(self) -> None:
         """
-        Esc goes through the page's key handler, installed only while editing and handing
-        on to whatever handler was there before.
+        Esc, Alt+Down and Alt+Up go through the page's key handler, installed only while
+        editing and handing on to whatever handler was there before.
         """
         try:
             page = self.page
@@ -719,11 +722,50 @@ class TranscriptEditor(ft.Column):
         if e.key == "Escape" and self.open is not None:
             await self.close_open(save=False)
             return
+        step = STEP_KEYS.get(e.key) if e.alt else None
+        if step is not None and self.open is not None and self.open.part == TEXT:
+            await self._step(step)
+            return
         previous = self._previous_key_handler
         if previous is not None:
             result = previous(e)
             if asyncio.iscoroutine(result):
                 await result
+
+    async def _step(self, offset: int) -> None:
+        """
+        Alt+Down and Alt+Up: saves the open text and opens the next or previous line's
+        text on this window (ticket 085). At the window's first or last line the field
+        just closes; moving to another window stays the pager's job, since it rebuilds
+        every row and moves the scroll position.
+
+        Not Tab, as first planned. Checked in the Flet web client: Tab moves the focus on
+        (to the row's delete button) before the new field exists, so the new field's
+        `autofocus` does not apply, and `focus()` on it had no effect, even after a delay.
+        Alt+arrows move no focus: the old field is removed while it has the focus, and
+        the new field's `autofocus` takes it, as it does after a click.
+        """
+        opened = self.open
+        if opened is None:
+            return
+        line_ids = list(self.rows)
+        index = line_ids.index(opened.line_id) + offset
+        if not 0 <= index < len(line_ids):
+            await self.close_open(save=True)
+            return
+        target = line_ids[index]
+        await self._open_part(target, TEXT)
+        await self._scroll_to_row(target)
+
+    async def _scroll_to_row(self, line_id: str) -> None:
+        """
+        Brings a row into view by its key. `scroll_to` only reaches rows the client has
+        built, which a neighbouring row always is.
+        """
+        try:
+            await self.line_list.scroll_to(scroll_key=line_id, duration=STEP_SCROLL_MS)
+        except (RuntimeError, AssertionError):
+            pass
 
     # Saving
 

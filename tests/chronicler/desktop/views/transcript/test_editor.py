@@ -1161,6 +1161,84 @@ class TestKeys:
         earlier.assert_called_once_with(event)
 
 
+class TestMovingBetweenLines:
+    """Ticket 085: Alt+Down and Alt+Up move the open text field along the window."""
+
+    @staticmethod
+    def _alt(key):
+        return MagicMock(key=key, alt=True, shift=False)
+
+    @pytest.mark.asyncio
+    async def test_alt_down_saves_and_opens_the_next_line(self, make_editor):
+        editor, service = make_editor([_line("First"), _line("Second", start=1.0)])
+        await editor.load()
+        field = await _open_text(editor, 0)
+        field.value = "First, corrected"
+
+        await editor.key_pressed(self._alt("Arrow Down"))
+
+        assert service.update_line.await_args.kwargs["text"] == "First, corrected"
+        assert editor.open.line_id == _row(editor, 1).line_id
+        assert editor.open.control.value == "Second"
+
+    @pytest.mark.asyncio
+    async def test_alt_up_opens_the_previous_line(self, make_editor):
+        editor, _ = make_editor([_line("First"), _line("Second", start=1.0)])
+        await editor.load()
+        await _open_text(editor, 1)
+
+        await editor.key_pressed(self._alt("Arrow Up"))
+
+        assert editor.open.line_id == _row(editor, 0).line_id
+
+    @pytest.mark.asyncio
+    async def test_the_opened_line_is_scrolled_into_view(self, make_editor):
+        editor, _ = make_editor([_line("First"), _line("Second", start=1.0)])
+        await editor.load()
+        editor.line_list.scroll_to = AsyncMock()
+        await _open_text(editor, 0)
+
+        await editor.key_pressed(self._alt("Arrow Down"))
+
+        assert editor.line_list.scroll_to.await_args.kwargs["scroll_key"] == (
+            _row(editor, 1).line_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_at_the_end_of_the_window_the_field_saves_and_closes(self, make_editor):
+        """Moving to another window stays the pager's job."""
+        editor, service = make_editor([_line("Only")])
+        await editor.load()
+        field = await _open_text(editor)
+        field.value = "Only, corrected"
+
+        await editor.key_pressed(self._alt("Arrow Down"))
+
+        assert editor.open is None
+        assert service.update_line.await_args.kwargs["text"] == "Only, corrected"
+
+    @pytest.mark.asyncio
+    async def test_an_arrow_without_alt_is_left_to_the_field(self, make_editor):
+        editor, _ = make_editor([_line("First"), _line("Second", start=1.0)])
+        await editor.load()
+        await _open_text(editor, 0)
+
+        await editor.key_pressed(MagicMock(key="Arrow Down", alt=False, shift=False))
+
+        assert editor.open.line_id == _row(editor, 0).line_id
+
+    @pytest.mark.asyncio
+    async def test_a_speaker_picker_does_not_move(self, make_editor):
+        editor, _ = make_editor([_line("First"), _line("Second", start=1.0)])
+        await editor.load()
+        await _open_speaker(editor, 0)
+
+        await editor.key_pressed(self._alt("Arrow Down"))
+
+        assert editor.open.part == "speaker"
+        assert editor.open.line_id == _row(editor, 0).line_id
+
+
 class TestDeletingALine:
     @pytest.mark.asyncio
     async def test_it_confirms_first(self, make_editor, attach_page):

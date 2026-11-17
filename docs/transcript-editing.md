@@ -199,6 +199,22 @@ click on a menu option blurs the field first and delivers the pick a moment late
 closing at once would take the menu away under the click. The "Add speaker" button
 blurs the field the same way, and is caught by the same grace.
 
+### Moving between lines
+
+While a text field is open, **Alt+↓** saves it and opens the next line's text, and
+**Alt+↑** the previous line's. The opened row is scrolled into view by its key
+(`ListView.scroll_to(scroll_key=...)`), which works because a neighbouring row is always
+built. At the first or last line of the window the field just saves and closes: moving to
+another window is the pager's job, since it rebuilds every row and moves the scroll
+position. The speaker picker does not move.
+
+Tab was the first plan and does not work. Checked in the Flet web client: Tab moves the
+focus on, to the row's delete button, before the next field exists, so that field's
+`autofocus` does not apply, and `focus()` on it had no effect, even after a delay.
+Alt+arrows move no focus: the old field is removed while it has the focus, and the new
+field's `autofocus` takes it, as it does after a click. A Tab in a field still leaves it,
+which saves it like any other blur.
+
 ### One part open at a time
 
 The editor holds at most one open part (`TranscriptEditor.open`). Opening another closes
@@ -208,7 +224,7 @@ the save itself, because the control is being removed and a removed field sends 
 control is still the open one, so a late blur from a field already closed (by Esc, say)
 does nothing.
 
-Esc goes through `page.on_keyboard_event`. The editor installs its handler when edit mode
+Esc, Alt+↓ and Alt+↑ go through `page.on_keyboard_event`. The editor installs its handler when edit mode
 loads, passes on any key it does not use to the handler that was there before, and puts
 that one back when editing finishes.
 
