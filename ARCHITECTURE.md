@@ -200,6 +200,7 @@ Responsible for:
 Responsible for:
 
 * reading a Chronicle's transcript
+* searching transcripts, in one Chronicle or across the workspace
 * reconciling its speaker count
 * listing its audio sources
 * rendering exports - plain text, subtitles, HTML, PDF, and a portable Chronicle archive
@@ -210,20 +211,20 @@ repository.
 
 ---
 
-## Search Service
+## System Service
 
 Responsible for:
 
-* Chronicle metadata search — implemented
-* tag and task search — implemented
-* full-text search within a Chronicle and across the workspace — implemented
-* speaker search — **Planned**
+* telling a thin client what it is talking to: version and capabilities of the server
+* listing the models the configured summary provider offers
+* a cheap `ping` for a thin client to check its server
 
-Transcript lines live in per-Chronicle databases, so transcript search uses an FTS5
-index in each one and fans out across them for the workspace. See
-[docs/search.md](docs/search.md).
+---
 
-Future search implementations may include semantic or vector search.
+There is no separate search service. Searching Chronicles by title, description and tags
+is `ChronicleService.search_chronicles`, and searching what was said is
+`TranscriptService.search_transcript` and `search_transcripts`. See
+[Search](#search) below and [docs/search.md](docs/search.md).
 
 ---
 
@@ -231,7 +232,9 @@ Future search implementations may include semantic or vector search.
 
 Application services are annotated.
 
-These annotations are used at runtime to generate additional interfaces.
+These annotations are used at runtime to generate additional interfaces. Only the
+methods a service names in `@service(expose=[...])` get an HTTP route and a proxy
+method.
 
 ```mermaid
 flowchart LR
@@ -316,12 +319,10 @@ It does **not** contain transcript content.
 Every Chronicle owns its own database, holding the content that makes it large and
 worth keeping portable:
 
-* transcript lines
+* transcript lines, and the full-text index over them
 * speakers
-* a reserved key/value `metadata` table (created by the baseline migration; nothing
-  reads or writes it yet)
-
-Generated analysis will live here too once it exists.
+* audio sources
+* summaries
 
 Note that **tags are workspace-level, not per-Chronicle** — they are shared across the
 workspace and indexed for search, so they live in `chronicler.db` alongside the
@@ -338,13 +339,16 @@ copied in from elsewhere is upgraded to head the first time it is opened.
 
 Operations that may take significant time are represented as persistent tasks.
 
-Examples include:
+The task types are:
 
-* importing files
-* recording
-* transcription
-* post-processing
-* exporting
+* `IMPORT`: parsing a formatted text transcript
+* `NORMALIZE`: preparing an audio track for transcription
+* `TRANSCRIBE`: transcribing one audio track
+* `CLEAN`: re-running the transcript cleaner
+* `SUMMARIZE`: summarizing a transcript with a language model
+
+Recording runs in the client, and exports are service calls that return the document,
+so neither is a task.
 
 Tasks belong to a Chronicle.
 
@@ -364,6 +368,8 @@ WORKING --> DONE
 WORKING --> FAILED : no attempts left
 WORKING --> PENDING : attempts remain
 WORKING --> PENDING : worker stopped
+PENDING --> CANCELLED : cancel_task()
+WORKING --> CANCELLED : cancel_task(), transcription only
 ```
 
 A task still WORKING when the worker starts was interrupted, and is put back to PENDING,
@@ -404,6 +410,13 @@ instead, and `WorkerManager` bounds each poll cycle to what was pending when the
 started so retries spread across cycles rather than burning through instantly.
 
 Failed tasks remain in the queue for inspection.
+
+---
+
+## CANCELLED
+
+Stopped by the user. A cancelled task is not a failure and is never retried. See
+[docs/tasks.md](docs/tasks.md#progress-and-cancelling).
 
 ---
 
@@ -455,9 +468,11 @@ hardcoded routing.
 | Export          | Markdown, HTML, PDF                        |
 
 Today there is one handler per task type and no provider concept: `Task` has no
-`provider` field, and the implemented types are IMPORT (text), CLEAN and TRANSCRIBE
-(faster-whisper). Adding a task type currently means writing a handler module under
-`chronicler/core/processing/handlers/` and registering it in `worker_wiring.py`.
+`provider` field, and the implemented types are IMPORT (text), NORMALIZE (PyAV),
+TRANSCRIBE (faster-whisper), CLEAN and SUMMARIZE (a local `.gguf` or an
+OpenAI-compatible model server). Adding a task type currently means writing a handler
+module under `chronicler/core/processing/handlers/` and registering it in
+`worker_wiring.py`.
 
 ---
 
@@ -545,10 +560,10 @@ For example, a summarization task may specify which model to use while the provi
 Most new functionality follows the same pattern.
 
 1. Add or extend an application service under `chronicler/core/services/`. Decorate the
-   class with `@service` if it should be reachable over HTTP, and give every method
-   complete type annotations — the generated API and the thin-client proxy both derive
-   their (de)serialization from them, so a missing return annotation silently hands
-   remote callers a raw dict.
+   class with `@service(expose=[...])` and name each method a client should reach over
+   HTTP; nothing else is published. Give every method complete type annotations — the
+   generated API and the thin-client proxy both derive their (de)serialization from
+   them, so a missing return annotation silently hands remote callers a raw dict.
 2. If background processing is required, add a `TaskType`, a handler module under
    `chronicler/core/processing/handlers/`, and register it in
    `core/worker_wiring.py::build_worker_manager`.
@@ -557,13 +572,14 @@ Most new functionality follows the same pattern.
 4. Update the user interface if the feature needs to be reachable or configured.
 5. Add tests in the mirrored location under `tests/chronicler/`.
 
-Because services are the central abstraction, new functionality automatically becomes available to:
+Because services are the central abstraction, a service method works the same in:
 
 * Full Stack deployments
 * Server deployments
-* Thin Clients
+* Thin Clients, once it is named in `expose=`
 
-without requiring duplicate implementations.
+without requiring duplicate implementations. See
+[docs/deployment-and-rpc.md](docs/deployment-and-rpc.md#exposure-is-explicit).
 
 ---
 
