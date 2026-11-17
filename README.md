@@ -226,27 +226,20 @@ Long-running operations are represented as persistent tasks.
 
 Tasks belong to a Chronicle, survive application restarts, and are executed by a
 background worker loop. They carry a task type and a JSON payload holding
-task-specific configuration.
-
-Implemented today:
+task-specific configuration. A running transcription reports its progress and can be
+cancelled.
 
 | Task type    | What it does                                                        |
 | ------------ | ------------------------------------------------------------------- |
 | `IMPORT`     | Parses a formatted text transcript into a Chronicle                 |
+| `NORMALIZE`  | Evens out the loudness of an audio track before transcription       |
 | `TRANSCRIBE` | Transcribes one imported audio track with faster-whisper            |
 | `CLEAN`      | Re-runs the transcript cleaner over a Chronicle's existing lines     |
+| `SUMMARIZE`  | Summarizes a transcript with a local or remote language model       |
 
-Planned:
-
-| Task type       | Example providers                          |
-| --------------- | ------------------------------------------ |
-| Recording       | Local recorder                             |
-| Pre-processing  | Audio normalization                        |
-| Post-processing | Speaker identification, summaries          |
-| Export          | Markdown, HTML, PDF                        |
-| AI processing   | Summaries, analysis                        |
-
-See [TODO.md](TODO.md) for the current state of each.
+Recording is not a task: it runs in the app, on the machine with the microphone. Exports
+are not tasks either. Plain text, subtitles, HTML, PDF and a portable Chronicle archive
+are service calls that return the document. See [docs/tasks.md](docs/tasks.md).
 
 ## Processing pipeline
 
@@ -334,10 +327,14 @@ More detailed documentation is available in:
 | Tests      | pytest, pytest-asyncio, pytest-cov |
 | CI/CD      | GitHub Actions                |
 
-Standalone builds for Linux and Windows are produced by PyInstaller from
-[`Chronicler.spec`](Chronicler.spec) and published by the release workflow. See
-[docs/packaging.md](docs/packaging.md) for how to build one locally, how to cut a release,
-and what the spec's settings are there for.
+The release workflow publishes two standalone builds for Linux and Windows:
+
+* a PyInstaller build from [`Chronicler.spec`](Chronicler.spec), with every extra but
+  `llm` bundled. See [docs/packaging.md](docs/packaging.md) for how to build one locally,
+  how to cut a release, and what the spec's settings are there for.
+* an embedded-runtime build (`Chronicler-modular`), a small launcher that downloads
+  transcription, normalization, recording and the server as components when they are
+  first needed. See [docs/runtime-build.md](docs/runtime-build.md).
 
 The release number lives in `chronicler/__init__.py` and nowhere else — Hatchling reads it
 from there, so a version bump is that one line.
@@ -420,7 +417,7 @@ python -m chronicler [mode] [-v|--verbose] [--config PATH] [--help]
 
 ### Quality checks
 
-The same four checks CI runs, in the order it runs them:
+The four checks CI's main job runs, in the order it runs them:
 
 ```bash
 ruff check chronicler tests
@@ -441,6 +438,16 @@ pytest --cov=chronicler --cov-report=term --cov-fail-under=80
 All four are blocking gates with no per-module exemptions — if you need to
 suppress something, prefer a narrow `# type: ignore[code]` with a comment explaining why
 over widening the configuration.
+
+CI also runs the tests with every extra installed from the runtime locks, imports each
+component on its own, and checks that the locks still match `pyproject.toml`. After
+changing dependencies, regenerate the locks (needs `uv`):
+
+```bash
+python scripts/runtime/locks.py
+```
+
+See [docs/runtime-build.md](docs/runtime-build.md#locks).
 
 ### Test layout
 
@@ -469,8 +476,6 @@ views — `ImportCoordinator` is the clearest example.
 
 ### Near future
 
-* Audio recording
-* Transcript editing improvements
 * Speaker diarization
 * Audio playback synchronization
 * Additional import and export formats
@@ -478,7 +483,7 @@ views — `ImportCoordinator` is the clearest example.
 ### Future
 
 * Additional transcription providers
-* AI summaries and analysis
+* AI analysis beyond summaries
 * Semantic search
 * Remote collaboration
 * Additional client applications
