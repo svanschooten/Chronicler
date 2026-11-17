@@ -84,6 +84,13 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"
 asyncio_default_fixture_loop_scope = "function"
+# A leaked connection or file fails the run instead of scrolling past. It is reported by
+# whichever test the garbage collector finds it in, which need not be the test that leaked
+# it. See docs/testing.md.
+filterwarnings = [
+    "error::ResourceWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+]
 
 [tool.ruff]
 line-length = 100
