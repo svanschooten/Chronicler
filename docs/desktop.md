@@ -139,8 +139,9 @@ values, before and after being shown rather than for the duration of one await.
 ## Dropdowns for lists nobody wants to scroll
 
 `searchable_dropdown()` in `desktop/widgets.py` backs every open-ended picker: the
-summary model, the transcribe dialog's speaker, and the per-line speaker in the
-transcript editor. Fixed sets — locale, Whisper model size, provider — stay plain.
+summary model and the transcribe dialog's speaker. The transcript editor builds its own
+speaker picker on the same rules (see [transcript-editing.md](transcript-editing.md)).
+Fixed sets — locale, Whisper model size, provider — stay plain.
 
 `editable` and `enable_filter` were already set on some of them and were not enough. Two
 things had to be added.
@@ -153,7 +154,15 @@ have typed a filter into — so the list could not be narrowed at all, which is 
 **Emptying the field on focus.** It arrives holding the current selection, so typing
 inserts into the middle of it (`venice/llama-3b` + `qwen`) and matches nothing. The clear
 goes through `value`, not `text`: `text` is client-reported and writing it back does not
-repaint. Leaving without choosing restores the selection.
+repaint. While the field is empty, the selection it held is its `hint_text`, so clicking a
+picker never makes the current choice look deleted.
+
+Leaving without choosing restores the selection. Whether anything was typed is tracked
+from `on_text_change` since the focus, not read from `text`. `text` keeps the client's last
+report, so a field typed into on an earlier visit still looked typed into after the clear,
+the restore was skipped, and the picker stayed blank (ticket 086). Only a click in the
+field focuses it: a click on the arrow of an untouched field opens the menu without a
+focus, so nothing is cleared then either.
 
 `chosen_value()` is the other half. An editable Dropdown keeps `text` (what is in the
 field) and `value` (the option last *selected*) apart, so reading `value` alone ignores a

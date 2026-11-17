@@ -291,7 +291,7 @@ changes. That order is a scheduling choice: if the editor matters more, take 082
 after 056 and rebase 036 and 041 onto it. 086 is a bug in the shared dropdown and needs
 nothing else, so it can be taken now.
 
-- [ ] [086-L19 Clicking a speaker or model picker empties it, and leaving does not always put it back](086-L19_dropdown_clears_on_click.md) · medium · XS
+- [x] [086-L19 Clicking a speaker or model picker empties it, and leaving does not always put it back](086-L19_dropdown_clears_on_click.md) · medium · XS
 
 - [ ] [083-L18 Typing a speaker in different case creates a second speaker in the chronicle](083-L18_speaker_case_duplicates.md) · low · S · after 040
 

@@ -59,22 +59,41 @@ def searchable_dropdown(
     typing inserts into the middle of that ("venice/llama-3b" + "qwen") and matches
     nothing. Clearing is done through `value`, not `text`: in Flet 0.86 `text` is reported
     by the client and writing it back changes nothing on screen, while `value` is the
-    selection and does repaint the field. Leaving without choosing puts the selection back.
+    selection and does repaint the field. While the field is empty, the selection it held
+    is shown as `hint_text`, so a click never makes the current choice look deleted.
+
+    Leaving without choosing puts the selection back. Whether anything was typed is
+    tracked from `on_text_change` since this focus, not read from `text`: `text` keeps
+    whatever the client last reported, so a field typed into once and then cleared for
+    filtering would still look typed into, and would stay blank.
 
     See docs/desktop.md.
     """
     remembered = value
+    typed_since_focus = False
 
     def clear_for_typing(event):
-        nonlocal remembered
-        remembered = event.control.value
-        event.control.value = None
-        _repaint(event.control)
+        nonlocal remembered, typed_since_focus
+        control = event.control
+        remembered = control.value
+        typed_since_focus = False
+        control.hint_text = remembered
+        control.value = None
+        _repaint(control)
+
+    def note_typing(event):
+        nonlocal typed_since_focus
+        typed_since_focus = bool(_reported_text(event).strip())
 
     def restore_if_nothing_chosen(event):
-        if event.control.value is None and not (event.control.text or "").strip():
-            event.control.value = remembered
-            _repaint(event.control)
+        control = event.control
+        control.hint_text = None
+        if control.value is None and not typed_since_focus:
+            control.value = remembered
+            # Bookkeeping only: what the client last reported is not what it shows now,
+            # and `chosen_value` must not read it as typed.
+            control.text = None
+        _repaint(control)
 
     return ft.Dropdown(
         label=label,
@@ -87,6 +106,7 @@ def searchable_dropdown(
         menu_height=MENU_HEIGHT,
         on_select=on_select,
         on_focus=clear_for_typing,
+        on_text_change=note_typing,
         on_blur=restore_if_nothing_chosen,
     )
 
@@ -108,6 +128,17 @@ def chosen_value(control: ft.Control) -> str:
     if typed:
         return typed
     return (getattr(control, "value", None) or "").strip()
+
+
+def _reported_text(event) -> str:
+    """
+    The text an `on_text_change` event reports: the event's data when it carries the text
+    as a string, otherwise `text`, which the client patches before the event arrives.
+    """
+    data = getattr(event, "data", None)
+    if isinstance(data, str):
+        return data
+    return getattr(event.control, "text", None) or ""
 
 
 def _repaint(control: ft.Control) -> None:
