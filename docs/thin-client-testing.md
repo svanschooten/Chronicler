@@ -36,7 +36,7 @@ Starting server...
 
 Connecting thin client...
   ok    server version <version> matches client <version>
-  ok    capabilities: clean, export, import, transcribe
+  ok    capabilities: clean, export, import, normalize, transcribe
   ok    pulled chronicle list (0 chronicles)
   ok    round-tripped a chronicle over RPC (Thin client check)
   ok    cleaned up
@@ -126,7 +126,7 @@ is established, and an empty archive is a normal state.
 The success line is deliberately greppable for log monitoring:
 
 ```text
-Connected to Chronicler server (version <version>, chronicles: 3, capabilities: clean, export, import, transcribe)
+Connected to Chronicler server (version <version>, chronicles: 3, capabilities: clean, export, import, normalize, transcribe)
 ```
 
 ## Capabilities

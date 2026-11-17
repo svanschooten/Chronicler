@@ -24,11 +24,12 @@ The desktop then infers thin client from its server URL instead of failing to st
 
 ## The generated API
 
-`RpcServer` turns every `@service`-decorated class into a set of `POST` routes.
+`RpcServer` turns each method a `@service` class names in `expose=` into a `POST` route.
 `ChronicleService.list_chronicles` becomes `POST /chronicle/list_chronicles`; the
-`Service` suffix is stripped and the rest lowercased.
+`Service` suffix is stripped and the rest lowercased. Nothing else is published; see
+[Exposure is explicit](#exposure-is-explicit).
 
-Only coroutine functions are exposed. That is why `TranscriptService.list_audio_sources`
+Only coroutine functions can be exposed. That is why `TranscriptService.list_audio_sources`
 is `async` despite being plain filesystem I/O.
 
 Every parameter becomes a body field. The method's own default is preserved, including
@@ -73,9 +74,9 @@ Without a container there is nothing to resolve service instances from, so only
 
 ## Remote proxies
 
-`RemoteServiceProxy` mirrors a service class over HTTP. It inspects the class, and for
-each public coroutine method installs a callable that serialises the arguments, posts
-them, and validates the response back into the declared return type.
+`RemoteServiceProxy` mirrors a service class over HTTP. For each method in the class's
+`expose=` list it installs a callable that serialises the arguments, posts them, and
+validates the response back into the declared return type.
 
 Arguments are serialised **per their declared parameter type** via `TypeAdapter`, not
 by inspecting the runtime value. That handles `UUID`, `datetime`, `Path`, enums and

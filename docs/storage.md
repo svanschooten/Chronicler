@@ -13,9 +13,10 @@ why they live here.
 
 ## Project database
 
-One per chronicle, at `<workspace>/chronicles/<id>/project.db`, holding the transcript,
-speakers, and per-chronicle metadata. This is what makes a Chronicle portable: it can
-be copied, archived or shared without the rest of the workspace.
+One per chronicle, at `<workspace>/chronicles/<id>/project.db`, holding the transcript
+and its search index, speakers, audio sources and summaries. This is what makes a
+Chronicle portable: it can be copied, archived or shared without the rest of the
+workspace.
 
 A **linked chronicle** has `project_path` set and keeps its `project.db` wherever the
 user put it, outside the workspace. `delete_chronicle` must never remove that directory
@@ -312,9 +313,6 @@ message rather than letting it reach Flet as an unhandled error.
 * **`get_or_create_speaker` flushes rather than commits**, making the row visible to
   `refresh()` and to later queries in the same transaction without ending it. The
   caller controls the transaction boundary.
-* **`TranscriptRepository.search` raises `NotImplementedError`** rather than silently
-  returning `None` against a `-> list[...]` annotation. `SearchService` had exactly that
-  bug.
 
 ## `LIKE` escaping
 
@@ -327,11 +325,10 @@ The escape character is `!` rather than the more usual backslash: SQLite has no 
 SQLAlchemy's `escape=` parameter does — and `!` is rare in transcript titles and tags,
 so it appears less often in the escaped output than a backslash would.
 
-## `DBProjectMetadata`
+## No `metadata` table
 
-A reserved key/value table for per-chronicle provenance. Nothing reads or writes it
-yet. It is kept in sync with the baseline migration that already creates the table
-rather than dropped, so the ORM metadata and the on-disk schema do not disagree.
+The baseline migration created a reserved key/value `metadata` table that nothing ever
+read or wrote. Project migration `e5b2f70c31a8` drops it.
 
 ## Linking a project database from elsewhere
 
