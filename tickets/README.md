@@ -252,7 +252,7 @@ Safe to take in parallel with anything above, at any time.
 
 - [ ] [080-T9 The test suite is not warning-free under coverage](080-T9_warning_free_tests.md) · low · XS
 
-- [ ] [081-T10 Release builds do not run the tests](081-T10_release_runs_tests.md) · low · XS
+- [x] [081-T10 Release builds do not run the tests](081-T10_release_runs_tests.md) · low · XS
 
 - [ ] [071-T8 Two tests pass for a reason other than the one they state](071-T8_tests_that_pass_for_the_wrong_reason.md) · low · XS
 
