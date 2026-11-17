@@ -250,7 +250,7 @@ Safe to take in parallel with anything above, at any time.
 
 - [ ] [045-T5 Tighten Ruff's rules and target version](045-T5_ruff_rules_and_target.md) · low · S
 
-- [ ] [080-T9 The test suite is not warning-free under coverage](080-T9_warning_free_tests.md) · low · XS
+- [x] [080-T9 The test suite is not warning-free under coverage](080-T9_warning_free_tests.md) · low · XS
 
 - [ ] [081-T10 Release builds do not run the tests](081-T10_release_runs_tests.md) · low · XS
 
