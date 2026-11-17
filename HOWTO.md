@@ -102,23 +102,26 @@ gap, and the server names the flag that fills it.
 
 ## Enabling Optional Features
 
-Two features need extra dependencies, so a default install stays small:
+Five features need extra dependencies, so a default install stays small. Install the
+ones you use, for example:
 
 ```bash
-pip install -e ".[server]"
+pip install -e ".[server,transcription]"
 ```
 
-Needed to run `python -m chronicler server` (FastAPI, Uvicorn, multipart upload
-support).
+| Extra | Needed for |
+| ----- | ---------- |
+| `server` | `python -m chronicler server` (FastAPI, Uvicorn, multipart upload support) |
+| `transcription` | `TRANSCRIBE` tasks (faster-whisper) |
+| `normalization` | `NORMALIZE` tasks (PyAV and numpy; already present with `transcription`) |
+| `llm` | Summaries with a local `.gguf` model (llama-cpp-python); not needed for a model server |
+| `recording` | Recording a source in the app (sounddevice) |
 
-```bash
-pip install -e ".[transcription]"
-```
-
-Needed for `TRANSCRIBE` tasks (faster-whisper). Without it, a queued transcription fails
-with an explanatory error rather than crashing. The model itself is downloaded on the
-first real transcription, not at startup — so expect the first one to take noticeably
-longer than later ones.
+Without an extra, the feature that needs it fails with an explanatory error rather than
+crashing, and the desktop offers to install it where it can. The transcription model
+itself is downloaded on the first real transcription, not at startup — so expect the
+first one to take noticeably longer than later ones. See
+[docs/optional-extras.md](docs/optional-extras.md).
 
 ---
 
