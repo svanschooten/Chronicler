@@ -51,12 +51,6 @@ def _line(speaker, text, start, end):
     return TranscriptLine(speaker_name=speaker, text=text, start_time=start, end_time=end)
 
 
-async def _registry_names(db_manager):
-    """The registry as another connection sees it, so an uncommitted write does not count."""
-    async with db_manager.get_archive_session() as other:
-        return await SQLiteKnownSpeakerRepository(other).list_names()
-
-
 class TestHydration:
     @pytest.mark.asyncio
     async def test_it_counts_the_speakers_it_finds(self, tmp_path):
@@ -185,6 +179,12 @@ class TestHydration:
 class TestSpeakerRegistry:
     @pytest.mark.asyncio
     async def test_linked_speakers_join_the_workspace_registry(self, tmp_path):
+        """
+        Read through the linking session. A second connection would not prove the registry
+        commits: hydrating commits the shared session later anyway. That the registry
+        commits its own write is `test_another_connection_sees_it_at_once` in
+        test_known_speaker_repository.py.
+        """
         db_manager, session, service, transcripts = await _workspace(tmp_path)
         try:
             project_db = await _external_project(
@@ -195,7 +195,7 @@ class TestSpeakerRegistry:
 
             await service.link_external_chronicle(str(project_db))
 
-            assert await _registry_names(db_manager) == ["Nyx", "Vale"]
+            assert await SQLiteKnownSpeakerRepository(session).list_names() == ["Nyx", "Vale"]
         finally:
             await session.close()
             await db_manager.close_all()
