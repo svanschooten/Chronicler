@@ -85,7 +85,7 @@ class RemoteFileStager(FileStager):
         headers = {"X-API-Key": self.api_key} if self.api_key else {}
         client = self._client or httpx.AsyncClient(timeout=RPC_TIMEOUT)
         try:
-            with open(local_path, "rb") as f:
+            with open(local_path, "rb") as f:  # noqa: ASYNC230 - httpx reads it while sending
                 files = {"file": (Path(local_path).name, f)}
                 response = await client.post(
                     f"{self.base_url}/upload", files=files, headers=headers

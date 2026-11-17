@@ -23,8 +23,7 @@ class ImportHandler(HandlerBase):
 
         logger.info(f"Importing transcript from {file_path} for chronicle {chronicle_id}")
 
-        with open(resolved_path, encoding="utf-8") as f:
-            content = f.read()
+        content = await asyncio.to_thread(resolved_path.read_text, encoding="utf-8")
 
         importer = self._importer_for(data)
 

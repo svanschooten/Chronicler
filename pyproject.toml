@@ -93,7 +93,14 @@ target-version = "py312"
 extend-exclude = ["chronicler/migrations/*/versions/*.py"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+# DTZ is left off on purpose: times are stored and shown as naive local values. Moving to
+# UTC changes stored data and how it displays, which is a decision of its own (ticket 045).
+select = ["E", "F", "I", "UP", "ASYNC"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests read and write small temporary files and poll for conditions; blocking there costs
+# nothing, and wrapping every call in a thread would hide what a test does.
+"tests/**" = ["ASYNC"]
 
 [tool.ruff.format]
 quote-style = "double"
