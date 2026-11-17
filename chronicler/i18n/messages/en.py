@@ -17,6 +17,7 @@ MESSAGES = {
         "close": "Close",
         "unknown": "Unknown",
         "ok": "OK",
+        "thousands_separator": ",",
     },
     "settings": {
         "title": "Settings",
@@ -191,6 +192,12 @@ MESSAGES = {
         "edit": "Edit the transcript",
         "done": "Finish editing",
         "delete_line": "Delete this line",
+        "line_window": "Lines {first}-{last} of {total}",
+        "line_window_timed": "Lines {first}-{last} of {total} · {start}-{end}",
+        "first_lines": "First lines",
+        "previous_lines": "Previous lines",
+        "next_lines": "Next lines",
+        "last_lines": "Last lines",
         "fullscreen": "Full screen",
         "fullscreen_exit": "Leave full screen",
         "delete_line_title": "Delete this line?",
@@ -198,6 +205,7 @@ MESSAGES = {
             'This removes "{excerpt}" from the transcript. This cannot be undone.'
         ),
         "save_failed": "Could not save the change: {error}",
+        "line_save_failed": "Could not save the line at {time}: {error}",
         "title": "Transcript",
         "loading": "Loading transcript...",
         "empty": "Transcript is empty or still processing.",

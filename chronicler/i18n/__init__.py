@@ -13,6 +13,14 @@ def t(key: str, **params: Any) -> str:
     return _translator.t(key, **params)
 
 
+def format_count(number: int) -> str:
+    """
+    A whole number with the active locale's thousands separator: "1,686" in English,
+    "1.686" in Dutch and German, where a comma would read as a decimal point.
+    """
+    return f"{number:,}".replace(",", t("common.thousands_separator"))
+
+
 def set_locale(locale: str) -> None:
     """Switches the locale every subsequent `t()` call resolves against."""
     _translator.locale = locale
@@ -32,6 +40,7 @@ __all__ = [
     "MessageMap",
     "Translator",
     "available_locales",
+    "format_count",
     "get_locale",
     "set_locale",
     "t",

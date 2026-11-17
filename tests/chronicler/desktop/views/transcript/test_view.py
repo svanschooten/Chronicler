@@ -421,6 +421,31 @@ class TestEditMode:
         view.editor.load.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_editing_opens_on_the_first_find_match(self, make_view, attach_page):
+        view = make_view()
+        attach_page(TranscriptView)
+        view.editor.load = AsyncMock()
+        first, second = (
+            TranscriptLine(text="a match", start_time=9.0, end_time=10.0),
+            TranscriptLine(text="another match", start_time=20.0, end_time=21.0),
+        )
+        view.found_lines = [first, second]
+
+        await view.edit_toggled(MagicMock())
+
+        view.editor.load.assert_awaited_once_with(show_line=first.id)
+
+    @pytest.mark.asyncio
+    async def test_editing_without_a_find_opens_where_it_was_left(self, make_view, attach_page):
+        view = make_view()
+        attach_page(TranscriptView)
+        view.editor.load = AsyncMock()
+
+        await view.edit_toggled(MagicMock())
+
+        view.editor.load.assert_awaited_once_with(show_line=None)
+
+    @pytest.mark.asyncio
     async def test_toggling_back_returns_to_the_read_view(self, make_view, attach_page):
         view = make_view()
         attach_page(TranscriptView)
@@ -433,6 +458,22 @@ class TestEditMode:
         assert view.editing is False
         assert view.transcript_body.content is view.transcript_area
         view.load_transcript.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_finishing_editing_saves_text_still_unsaved_first(self, make_view, attach_page):
+        """The editor's fields send no blur once they are off the screen."""
+        view = make_view()
+        attach_page(TranscriptView)
+        calls = []
+        view.editor.load = AsyncMock()
+        view.editor.save_unsaved = AsyncMock(side_effect=lambda: calls.append("save"))
+        view.load_transcript = AsyncMock(side_effect=lambda: calls.append("reload"))
+
+        await view.edit_toggled(MagicMock())
+        view.editor.save_unsaved.assert_not_awaited()
+        await view.edit_toggled(MagicMock())
+
+        assert calls == ["save", "reload"]
 
     @pytest.mark.asyncio
     async def test_the_timestamp_checkbox_is_disabled_while_editing(self, make_view, attach_page):
