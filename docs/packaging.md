@@ -181,6 +181,15 @@ follow that single line.
 3. Publish the GitHub release for that tag. That fires `release-workflow.yml`, which
    builds both binaries from the spec and attaches them to the release.
 
+**Nothing is built until the checks pass.** The workflow's `checks` job runs CI's gates
+(Ruff, Ruff format and mypy on Ubuntu, the tests on Ubuntu and Windows) on the commit being
+released, and both build jobs wait for it. CI only gates `master`, and a tag can point
+anywhere, so this is the one place a tagged commit is certain to be tested.
+
+A manual run (`workflow_dispatch`) checks out and builds the ref the run was started on;
+the `tag` input only names the release and its version. Start it from the tag, not from
+`master`, or the binaries come from whatever `master` holds.
+
 **The tag decides what gets built.** The workflow's `version` job reads the release tag,
 strips a leading `v` if there is one (`v1.0.9` and `1.0.9` both land as `1.0.9`), and
 `pack` stamps that number over `__version__` in its own checkout before running
