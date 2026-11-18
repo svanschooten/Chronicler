@@ -4,8 +4,9 @@ The smoke test's server step, run against this source install instead of a built
 A real server process on a real port: this is the check that tells a release whether
 `server` works, so it is worth a few seconds here to know the check itself works. The
 server gets its own --config and a scratch working directory, so the developer's real
-configuration is never read. `isolated_config` is not used: it moves HOME, which hides a
-user-site install of the dependencies from the child process.
+configuration is never read. The module is marked `real_home`, so the autouse
+`isolated_config` leaves HOME alone: moving it hides a user-site install of the
+dependencies from the child process.
 """
 
 import sys
@@ -14,6 +15,8 @@ import time
 import pytest
 
 from scripts.runtime import smoke
+
+pytestmark = pytest.mark.real_home
 
 SOURCE = [sys.executable, "-m", "chronicler"]
 
