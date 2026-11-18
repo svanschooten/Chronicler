@@ -9,6 +9,7 @@ are only collected when `FLET_TEST_FLUTTER_APP_DIR` points at that client. The o
 import json
 import os
 import shutil
+import socket
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -66,6 +67,16 @@ def _grab_screen(name: str) -> None:
     )
 
 
+def _free_port() -> int:
+    """
+    A port for the app to listen on. Flet finds one itself by binding a socket it never
+    closes, which the suite's ResourceWarning filter turns into an error.
+    """
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
 async def _noop(_progress) -> None:
     return None
 
@@ -110,6 +121,7 @@ async def tester(request, runtime) -> AsyncIterator:
         flutter_app_dir=Path(os.environ[HOST_ENV_VAR]),
         flet_app_main=DesktopApp(runtime).main,
         test_path=str(request.path),
+        tcp_port=_free_port(),
         device_mode=False,
         disable_fvm=True,
     )
