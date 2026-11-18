@@ -108,6 +108,13 @@ jobs:
       - name: Prepare the Flutter client
         run: echo "FLET_TEST_FLUTTER_APP_DIR=$(python scripts/ui_host.py build/ui-host)" >> "$GITHUB_ENV"
 
+      # TEMPORARY diagnostics: flutter -v, logged in full.
+      - name: Wrap flutter
+        run: |
+          printf '#!/bin/bash\nflutter "$@" -v >> "%s/flutter.log" 2>&1\n' "$RUNNER_TEMP" > "$RUNNER_TEMP/flutter-v"
+          chmod +x "$RUNNER_TEMP/flutter-v"
+          echo "FLET_TEST_FLUTTER_EXE=$RUNNER_TEMP/flutter-v" >> "$GITHUB_ENV"
+
       # Without the X11 backend and software GL the client draws nothing on Xvfb.
       - name: Run the UI tests
         env:
@@ -117,25 +124,18 @@ jobs:
           CHRONICLER_UI_SCREENSHOTS: ${{ runner.temp }}/ui-screenshots
         run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v -s -x tests/ui
 
-      # `flutter test` keeps the client's own stderr to itself, so a client that dies on
-      # start shows nothing above. Start it alone for a few seconds to see why.
-      - name: Start the client alone
+      - name: Show the verbose Flutter log
         if: failure()
-        env:
-          GDK_BACKEND: x11
-          LIBGL_ALWAYS_SOFTWARE: "1"
-        run: |
-          (cd "$FLET_TEST_FLUTTER_APP_DIR" && flutter build linux --debug)
-          timeout 15 xvfb-run -a -s "-screen 0 1600x1000x24" \
-            "$FLET_TEST_FLUTTER_APP_DIR/build/linux/x64/debug/bundle/flet" tcp://127.0.0.1:9 \
-            || echo "exit code $?"
+        run: tail -n 300 "$RUNNER_TEMP/flutter.log"
 
       - name: Upload the screens of failed tests
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: ui-screenshots
-          path: ${{ runner.temp }}/ui-screenshots
+          path: |
+            ${{ runner.temp }}/ui-screenshots
+            ${{ runner.temp }}/flutter.log
           if-no-files-found: ignore
 
   # The tests job installs no extras, so normalization and transcription code would go
