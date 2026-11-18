@@ -78,9 +78,7 @@ jobs:
   # required yet, until it has shown it is not flaky. See docs/testing.md.
   ui:
     name: Rendered UI
-    # Not ubuntu-latest: the Mesa there (26.0) segfaults in its software renderer when
-    # the Flutter client draws under `flutter test`. 24.04 ships Mesa 25.2, which works.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7
@@ -111,10 +109,13 @@ jobs:
         run: echo "FLET_TEST_FLUTTER_APP_DIR=$(python scripts/ui_host.py build/ui-host)" >> "$GITHUB_ENV"
 
       # Without the X11 backend and software GL the client draws nothing on Xvfb.
+      # softpipe, not Mesa's default llvmpipe: on the runners llvmpipe segfaults in a
+      # memcpy when the Flutter client draws under `flutter test`.
       - name: Run the UI tests
         env:
           GDK_BACKEND: x11
           LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: softpipe
           CHRONICLER_UI_SCREENSHOTS: ${{ runner.temp }}/ui-screenshots
         run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v tests/ui
 
