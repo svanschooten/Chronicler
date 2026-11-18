@@ -117,16 +117,35 @@ async def tester(request, runtime) -> AsyncIterator:
     import flet.testing as ftt
 
     await _seed(runtime)
+    desktop = DesktopApp(runtime)
+    app_errors: list[BaseException] = []
+
+    async def main(page) -> None:
+        # Flet logs an exception from the app's main and closes the session, which ends
+        # the client; the test would only see "Flutter process exited early".
+        try:
+            await desktop.main(page)
+        except BaseException as error:
+            app_errors.append(error)
+            raise
+
     app = ftt.FletTestApp(
         flutter_app_dir=Path(os.environ[HOST_ENV_VAR]),
-        flet_app_main=DesktopApp(runtime).main,
+        flet_app_main=main,
         test_path=str(request.path),
         tcp_port=_free_port(),
         device_mode=False,
         disable_fvm=True,
     )
-    await app.start()
+    started = False
     try:
+        try:
+            await app.start()
+        except RuntimeError as error:
+            if app_errors:
+                raise app_errors[0] from error
+            raise
+        started = True
         await app.tester.pump_and_settle()
         yield app.tester
         await app.tester.pump_and_settle()
@@ -135,5 +154,6 @@ async def tester(request, runtime) -> AsyncIterator:
             _grab_screen(request.node.name)
         assert unknown.count == 0, "the client drew a control it could not render"
     finally:
-        await app.teardown()
+        if started:
+            await app.teardown()
         await runtime.db_manager.close_all()
