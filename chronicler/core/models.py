@@ -1,11 +1,11 @@
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     PENDING = "PENDING"
     WORKING = "WORKING"
     DONE = "DONE"
@@ -13,14 +13,14 @@ class TaskStatus(str, Enum):
     CANCELLED = "CANCELLED"
 
 
-class SourceState(str, Enum):
+class SourceState(StrEnum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     DONE = "DONE"
     FAILED = "FAILED"
 
 
-class TaskType(str, Enum):
+class TaskType(StrEnum):
     IMPORT = "IMPORT"
     TRANSCRIBE = "TRANSCRIBE"
     NORMALIZE = "NORMALIZE"

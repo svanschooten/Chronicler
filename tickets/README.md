@@ -248,7 +248,7 @@ Progress and cancel for long transcriptions, explanations that reach thin client
 
 Safe to take in parallel with anything above, at any time.
 
-- [ ] [045-T5 Tighten Ruff's rules and target version](045-T5_ruff_rules_and_target.md) · low · S
+- [x] [045-T5 Tighten Ruff's rules and target version](045-T5_ruff_rules_and_target.md) · low · S
 
 - [ ] [080-T9 The test suite is not warning-free under coverage](080-T9_warning_free_tests.md) · low · XS
 

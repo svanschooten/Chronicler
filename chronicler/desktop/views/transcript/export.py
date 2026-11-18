@@ -46,6 +46,13 @@ def _move_into_place(temporary: Path, destination: str) -> None:
         os.chmod(destination, _new_file_mode())
 
 
+def _write(destination: str, content: str | bytearray) -> None:
+    if isinstance(content, bytearray):
+        Path(destination).write_bytes(content)
+    else:
+        Path(destination).write_text(content, encoding="utf-8")
+
+
 class TranscriptExporter:
     def __init__(
         self,
@@ -129,8 +136,7 @@ class TranscriptExporter:
             return
 
         try:
-            with open(destination, "w", encoding="utf-8") as f:
-                f.write(content)
+            await asyncio.to_thread(_write, destination, content)
         except OSError as ex:
             logger.error(f"Error writing export file: {ex}")
             self.show_snackbar(t("export.write_failed", error=ex))
@@ -229,7 +235,7 @@ class TranscriptExporter:
             await self._save_to_picked_place(content, file_name, extension)
         finally:
             if isinstance(content, Path):
-                content.unlink(missing_ok=True)
+                await asyncio.to_thread(content.unlink, missing_ok=True)
 
     async def _save_to_picked_place(
         self, content: str | bytearray | Path, file_name: str, extension: str
@@ -256,12 +262,8 @@ class TranscriptExporter:
         try:
             if isinstance(content, Path):
                 await asyncio.to_thread(_move_into_place, content, destination)
-            elif isinstance(content, bytearray):
-                with open(destination, "wb") as handle:
-                    handle.write(content)
             else:
-                with open(destination, "w", encoding="utf-8") as handle:
-                    handle.write(content)
+                await asyncio.to_thread(_write, destination, content)
         except OSError as ex:
             logger.error(f"Error writing export file: {ex}")
             self.show_snackbar(t("export.write_failed", error=ex))

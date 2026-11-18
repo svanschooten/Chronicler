@@ -106,13 +106,10 @@ class NormalizeHandler(HandlerBase):
         return normalized if normalized.exists() else source
 
     async def _source_record(self, chronicle_id: UUID, source: Path) -> AudioSource | None:
+        content_hash, size_bytes = await asyncio.to_thread(_fingerprint_if_present, source)
         async with self.transaction(chronicle_id) as session:
             repo = SQLiteAudioSourceRepository(session)
-            await repo.register(
-                source.name,
-                content_hash=fingerprint_file(source) if source.exists() else None,
-                size_bytes=source.stat().st_size if source.exists() else None,
-            )
+            await repo.register(source.name, content_hash=content_hash, size_bytes=size_bytes)
             return await repo.get_by_filename(source.name)
 
     async def _mark_running(self, chronicle_id: UUID, source: Path) -> None:
@@ -127,3 +124,9 @@ class NormalizeHandler(HandlerBase):
                 )
         except KeyError:
             pass  # the source row is gone, so there is nothing to mark
+
+
+def _fingerprint_if_present(source: Path) -> tuple[str | None, int | None]:
+    if not source.exists():
+        return None, None
+    return fingerprint_file(source), source.stat().st_size

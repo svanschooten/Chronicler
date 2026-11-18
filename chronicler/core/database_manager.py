@@ -507,7 +507,7 @@ class DatabaseManager:
         `must_exist` as on `project_path_for`: copying a linked database that has moved
         must not create an empty one in its place.
         """
-        if destination.exists():
+        if destination.exists():  # noqa: ASYNC240 - one stat
             raise FileExistsError(f"Refusing to overwrite {destination}")
 
         key = str(chronicle_id)

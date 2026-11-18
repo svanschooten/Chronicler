@@ -86,14 +86,21 @@ addopts = "-ra"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 # Alembic-generated migration files use its own script.py.mako boilerplate style
 # (Union/Sequence, unsorted imports) - every future `alembic revision --autogenerate`
 # produces the same, so excluding rather than hand-fixing each one.
 extend-exclude = ["chronicler/migrations/*/versions/*.py"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+# DTZ is left off on purpose: times are stored and shown as naive local values. Moving to
+# UTC changes stored data and how it displays, which is a decision of its own (ticket 045).
+select = ["E", "F", "I", "UP", "ASYNC"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests read and write small temporary files and poll for conditions; blocking there costs
+# nothing, and wrapping every call in a thread would hide what a test does.
+"tests/**" = ["ASYNC"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -102,6 +109,15 @@ line-ending = "auto"
 
 [tool.mypy]
 python_version = "3.12"
+# Without this mypy skips the body of every function with no annotations, which is most
+# Flet event handlers.
+check_untyped_defs = true
+
+# The tests are left out: they lean on mocks and on narrowing `Optional`s by assertion,
+# which this flags about 225 times without finding bugs.
+[[tool.mypy.overrides]]
+module = "tests.*"
+check_untyped_defs = false
 
 # faster-whisper is an optional dependency (the "transcription" extra), imported
 # lazily inside transcriber._get_model() - it is intentionally NOT installed in CI.

@@ -2,11 +2,10 @@ import inspect
 import secrets
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 _services: list[type] = []
 
-T = TypeVar("T")
 
 EXPOSED_ATTRIBUTE = "__rpc_exposed__"
 
@@ -58,7 +57,7 @@ def refusal_for(error: Exception) -> tuple[str, int] | None:
     return None
 
 
-def service(cls: type[T] | None = None, *, expose: Sequence[str] | None = None) -> Any:
+def service[T](cls: type[T] | None = None, *, expose: Sequence[str] | None = None) -> Any:
     """
     Registers a class as an RPC service, publishing only the methods it names.
 

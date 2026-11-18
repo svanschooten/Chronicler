@@ -1,5 +1,4 @@
 import re
-
 import tomllib
 
 from chronicler import __version__
