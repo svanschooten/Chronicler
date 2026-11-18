@@ -112,6 +112,11 @@ runtime tests that had none still read the developer's workspace and failed on a
 with one configured (ticket 071). The home directory is made with `tmp_path_factory`
 rather than inside `tmp_path`, so a test asserting its `tmp_path` is empty still can.
 
+A test that starts a child Python process from the source install opts out with
+`@pytest.mark.real_home` (as `tests/scripts/runtime/test_smoke.py` does): a moved HOME
+hides a `pip install --user` of the dependencies from the child. Such a test must keep the
+developer's configuration out some other way, for example by passing `--config`.
+
 ## Extras that may not be installed
 
 A test module that needs an optional extra starts with:

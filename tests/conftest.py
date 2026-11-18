@@ -70,15 +70,29 @@ async def two_sessions(tmp_path) -> AsyncIterator[TwoSessions]:
     await db_manager.close_all()
 
 
+REAL_HOME = "real_home"
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        f"{REAL_HOME}: keep the real home directory; `isolated_config` does nothing. Only for "
+        "tests that start a child Python, which needs HOME to find a user-site install.",
+    )
+
+
 @pytest.fixture(autouse=True)
-def isolated_config(monkeypatch, tmp_path_factory):
+def isolated_config(request, monkeypatch, tmp_path_factory):
     """
     Keeps Settings() away from the developer's real configuration, in every test.
 
     Without this, any test that reads or writes settings passes or fails depending on
     whose machine it runs on. Autouse, because opting in was forgotten more than once.
-    Yields the config file's directory.
+    Yields the config file's directory, or None for a test marked `real_home`.
     """
+    if request.node.get_closest_marker(REAL_HOME):
+        yield None
+        return
     # Its own directory, so a test's `tmp_path` stays as empty as the test left it.
     home = tmp_path_factory.mktemp("home")
     isolate_home(monkeypatch, home)
