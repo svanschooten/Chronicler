@@ -122,7 +122,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
           FLET_TEST_VERBOSE: "1"
           CHRONICLER_UI_SCREENSHOTS: ${{ runner.temp }}/ui-screenshots
-        run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v -s -x tests/ui
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v -s -x -o log_cli=true --log-cli-level=WARNING tests/ui
 
       - name: Show the verbose Flutter log
         if: failure()
