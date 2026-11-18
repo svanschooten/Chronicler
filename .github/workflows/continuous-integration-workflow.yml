@@ -80,10 +80,6 @@ jobs:
     name: Rendered UI
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      # TRIAL: under `flutter test` the client segfaults in glibc's AVX-512 memcpy on the
-      # runners, which have AVX-512. Keep glibc on its AVX2 routines.
-      GLIBC_TUNABLES: glibc.cpu.hwcaps=-AVX512F,-AVX512VL,-AVX512BW,-AVX512DQ,-AVX512CD
     steps:
       - uses: actions/checkout@v7
         name: Checkout Repository
@@ -100,7 +96,7 @@ jobs:
       - name: Install the Linux build tools and a virtual display
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libgl1-mesa-dri xvfb ffmpeg
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libgl1-mesa-dri xvfb ffmpeg gdb
 
       - uses: subosito/flutter-action@v2
         name: Setup Flutter
@@ -132,19 +128,18 @@ jobs:
         if: failure()
         run: tail -n 120 "$RUNNER_TEMP/flutter.log"
 
-      # TEMPORARY: the client under `flutter test` alone, with and without software GL.
-      - name: Run the client test alone
+      # TEMPORARY: a backtrace of the client's crash. The bundle `flutter test` left
+      # behind runs the test entrypoint.
+      - name: Backtrace the client
         if: failure()
         working-directory: ${{ env.FLET_TEST_FLUTTER_APP_DIR }}
+        env:
+          GDK_BACKEND: x11
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
-          for gl in 1 0; do
-            echo "::group::LIBGL_ALWAYS_SOFTWARE=$gl"
-            LIBGL_ALWAYS_SOFTWARE=$gl GDK_BACKEND=x11 timeout 90 xvfb-run -a -s "-screen 0 1600x1000x24" \
-              flutter test integration_test -d linux --reporter expanded \
-              --dart-define=FLET_TEST_APP_URL=tcp://127.0.0.1:9 || echo "exit code $?"
-            echo "::endgroup::"
-          done
-          sudo dmesg | tail -n 30 || true
+          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" gdb -batch \
+            -ex "handle SIGPIPE nostop noprint" -ex run -ex "bt 40" -ex "info sharedlibrary" \
+            --args build/linux/x64/debug/bundle/flet || echo "exit code $?"
 
       - name: Upload the screens of failed tests
         if: failure()
