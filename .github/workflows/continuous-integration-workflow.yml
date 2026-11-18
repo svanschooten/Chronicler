@@ -80,6 +80,10 @@ jobs:
     name: Rendered UI
     runs-on: ubuntu-latest
     continue-on-error: true
+    env:
+      # TRIAL: under `flutter test` the client segfaults in glibc's AVX-512 memcpy on the
+      # runners, which have AVX-512. Keep glibc on its AVX2 routines.
+      GLIBC_TUNABLES: glibc.cpu.hwcaps=-AVX512F,-AVX512VL,-AVX512BW,-AVX512DQ,-AVX512CD
     steps:
       - uses: actions/checkout@v7
         name: Checkout Repository
