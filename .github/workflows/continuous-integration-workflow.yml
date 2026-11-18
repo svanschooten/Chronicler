@@ -122,24 +122,24 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
           FLET_TEST_VERBOSE: "1"
           CHRONICLER_UI_SCREENSHOTS: ${{ runner.temp }}/ui-screenshots
-        run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v -s -x -o log_cli=true --log-cli-level=WARNING tests/ui
+        run: |
+          sudo sysctl -w kernel.core_pattern=/tmp/core.%p
+          ulimit -c unlimited
+          xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v -s -x -o log_cli=true --log-cli-level=WARNING tests/ui
 
       - name: Show the verbose Flutter log
         if: failure()
         run: tail -n 120 "$RUNNER_TEMP/flutter.log"
 
-      # TEMPORARY: a backtrace of the client's crash. The bundle `flutter test` left
-      # behind runs the test entrypoint.
+      # TEMPORARY: a backtrace from the client's core dump.
       - name: Backtrace the client
         if: failure()
-        working-directory: ${{ env.FLET_TEST_FLUTTER_APP_DIR }}
-        env:
-          GDK_BACKEND: x11
-          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
-          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" gdb -batch \
-            -ex "handle SIGPIPE nostop noprint" -ex run -ex "bt 40" -ex "info sharedlibrary" \
-            --args build/linux/x64/debug/bundle/flet || echo "exit code $?"
+          for core in /tmp/core.*; do
+            gdb -batch -ex "bt 40" -ex "info sharedlibrary" \
+              "$FLET_TEST_FLUTTER_APP_DIR/build/linux/x64/debug/bundle/flet" "$core"
+            break
+          done
 
       - name: Upload the screens of failed tests
         if: failure()
