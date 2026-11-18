@@ -49,26 +49,30 @@ override to `^1.1.1`, without which `flutter pub get` fails on current packages.
 pins it for an ARM64 build bug, dart-lang/native#3498. Drop the override once that is
 fixed.
 
-**Running them.** They are only collected when `FLET_TEST_FLUTTER_APP_DIR` is set, so
-the ordinary `pytest` run skips the folder. On Linux, with `clang ninja-build
-libgtk-3-dev xvfb` from apt and the Flutter version the installed Flet names
-(`python scripts/ui_host.py --flutter-version`) on `PATH`:
+**Running them.** They run locally only, on Linux, with `scripts/ui_tests.sh`; CI does
+not run them (see below). They are only collected when `FLET_TEST_FLUTTER_APP_DIR` is set,
+so the ordinary `pytest` run skips the folder. The script needs:
+
+- `clang ninja-build libgtk-3-dev xvfb` from apt, and `ffmpeg` for screens of failures;
+- the Flutter version the installed Flet builds with on `PATH`
+  (`python scripts/ui_host.py --flutter-version` prints it).
 
 ```bash
-pip install "flet[test]==$(python -c 'from importlib.metadata import version; print(version("flet"))')"
+scripts/ui_tests.sh
 ```
 
-```bash
-export FLET_TEST_FLUTTER_APP_DIR=$(python scripts/ui_host.py build/ui-host)
-```
+It installs `flet[test]` into the active environment if it is missing: `flet.testing`
+imports numpy, Pillow and scikit-image, which nothing else needs. It prepares the client
+in `build/ui-host` the first time and after a Flet upgrade. Then it runs `pytest tests/ui`
+under `xvfb-run`, passing on any arguments, with `GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1`
+and without `WAYLAND_DISPLAY`. Without those the tests still pass on Xvfb but nothing is
+drawn, and under WSL, GTK would go to Wayland. Set `PYTHON` to use an interpreter other
+than `python`. The first run builds the client, which takes about a minute.
 
-```bash
-GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s "-screen 0 1600x1000x24" pytest tests/ui
-```
-
-Without `GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1` the tests still pass on Xvfb but
-nothing is drawn. Under WSL, also unset `WAYLAND_DISPLAY`. The first run builds the
-client, which takes about a minute.
+**Not in CI.** On GitHub's runners the client segfaults inside Mesa about two seconds
+after it starts, under `flutter test` only, whatever the runner image, GL setting or
+Mesa driver. Every test passes locally. Ticket
+[058](../tickets/058-T6_ui_rendering_checks.md) has the evidence and what to try next.
 
 **Screens of failures.** Flet takes app screenshots only on Android and iOS. Set
 `CHRONICLER_UI_SCREENSHOTS` to a folder, with `ffmpeg` installed, and the fixture grabs
@@ -107,12 +111,9 @@ pytest --cov=chronicler --cov-report=term --cov-fail-under=80
 ```
 
 The tests run on Ubuntu and Windows; the other checks run once, on Ubuntu.
-All of them are blocking, with no per-module exemptions. The **Rendered UI** job runs
-`tests/ui/` on Ubuntu with `GALLIUM_DRIVER=softpipe`: on the runners Mesa's default
-software renderer, llvmpipe, segfaults when the Flutter client draws under `flutter
-test`. The job is not blocking until it has shown it is not flaky; when it
-fails, it uploads a grab of the screen for each failed test. Prefer a narrow
-`# type: ignore[code]` over widening the configuration. Run `ruff format chronicler tests`
+All of them are blocking, with no per-module exemptions. The rendered UI tests in
+`tests/ui/` are not part of CI: run `scripts/ui_tests.sh` before pushing a change to the
+desktop views. Prefer a narrow `# type: ignore[code]` over widening the configuration. Run `ruff format chronicler tests`
 before pushing to clear a formatting failure.
 
 Every job sets up through `.github/actions/setup`, so a new job or platform reuses that
