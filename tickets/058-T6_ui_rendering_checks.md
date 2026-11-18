@@ -29,8 +29,8 @@ a dismissed confirmation (073), and editing a transcript line. Each test fails i
 fails them, which no control-tree test could see. About 25 s a test.
 
 They found a bug on the first run: clicking "Finish editing" right after typing showed
-the old text, because the blur's save had not landed when the view reloaded. Fixed in
-the follow-up PR, which also removes that test's `xfail`.
+the old text, because the blur's save had not landed when the view reloaded. Finishing
+now waits for saves already running, and that test passes.
 
 What it took:
 
