@@ -262,7 +262,7 @@ Safe to take in parallel with anything above, at any time.
 
 Internal only, and the most likely to conflict, so these come after the user-facing work. Schedule 041 alone. 043 has the least value of anything here: take it last, or drop it.
 
-- [ ] [029-S1 Remove dead code and unused columns](029-S1_remove_dead_code.md) · medium · S
+- [x] [029-S1 Remove dead code and unused columns](029-S1_remove_dead_code.md) · medium · S
 
 - [ ] [030-S2 Remove the repository interfaces](030-S2_remove_repository_abcs.md) · medium · S · after 029
 
