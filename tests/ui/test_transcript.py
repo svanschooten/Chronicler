@@ -37,12 +37,6 @@ async def test_clicking_away_from_an_edited_line_saves_it(tester):
     assert (await tester.find_by_text_containing(LONG_LINE)).count == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="Clicking Finish blurs the field first. The blur starts the save, so the "
-    "finish finds nothing open and reloads the read view before the save lands.",
-)
 async def test_finishing_right_after_typing_shows_the_edit(tester):
     await edit_the_long_line(tester)
 

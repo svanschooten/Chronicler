@@ -329,6 +329,8 @@ class TranscriptEditor(ft.Column):
         self.open: _Open | None = None
         # Keyed by (field, line id). See `_start_save`.
         self._saves: dict[tuple[str, str], _Saves] = {}
+        # Every save still running, whoever started it. See `save_unsaved`.
+        self._running: set[asyncio.Task[bool]] = set()
         self.ordered: list[TranscriptLine] = []
         self.speakers: list[str] = []
         self.window_start = 0
@@ -630,10 +632,16 @@ class TranscriptEditor(ft.Column):
     async def save_unsaved(self) -> None:
         """
         Saves and closes the open part before the rows are replaced (paging, reloading
-        after a delete, leaving edit mode). Only one part can be open, so that is all
-        there is to save.
+        after a delete, leaving edit mode), then waits for every save still running.
+
+        Waiting only for the open part's save is not enough. Clicking Finish blurs the
+        open field first: the blur closes it and starts its save, so by the time the
+        click arrives nothing is open, and the read view would be loaded from the
+        database before that save had written to it.
         """
         await self.close_open(save=True)
+        while self._running:
+            await asyncio.wait(set(self._running))
 
     async def text_submitted(self, e) -> None:
         """Enter saves and closes; Shift+Enter is a newline (`shift_enter`)."""
@@ -771,11 +779,13 @@ class TranscriptEditor(ft.Column):
 
     def _start_save(self, line: TranscriptLine, field: str, value: str) -> Awaitable[bool]:
         """
-        Puts `value` on the line now and returns the save to await.
+        Puts `value` on the line now, starts the save and returns it to await. It runs
+        as a task, so `save_unsaved` can wait for it from another handler.
 
         The line takes the value before the save runs, not after. Closing a field shows
-        the line's text at once, and paging can rebuild the row while the save is still
-        running; built from the old text, either would show the edit as lost.
+        the line's text at once, and built from the old text it would show the edit as
+        lost. Paging waits for running saves (`save_unsaved`), but a row rebuilt any
+        other way while a save runs is built from the line too.
 
         That makes a failure harder to undo: by the time one save fails, a later edit of
         the same field may have been saved, or still be running. So nothing is put back
@@ -788,7 +798,10 @@ class TranscriptEditor(ft.Column):
             saves = self._saves[key] = _Saves(confirmed=getattr(line, field))
         saves.pending += 1
         setattr(line, field, value)
-        return self._finish_save(line, field, value, saves)
+        task = asyncio.create_task(self._finish_save(line, field, value, saves))
+        self._running.add(task)
+        task.add_done_callback(self._running.discard)
+        return task
 
     async def _finish_save(
         self, line: TranscriptLine, field: str, value: str, saves: _Saves

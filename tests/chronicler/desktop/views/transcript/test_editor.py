@@ -714,7 +714,7 @@ class TestEditingText:
         assert shown == "New"
 
     @pytest.mark.asyncio
-    async def test_paging_back_during_a_save_shows_the_new_text(self, make_editor):
+    async def test_paging_waits_for_a_running_save(self, make_editor):
         editor, service = make_editor(_long(WINDOW_SIZE + 1))
         await editor.load()
         release = asyncio.Event()
@@ -726,17 +726,27 @@ class TestEditingText:
 
         saving = asyncio.create_task(_edit_text(editor, "Corrected"))
         await asyncio.sleep(0)
-        await _press(editor, editor.pager.next_button)
-        await _press(editor, editor.pager.previous_button)
-        release.set()
-        await saving
+        paging = asyncio.create_task(_press(editor, editor.pager.next_button))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert not paging.done()
+        assert editor.window_start == 0
 
+        release.set()
+        await paging
+        await saving
+        await _press(editor, editor.pager.previous_button)
+
+        assert editor.window_start == 0
         assert _shown_text(_row(editor)) == "Corrected"
         assert service.update_line.await_count == 1
 
     @pytest.mark.asyncio
     async def test_a_save_failing_after_paging_back_repaints_the_rebuilt_row(self, make_editor):
-        """The row that started the save is gone; the one on screen must not look saved."""
+        """
+        The row that started the save is gone; the one on screen must not look saved.
+        Paging waits for running saves, so this guards any rebuild that does not.
+        """
         editor, service = make_editor(_long(WINDOW_SIZE + 1))
         await editor.load()
         release = asyncio.Event()
@@ -749,8 +759,9 @@ class TestEditingText:
 
         saving = asyncio.create_task(_edit_text(editor, "Attempted"))
         await asyncio.sleep(0)
-        await _press(editor, editor.pager.next_button)
-        await _press(editor, editor.pager.previous_button)
+        # Paging waits for the save, so rebuild the rows directly.
+        await editor._show_window(WINDOW_SIZE)
+        await editor._show_window(0)
         release.set()
         await saving
 
@@ -847,6 +858,38 @@ class TestEditingText:
         await editor.finish_editing()
 
         assert service.update_line.await_args.kwargs["text"] == "New"
+
+    @pytest.mark.asyncio
+    async def test_finishing_waits_for_the_save_a_blur_started(self, make_editor):
+        """
+        Clicking Finish blurs the field first. The blur closes it and starts the save,
+        so the finish finds nothing open; it must still wait for that save, or the read
+        view loads the old text from the database.
+        """
+        editor, service = make_editor([_line("Old")])
+        await editor.load()
+        release = asyncio.Event()
+        written = []
+
+        async def slow_save(chronicle_id, line_id, **changes):
+            await release.wait()
+            written.append(changes["text"])
+
+        service.update_line.side_effect = slow_save
+
+        blurring = asyncio.create_task(_edit_text(editor, "New"))
+        await asyncio.sleep(0)
+        assert editor.open is None
+        finishing = asyncio.create_task(editor.finish_editing())
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert not finishing.done()
+
+        release.set()
+        await finishing
+
+        assert written == ["New"]
+        await blurring
 
     @pytest.mark.asyncio
     async def test_editing_does_not_reload_the_whole_list(self, make_editor):
@@ -1018,8 +1061,9 @@ class TestReassigningASpeaker:
 
         saving = asyncio.create_task(_pick(editor, "Vale"))
         await asyncio.sleep(0)
-        await _press(editor, editor.pager.next_button)
-        await _press(editor, editor.pager.previous_button)
+        # Paging waits for the save, so rebuild the rows directly.
+        await editor._show_window(WINDOW_SIZE)
+        await editor._show_window(0)
         release.set()
         await saving
 
