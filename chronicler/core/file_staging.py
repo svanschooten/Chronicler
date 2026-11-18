@@ -85,7 +85,9 @@ class RemoteFileStager(FileStager):
         headers = {"X-API-Key": self.api_key} if self.api_key else {}
         client = self._client or httpx.AsyncClient(timeout=RPC_TIMEOUT)
         try:
-            with open(local_path, "rb") as f:  # noqa: ASYNC230 - httpx reads it while sending
+            # The open is cheap, hence the noqa. httpx then reads the file on the event loop
+            # while sending, which Ruff cannot see: each read of a large upload blocks it.
+            with open(local_path, "rb") as f:  # noqa: ASYNC230
                 files = {"file": (Path(local_path).name, f)}
                 response = await client.post(
                     f"{self.base_url}/upload", files=files, headers=headers
