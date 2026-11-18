@@ -34,7 +34,7 @@ below and leave the code clean.
 | [desktop.md](desktop.md) | Flet views, theming, dialog patterns, chronicle actions, the transcribe dialog |
 | [packaging.md](packaging.md) | PyInstaller spec, why the build is windowed, the two setup wizards, hidden imports |
 | [runtime-build.md](runtime-build.md) | The embedded-runtime (PyApp) build, hash-pinned locks, downloadable components |
-| [testing.md](testing.md) | Test layout, shared fixtures, how views are tested |
+| [testing.md](testing.md) | Test layout, shared fixtures, how views are tested, rendered UI tests |
 | [troubleshooting.md](troubleshooting.md) | File dialogs, the session bus on WSL, and migration recovery |
 | [superpowers/specs/](superpowers/specs/) | Agreed designs for work not yet built, each linked from its tickets |
 | [thin-client-testing.md](thin-client-testing.md) | Handshake, the two-process check, and LAN exposure from WSL2 |

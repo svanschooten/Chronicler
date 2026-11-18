@@ -256,7 +256,7 @@ Safe to take in parallel with anything above, at any time.
 
 - [x] [071-T8 Two tests pass for a reason other than the one they state](071-T8_tests_that_pass_for_the_wrong_reason.md) · low · XS
 
-- [ ] [058-T6 Nothing verifies the real rendered UI](058-T6_ui_rendering_checks.md) · low · M
+- [x] [058-T6 Nothing verifies the real rendered UI](058-T6_ui_rendering_checks.md) · low · M
 
 ### Wave 10: simplify the foundations, one at a time
 

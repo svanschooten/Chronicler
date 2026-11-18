@@ -113,10 +113,15 @@ for a focused field that is taken off the screen, so paging, the reload after a 
 and finishing editing first close the open part, saving its text. The save goes to the
 line itself, not to the row, so it does not matter that the row is gone by then.
 
+They then also wait for every save still running, not only the one they started. Clicking
+**Finish editing** blurs the open field first: the blur closes it and starts its save, so
+the click finds nothing open. Returning at once would load the read view from the
+database before that save had written, and show the old text until the next reload. Each
+save runs as a task the editor keeps until it ends, so any handler can wait for it.
+
 The line takes the new text when the save starts, not when it ends, so the row shows the
-correction as soon as the field closes, and paging straight back during a save rebuilds
-the row with it rather than with the old text. A
-failed save is undone only once the field's last running save ends: the line and the
+correction as soon as the field closes, and a row rebuilt during a save is built with it
+rather than with the old text. A failed save is undone only once the field's last running save ends: the line and the
 row on screen, which may be a rebuilt one, then get what the database is known to hold,
 the last text that saved or what the line held before. A failure that a later edit has
 already saved over is reported but takes nothing back.

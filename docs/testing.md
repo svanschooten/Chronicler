@@ -13,6 +13,7 @@ packages (`__init__.py`) because the mirrored layout repeats module names.
 | `two_sessions` | `tests/conftest.py` | A file-backed workspace with two independent sessions on `chronicler.db`, for lock contention |
 | `mock_flet_app` | `tests/conftest.py` | Autouse; stops anything from opening a real window |
 | `attach_page` | `tests/chronicler/desktop/conftest.py` | Gives a Flet control a stand-in `page`, since `Control.page` is a read-only property that raises when unattached |
+| `tester` | `tests/ui/conftest.py` | The desktop app on a seeded workspace, drawn by a real Flutter client; see [Rendered UI tests](#rendered-ui-tests) |
 
 `tests/paths.py` holds repo-relative paths for fixture files, so no test walks
 `parents[n]` to find one. `tests/chronicler/desktop/controls.py` has helpers for
@@ -23,6 +24,63 @@ asserting against a built Flet control tree.
 Views are tested by building them and inspecting the controls they produced. Nothing
 renders. Logic worth testing without a page attached is deliberately kept out of the
 views — `ImportCoordinator` is the clearest example.
+
+A control tree cannot show what the Flutter client actually draws, so a few flows also
+run against the real client: see [Rendered UI tests](#rendered-ui-tests).
+
+## Rendered UI tests
+
+`tests/ui/` runs the desktop app in full-stack mode on a seeded workspace and drives a
+real Flutter client through `flet.testing`: finding text and tooltips, tapping, typing.
+The `tester` fixture in `tests/ui/conftest.py` starts both, and fails any test that
+leaves "Unknown control" on screen, which is what the client draws for a control it
+cannot render. The FilePicker that was once added to `page.overlay` did that, and no
+control-tree test could see it.
+
+They are slow, about 25 seconds a test, since each starts its own `flutter test`. Keep
+them to flows a control tree cannot check: what is on screen after a click, a dialog
+that closes, an edit that shows up.
+
+**The client.** `flet.testing` in host mode needs a Flutter app to connect from.
+`scripts/ui_host.py` fetches Flet's own `client/` at the tag of the installed Flet and
+trims it. It removes every Flet extension, which Chronicler does not use and which need
+system libraries for video, maps and web views. It also lifts Flet's `jni: 1.0.0`
+override to `^1.1.1`, without which `flutter pub get` fails on current packages. Flet
+pins it for an ARM64 build bug, dart-lang/native#3498. Drop the override once that is
+fixed.
+
+**Running them.** They run locally only, on Linux, with `scripts/ui_tests.sh`; CI does
+not run them (see below). They are only collected when `FLET_TEST_FLUTTER_APP_DIR` is set,
+so the ordinary `pytest` run skips the folder. The script needs:
+
+- `clang ninja-build libgtk-3-dev xvfb` from apt, and `ffmpeg` for screens of failures;
+- the Flutter version the installed Flet builds with on `PATH`
+  (`python scripts/ui_host.py --flutter-version` prints it).
+
+```bash
+scripts/ui_tests.sh
+```
+
+It installs `flet[test]` into the active environment if it is missing: `flet.testing`
+imports numpy, Pillow and scikit-image, which nothing else needs. It prepares the client
+in `build/ui-host` the first time and after a Flet upgrade. Then it runs `pytest tests/ui`
+under `xvfb-run`, passing on any arguments, with `GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1`
+and without `WAYLAND_DISPLAY`. Without those the tests still pass on Xvfb but nothing is
+drawn, and under WSL, GTK would go to Wayland. Set `PYTHON` to use an interpreter other
+than `python`. The first run builds the client, which takes about a minute.
+
+**Not in CI.** On GitHub's runners the client segfaults inside Mesa about two seconds
+after it starts, under `flutter test` only, whatever the runner image, GL setting or
+Mesa driver. Every test passes locally. Ticket
+[058](../tickets/058-T6_ui_rendering_checks.md) has the evidence and what to try next.
+
+**Screens of failures.** Flet takes app screenshots only on Android and iOS. Set
+`CHRONICLER_UI_SCREENSHOTS` to a folder, with `ffmpeg` installed, and the fixture grabs
+the X display there when a test fails.
+
+**Flutter's package cache.** Every test points `HOME` at a temporary folder, and Flutter
+keeps its packages under `HOME`. The conftest sets `PUB_CACHE` to the real cache first,
+or every test downloads the packages again into a folder pytest later deletes.
 
 ## Isolation from the developer's machine
 
@@ -53,8 +111,9 @@ pytest --cov=chronicler --cov-report=term --cov-fail-under=80
 ```
 
 The tests run on Ubuntu and Windows; the other checks run once, on Ubuntu.
-All of them are blocking, with no per-module exemptions. Prefer a narrow
-`# type: ignore[code]` over widening the configuration. Run `ruff format chronicler tests`
+All of them are blocking, with no per-module exemptions. The rendered UI tests in
+`tests/ui/` are not part of CI: run `scripts/ui_tests.sh` before pushing a change to the
+desktop views. Prefer a narrow `# type: ignore[code]` over widening the configuration. Run `ruff format chronicler tests`
 before pushing to clear a formatting failure.
 
 Every job sets up through `.github/actions/setup`, so a new job or platform reuses that
