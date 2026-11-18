@@ -126,7 +126,21 @@ jobs:
 
       - name: Show the verbose Flutter log
         if: failure()
-        run: tail -n 300 "$RUNNER_TEMP/flutter.log"
+        run: tail -n 120 "$RUNNER_TEMP/flutter.log"
+
+      # TEMPORARY: the client under `flutter test` alone, with and without software GL.
+      - name: Run the client test alone
+        if: failure()
+        working-directory: ${{ env.FLET_TEST_FLUTTER_APP_DIR }}
+        run: |
+          for gl in 1 0; do
+            echo "::group::LIBGL_ALWAYS_SOFTWARE=$gl"
+            LIBGL_ALWAYS_SOFTWARE=$gl GDK_BACKEND=x11 timeout 90 xvfb-run -a -s "-screen 0 1600x1000x24" \
+              flutter test integration_test -d linux --reporter expanded \
+              --dart-define=FLET_TEST_APP_URL=tcp://127.0.0.1:9 || echo "exit code $?"
+            echo "::endgroup::"
+          done
+          sudo dmesg | tail -n 30 || true
 
       - name: Upload the screens of failed tests
         if: failure()
