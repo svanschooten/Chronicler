@@ -32,36 +32,12 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Releasing $version from tag $RAW_TAG"
 
-  # The same gates as CI, on the commit being released: a tag given to workflow_dispatch can
-  # point at a commit CI never ran on. Nothing is built unless these pass.
+  # Every CI gate, on the commit being released: CI only runs on master and pull requests,
+  # and a tag can point at a commit it never saw. Nothing is built unless these pass.
   checks:
-    name: Checks on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: true
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - uses: ./.github/actions/setup
-
-      - name: Check Ruff
-        if: runner.os == 'Linux'
-        run: ruff check chronicler tests
-
-      - name: Check Ruff Format
-        if: runner.os == 'Linux'
-        run: ruff format --check chronicler tests
-
-      - name: Check Mypy
-        if: runner.os == 'Linux'
-        run: mypy chronicler tests
-
-      - name: Run the tests
-        shell: bash
-        run: pytest --cov=chronicler --cov-report=term --cov-fail-under=80
+    uses: ./.github/workflows/continuous-integration-workflow.yml
+    with:
+      ref: ${{ github.event.release.tag_name || inputs.tag }}
 
   pack:
     name: Pack on ${{ matrix.os }}
@@ -85,6 +61,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # The tag, not the ref the run started on: a manual run is usually started
+          # from master, and must still build what the tag points at.
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
 
       - name: Stamp release version
         shell: bash
@@ -165,6 +145,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # The tag, not the ref the run started on: a manual run is usually started
+          # from master, and must still build what the tag points at.
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
 
       - name: Stamp release version
         env:
