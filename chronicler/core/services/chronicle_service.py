@@ -80,13 +80,13 @@ class ChronicleService:
     async def get_chronicle(self, chronicle_id: UUID) -> Chronicle | None:
         return await self.repository.get_by_id(chronicle_id)
 
-    async def create_chronicle(self, title: str, source_file: str | None = None) -> Chronicle:
+    async def create_chronicle(self, title: str) -> Chronicle:
         """
         A new chronicle, its database in the workspace. A database elsewhere is only ever
         linked, through `link_external_chronicle`, which checks the file first: naming a
         path here let a caller have Chronicler's tables written into any SQLite file.
         """
-        return await self.repository.create(Chronicle(title=title, source_file=source_file))
+        return await self.repository.create(Chronicle(title=title))
 
     async def link_external_chronicle(self, project_path: str) -> Chronicle:
         """

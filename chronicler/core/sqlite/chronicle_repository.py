@@ -35,7 +35,6 @@ class SQLiteChronicleRepository(ChronicleRepository):
             description=chronicle.description,
             kind=chronicle.kind,
             status=chronicle.status,
-            source_file=chronicle.source_file,
             project_path=chronicle.project_path,
             duration=chronicle.duration,
             speakers_count=chronicle.speakers_count,
@@ -57,7 +56,6 @@ class SQLiteChronicleRepository(ChronicleRepository):
             db_chronicle.description = chronicle.description
             db_chronicle.kind = chronicle.kind
             db_chronicle.status = chronicle.status
-            db_chronicle.source_file = chronicle.source_file
             db_chronicle.project_path = chronicle.project_path
             db_chronicle.duration = chronicle.duration
             db_chronicle.speakers_count = chronicle.speakers_count

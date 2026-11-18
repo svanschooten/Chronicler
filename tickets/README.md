@@ -44,8 +44,8 @@ Merged tickets are left in for context.
 | ---- | ----- | --- |
 | Worker and task queue | 007 → 009 → 069 → 022 → 077 → 064 → 040 | Same files in `core/workers.py` and `task_repository.py` |
 | Task handlers | 010 → 011 → 035 → 032 → 064 → 040 | Same files in `core/processing/handlers/` |
-| Project migrations | 010 → 020 → 074 → 063 → 029 | Each adds an Alembic revision on the project chain (head `c5e8a1f3d920`). Rebase `down_revision` on whatever merged last. 074 settles the compatibility rule before the next revision |
-| Archive migrations | 022 → 029 | Same for the archive chain (head `b4d7e2a9c156`) |
+| Project migrations | 010 → 020 → 074 → 063 → 029 | Each adds an Alembic revision on the project chain (head `74deed8515be`). Rebase `down_revision` on whatever merged last. 074 settles the compatibility rule before the next revision |
+| Archive migrations | 022 → 029 | Same for the archive chain (head `400807e8a72f`) |
 | Chronicle service and repository | 072 → 032 → 076 → 075 → 029 → 066 | Same parts of `chronicle_service.py` and `chronicle_repository.py` |
 | Archive view | 072 → 063 → 078 | Same parts of `desktop/views/archive/view.py` |
 | Dialogs and recording | 073 → 036 | Same code in `desktop/dialogs.py` and `views/transcript/recording.py` |

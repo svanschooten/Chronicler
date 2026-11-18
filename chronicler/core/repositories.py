@@ -6,7 +6,6 @@ from chronicler.core.models import (
     Chronicle,
     KnownSpeaker,
     Speaker,
-    Tag,
     Task,
     TranscriptLine,
 )
@@ -43,24 +42,6 @@ class ChronicleRepository(ABC):
         Attach a tag to a chronicle, creating the tag if a tag with this name doesn't
         exist yet.
         """
-        pass
-
-
-class TagRepository(ABC):
-    @abstractmethod
-    async def get_all(self) -> list[Tag]:
-        pass
-
-    @abstractmethod
-    async def create(self, tag: Tag) -> Tag:
-        pass
-
-    @abstractmethod
-    async def delete(self, tag_id: UUID) -> None:
-        pass
-
-    @abstractmethod
-    async def search(self, query: str) -> list[Tag]:
         pass
 
 
@@ -140,10 +121,6 @@ class TranscriptRepository(ABC):
         pass
 
     @abstractmethod
-    async def add_line(self, line: TranscriptLine) -> TranscriptLine:
-        pass
-
-    @abstractmethod
     async def add_lines(self, lines: list[TranscriptLine]) -> None:
         pass
 
@@ -192,7 +169,6 @@ class AudioSourceRepository(ABC):
         filename: str,
         content_hash: str | None = None,
         size_bytes: int | None = None,
-        duration_seconds: float | None = None,
     ) -> AudioSource:
         """Creates the row for `filename`, or refreshes the content of an existing one."""
 
@@ -255,8 +231,4 @@ class KnownSpeakerRepository(ABC):
 
     @abstractmethod
     async def list_names(self) -> list[str]:
-        pass
-
-    @abstractmethod
-    async def search(self, query: str) -> list[str]:
         pass

@@ -121,8 +121,8 @@ async def test_export_plaintext_omits_timestamps_by_default(tmp_path):
         async with project_session:
             repo = SQLiteTranscriptRepository(project_session)
             gm = await repo.get_or_create_speaker("GM")
-            await repo.add_line(
-                TranscriptLine(speaker_id=gm.id, start_time=65.0, end_time=70.0, text="Hi")
+            await repo.add_lines(
+                [TranscriptLine(speaker_id=gm.id, start_time=65.0, end_time=70.0, text="Hi")]
             )
             await project_session.commit()
 
@@ -203,8 +203,12 @@ async def test_export_plaintext_wraps_long_merged_lines_with_hanging_indent(tmp_
         async with project_session:
             repo = SQLiteTranscriptRepository(project_session)
             speaker = await repo.get_or_create_speaker("GM")
-            await repo.add_line(
-                TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text=long_text)
+            await repo.add_lines(
+                [
+                    TranscriptLine(
+                        speaker_id=speaker.id, start_time=0.0, end_time=1.0, text=long_text
+                    )
+                ]
             )
             await project_session.commit()
 

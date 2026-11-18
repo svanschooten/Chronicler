@@ -300,7 +300,7 @@ class TestExportZip:
         db_manager = DatabaseManager(tmp_path)
         await db_manager.init_archive()
         chronicle = await _chronicle_with_a_transcript(db_manager)
-        sources = db_manager.get_chronicle_sources_path(str(chronicle.id))
+        sources = db_manager.ensure_sources_path_for(str(chronicle.id))
         (sources / "alice.wav").write_bytes(b"RIFF" + b"\x00" * 2048)
         (sources / "alice.normalized.wav").write_bytes(b"RIFF" + b"\x00" * 2048)
 

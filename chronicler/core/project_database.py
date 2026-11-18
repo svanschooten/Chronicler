@@ -42,7 +42,6 @@ class DBAudioSource(ProjectBase):
     filename: Mapped[str] = mapped_column(String(1024), unique=True)
     content_hash: Mapped[str | None] = mapped_column(String(64))
     size_bytes: Mapped[int | None] = mapped_column(Integer)
-    duration_seconds: Mapped[float | None] = mapped_column(Float)
     added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     # Seconds added to every timestamp this track produces, so sequential parts of one
     # recording line up instead of interleaving.

@@ -110,10 +110,10 @@ async def test_a_closed_project_can_be_reopened(tmp_path):
     await db_manager.close_all()
 
 
-def test_get_chronicle_sources_path_creates_directory(tmp_path):
+def test_ensure_sources_path_for_creates_the_chronicles_sources_dir(tmp_path):
     db_manager = DatabaseManager(tmp_path)
 
-    path = db_manager.get_chronicle_sources_path("test-chronicle")
+    path = db_manager.ensure_sources_path_for("test-chronicle")
 
     assert path == tmp_path / "chronicles" / "test-chronicle" / "sources"
     assert path.is_dir()

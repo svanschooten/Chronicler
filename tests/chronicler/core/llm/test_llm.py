@@ -233,7 +233,6 @@ class TestReasoningReplies:
 
         assert draft.chunk_count > 1
         assert draft.content == "- a point"
-        assert all(note == "- a point" for note in draft.chunk_summaries)
 
 
 class TestDiscoverModels:
@@ -352,7 +351,6 @@ class TestSummarizeTranscript:
 
         assert draft.chunk_count > 1
         assert len(client.prompts) == draft.chunk_count + 1
-        assert draft.chunk_summaries
 
     class _WindowedClient:
         """
@@ -398,7 +396,8 @@ class TestSummarizeTranscript:
         assert client.prompts[-1].startswith(settings.recap_prompt)
         condensing = [p for p in client.prompts if p.startswith(settings.condense_prompt)]
         assert condensing
-        assert len(draft.chunk_summaries) == draft.chunk_count
+        extracting = [p for p in client.prompts if p.startswith(settings.chunk_prompt)]
+        assert len(extracting) == draft.chunk_count
 
     @pytest.mark.asyncio
     async def test_a_long_recap_prompt_is_budgeted(self):

@@ -112,14 +112,8 @@ class ChronicleActions(ft.Row):
     async def import_transcript_clicked(self, e):
         await self.operations.begin_transcript_import(self.chronicle)
 
-    async def transcript_import_confirmed(self, e=None):
-        await self._after(await self.operations.finish_transcript_import())
-
     async def edit_clicked(self, e):
         await self.operations.begin_edit(self.chronicle)
-
-    async def edit_save_clicked(self, e=None):
-        await self._after(await self.operations.finish_edit())
 
     async def delete_clicked(self, e):
         if await self.operations.delete(self.chronicle):

@@ -1,7 +1,7 @@
 """Two-stage transcript summarisation: extract per chunk, then write one recap."""
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from chronicler.core.config_sections import SummarySettings
 from chronicler.core.llm.client import LlmClient, LlmError
@@ -19,7 +19,6 @@ class SummaryDraft:
     model: str
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    chunk_summaries: list[str] = field(default_factory=list)
 
 
 def transcript_text(lines: list[TranscriptLine]) -> str:
@@ -184,5 +183,4 @@ async def summarize_transcript(
         model=recap.model or used_model,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
-        chunk_summaries=extracted,
     )

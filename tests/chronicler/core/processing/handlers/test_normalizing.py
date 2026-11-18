@@ -40,7 +40,7 @@ async def _fixture(tmp_path, settings=None):
     await db_manager.init_archive()
     handlers = WorkerHandlers(db_manager, settings=settings)
     chronicle_id = uuid4()
-    sources = db_manager.get_chronicle_sources_path(str(chronicle_id))
+    sources = db_manager.ensure_sources_path_for(str(chronicle_id))
     audio = write_tone(sources / "gm.wav")
     return db_manager, handlers, chronicle_id, audio
 

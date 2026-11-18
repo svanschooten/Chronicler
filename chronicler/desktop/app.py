@@ -352,8 +352,3 @@ class DesktopApp:
             settings=self.runtime.settings,
             on_reload=self.update_view,
         )
-
-
-def run_app(runtime: DesktopRuntime):
-    app = DesktopApp(runtime)
-    ft.run(app.main)

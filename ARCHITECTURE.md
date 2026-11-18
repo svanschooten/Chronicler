@@ -86,7 +86,7 @@ Where each part of the above actually lives.
 | `chronicler/core/container.py` | DI container; `create_scope()` is what gives each unit of work its own session |
 | `chronicler/core/local_container.py` | The registrations every local (non-remote) container shares |
 | `chronicler/core/remote.py` | `RemoteContainer` / `RemoteServiceProxy` — the thin client's stand-in for a container |
-| `chronicler/core/rpc.py` | `@service` registry, and the FastAPI app generated from it (plus `/upload`) |
+| `chronicler/core/rpc.py` | The `@service` decorator, and the FastAPI app generated from the services `RpcServer` is given (plus `/upload`) |
 | `chronicler/core/models.py` | Pydantic domain models crossing every boundary |
 | `chronicler/core/repositories.py` | Repository interfaces |
 | `chronicler/core/sqlite/` | SQLite implementations of those interfaces |

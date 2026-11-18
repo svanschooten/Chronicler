@@ -5,13 +5,11 @@ from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.repositories import (
     ChronicleRepository,
     KnownSpeakerRepository,
-    TagRepository,
     TaskRepository,
 )
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
     SQLiteKnownSpeakerRepository,
-    SQLiteTagRepository,
     SQLiteTaskRepository,
 )
 
@@ -26,5 +24,4 @@ def register_local_repositories(container: Container, db_manager: DatabaseManage
     container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
     container.register_factory(ChronicleRepository, SQLiteChronicleRepository)  # type: ignore[type-abstract]
     container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
-    container.register_factory(TagRepository, SQLiteTagRepository)  # type: ignore[type-abstract]
     container.register_factory(KnownSpeakerRepository, SQLiteKnownSpeakerRepository)  # type: ignore[type-abstract]

@@ -5,11 +5,10 @@ from datetime import datetime
 import pytest
 from sqlalchemy import select
 
-from chronicler.core.database import chronicle_tags
+from chronicler.core.database import DBTag, chronicle_tags
 from chronicler.core.models import Chronicle, Task, TaskType
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
-    SQLiteTagRepository,
     SQLiteTaskRepository,
 )
 
@@ -96,7 +95,7 @@ async def test_add_tag_reuses_existing_tag_by_name(async_session):
     await repo.add_tag(c1.id, "Transcript")
     await repo.add_tag(c2.id, "Transcript")
 
-    tags = await SQLiteTagRepository(async_session).get_all()
+    tags = (await async_session.execute(select(DBTag))).scalars().all()
     assert len(tags) == 1
 
 
@@ -239,15 +238,3 @@ async def test_chronicle_project_path(async_session):
 
     fetched = await repo.get_by_id(chronicle.id)
     assert fetched.project_path == "/external/path/project.db"
-
-
-@pytest.mark.asyncio
-async def test_chronicle_source_file(async_session):
-    repo = SQLiteChronicleRepository(async_session)
-    chronicle = Chronicle(title="Audio File", source_file="/path/to/audio.mp3")
-
-    created = await repo.create(chronicle)
-    assert created.source_file == "/path/to/audio.mp3"
-
-    fetched = await repo.get_by_id(chronicle.id)
-    assert fetched.source_file == "/path/to/audio.mp3"

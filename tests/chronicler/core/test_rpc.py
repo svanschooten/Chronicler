@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from chronicler.core.container import Container
 from chronicler.core.remote import RemoteContainer
-from chronicler.core.rpc import RpcServer, exposed_methods, get_services, service
+from chronicler.core.rpc import RpcServer, exposed_methods, service
 
 
 class Item(BaseModel):
@@ -151,10 +151,9 @@ async def build_upload_app():
         from sqlalchemy.ext.asyncio import AsyncSession
 
         from chronicler.core.database_manager import DatabaseManager
-        from chronicler.core.repositories import ChronicleRepository, TagRepository, TaskRepository
+        from chronicler.core.repositories import ChronicleRepository, TaskRepository
         from chronicler.core.sqlite import (
             SQLiteChronicleRepository,
-            SQLiteTagRepository,
             SQLiteTaskRepository,
         )
 
@@ -167,7 +166,6 @@ async def build_upload_app():
         container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
         container.register_factory(ChronicleRepository, SQLiteChronicleRepository)
         container.register_factory(TaskRepository, SQLiteTaskRepository)
-        container.register_factory(TagRepository, SQLiteTagRepository)
 
         server = RpcServer(container=container, services=[], api_key="test-key")
         return server.build(), db_manager.get_imports_path()
@@ -319,17 +317,20 @@ class TestTheRealServices:
         assert "mark_source_transcribed" not in published
 
     def test_every_published_method_exists_and_is_async(self):
-        for cls in get_services():
+        from chronicler.core.services import (
+            ChronicleService,
+            SystemService,
+            TaskService,
+            TranscriptService,
+        )
+
+        for cls in (ChronicleService, TranscriptService, TaskService, SystemService):
             for name in exposed_methods(cls):
                 method = getattr(cls, name, None)
                 assert method is not None, f"{cls.__name__}.{name}"
                 assert inspect.iscoroutinefunction(method), f"{cls.__name__}.{name}"
 
     def test_the_published_surface_is_what_we_think_it_is(self):
-        """
-        Counted per service rather than off `get_services()`, which is process-global and
-        collects the test-only services other modules register.
-        """
         from chronicler.core.services import (
             ChronicleService,
             SystemService,

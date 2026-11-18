@@ -14,7 +14,7 @@ from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.local_container import register_local_repositories
 from chronicler.core.models import Chronicle, TranscriptLine
-from chronicler.core.repositories import ChronicleRepository, TagRepository, TaskRepository
+from chronicler.core.repositories import ChronicleRepository, TaskRepository
 from chronicler.core.rpc import RpcServer, TempFile, service
 from chronicler.core.services import (
     ChronicleService,
@@ -83,8 +83,8 @@ async def test_server_builds_without_error(tmp_path):
 @pytest.mark.asyncio
 async def test_every_repository_is_concrete_enough_to_resolve(tmp_path):
     """
-    Reproduces the historical blocker directly: resolving a service used to raise
-    TypeError because SQLiteTagRepository didn't implement the abstract `search` method.
+    Resolving a service used to raise TypeError because a registered repository left an
+    abstract method unimplemented.
     """
     db_manager = DatabaseManager(tmp_path)
     try:
@@ -93,7 +93,6 @@ async def test_every_repository_is_concrete_enough_to_resolve(tmp_path):
         container = Container()
         register_local_repositories(container, db_manager)
 
-        assert container.resolve(TagRepository) is not None
         assert container.resolve(TaskRepository) is not None
         assert container.resolve(ChronicleRepository) is not None
     finally:
@@ -244,8 +243,8 @@ async def test_transcript_reachable_over_rpc(tmp_path):
         async with project_session:
             repo = SQLiteTranscriptRepository(project_session)
             speaker = await repo.get_or_create_speaker("Alice")
-            await repo.add_line(
-                TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Hi")
+            await repo.add_lines(
+                [TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Hi")]
             )
             await project_session.commit()
 
@@ -409,8 +408,8 @@ async def test_document_exports_reach_a_thin_client(tmp_path, monkeypatch):
         async with await db_manager.get_project_session(str(chronicle.id)) as project_session:
             repo = SQLiteTranscriptRepository(project_session)
             speaker = await repo.get_or_create_speaker("Alice")
-            await repo.add_line(
-                TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Hi")
+            await repo.add_lines(
+                [TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Hi")]
             )
             await project_session.commit()
 

@@ -6,10 +6,10 @@ from unittest.mock import MagicMock
 import flet as ft
 import pytest
 
-from chronicler.desktop.dialogs import Choice, ask_choice, ask_text, confirm
+from chronicler.desktop.dialogs import Choice, ask_choice, confirm
 
 
-async def _click(coro, button_index: int, before_click=None):
+async def _click(coro, button_index: int):
     """
     Starts `coro`, lets it reach its shown-dialog await point, clicks the button at
     `button_index`, and returns (result, page, dialog).
@@ -20,8 +20,6 @@ async def _click(coro, button_index: int, before_click=None):
 
     page.show_dialog.assert_called_once()
     (dialog,), _ = page.show_dialog.call_args
-    if before_click is not None:
-        before_click(dialog)
     await dialog.actions[button_index].on_click(MagicMock())
 
     return await asyncio.wait_for(task, timeout=1), page, dialog
@@ -116,40 +114,6 @@ async def test_confirm_uses_a_custom_confirm_label():
     assert dialog.actions[1].content == "Discard"
 
 
-@pytest.mark.asyncio
-async def test_ask_text_resolves_to_the_fields_value_at_click_time():
-    """
-    The value getter has to be lazy: the user types *after* the dialog is built, so a button
-    bound to `field.value` as read at build time would always resolve to the field's initial
-    contents.
-    """
-    field = ft.TextField(label="Speaker name")
-
-    async def call(page):
-        return await ask_text(page, "Transcribe", "Which speaker?", field, "Transcribe")
-
-    def type_into_field(_dialog):
-        field.value = "Bob"
-
-    result, page, dialog = await _click(call, button_index=1, before_click=type_into_field)
-
-    assert result == "Bob"
-    assert dialog.actions[1].content == "Transcribe"
-    page.pop_dialog.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_ask_text_resolves_to_none_on_cancel():
-    field = ft.TextField(value="typed but abandoned")
-
-    async def call(page):
-        return await ask_text(page, "T", "M", field)
-
-    result, _, _ = await _click(call, button_index=0)
-
-    assert result is None
-
-
 async def _dismiss(coro):
     """Starts `coro`, then closes its dialog the way Esc or a click outside does."""
     page = MagicMock(spec=ft.Page)
@@ -180,11 +144,3 @@ async def test_dismissing_a_confirm_means_no():
         return await confirm(page, "T", "M")
 
     assert await _dismiss(call) is False
-
-
-@pytest.mark.asyncio
-async def test_dismissing_a_text_dialog_means_cancelled():
-    async def call(page):
-        return await ask_text(page, "T", "M", ft.TextField(value="x"))
-
-    assert await _dismiss(call) is None

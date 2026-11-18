@@ -46,7 +46,6 @@ class SQLiteAudioSourceRepository(AudioSourceRepository):
         filename: str,
         content_hash: str | None = None,
         size_bytes: int | None = None,
-        duration_seconds: float | None = None,
     ) -> AudioSource:
         row = await self._row(filename)
         if row is None:
@@ -56,8 +55,6 @@ class SQLiteAudioSourceRepository(AudioSourceRepository):
         row.content_hash = content_hash
         if size_bytes is not None:
             row.size_bytes = size_bytes
-        if duration_seconds is not None:
-            row.duration_seconds = duration_seconds
 
         await self.session.flush()
         await self.session.refresh(row)
