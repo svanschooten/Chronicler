@@ -13,6 +13,7 @@ packages (`__init__.py`) because the mirrored layout repeats module names.
 | `two_sessions` | `tests/conftest.py` | A file-backed workspace with two independent sessions on `chronicler.db`, for lock contention |
 | `mock_flet_app` | `tests/conftest.py` | Autouse; stops anything from opening a real window |
 | `attach_page` | `tests/chronicler/desktop/conftest.py` | Gives a Flet control a stand-in `page`, since `Control.page` is a read-only property that raises when unattached |
+| `tester` | `tests/ui/conftest.py` | The desktop app on a seeded workspace, drawn by a real Flutter client; see [Rendered UI tests](#rendered-ui-tests) |
 
 `tests/paths.py` holds repo-relative paths for fixture files, so no test walks
 `parents[n]` to find one. `tests/chronicler/desktop/controls.py` has helpers for
@@ -23,6 +24,59 @@ asserting against a built Flet control tree.
 Views are tested by building them and inspecting the controls they produced. Nothing
 renders. Logic worth testing without a page attached is deliberately kept out of the
 views — `ImportCoordinator` is the clearest example.
+
+A control tree cannot show what the Flutter client actually draws, so a few flows also
+run against the real client: see [Rendered UI tests](#rendered-ui-tests).
+
+## Rendered UI tests
+
+`tests/ui/` runs the desktop app in full-stack mode on a seeded workspace and drives a
+real Flutter client through `flet.testing`: finding text and tooltips, tapping, typing.
+The `tester` fixture in `tests/ui/conftest.py` starts both, and fails any test that
+leaves "Unknown control" on screen, which is what the client draws for a control it
+cannot render. The FilePicker that was once added to `page.overlay` did that, and no
+control-tree test could see it.
+
+They are slow, about 25 seconds a test, since each starts its own `flutter test`. Keep
+them to flows a control tree cannot check: what is on screen after a click, a dialog
+that closes, an edit that shows up.
+
+**The client.** `flet.testing` in host mode needs a Flutter app to connect from.
+`scripts/ui_host.py` fetches Flet's own `client/` at the tag of the installed Flet and
+trims it. It removes every Flet extension, which Chronicler does not use and which need
+system libraries for video, maps and web views. It also lifts Flet's `jni: 1.0.0`
+override to `^1.1.1`, without which `flutter pub get` fails on current packages. Flet
+pins it for an ARM64 build bug, dart-lang/native#3498. Drop the override once that is
+fixed.
+
+**Running them.** They are only collected when `FLET_TEST_FLUTTER_APP_DIR` is set, so
+the ordinary `pytest` run skips the folder. On Linux, with `clang ninja-build
+libgtk-3-dev xvfb` from apt and the Flutter version the installed Flet names
+(`python scripts/ui_host.py --flutter-version`) on `PATH`:
+
+```bash
+pip install "flet[test]==$(python -c 'from importlib.metadata import version; print(version("flet"))')"
+```
+
+```bash
+export FLET_TEST_FLUTTER_APP_DIR=$(python scripts/ui_host.py build/ui-host)
+```
+
+```bash
+GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s "-screen 0 1600x1000x24" pytest tests/ui
+```
+
+Without `GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1` the tests still pass on Xvfb but
+nothing is drawn. Under WSL, also unset `WAYLAND_DISPLAY`. The first run builds the
+client, which takes about a minute.
+
+**Screens of failures.** Flet takes app screenshots only on Android and iOS. Set
+`CHRONICLER_UI_SCREENSHOTS` to a folder, with `ffmpeg` installed, and the fixture grabs
+the X display there when a test fails.
+
+**Flutter's package cache.** Every test points `HOME` at a temporary folder, and Flutter
+keeps its packages under `HOME`. The conftest sets `PUB_CACHE` to the real cache first,
+or every test downloads the packages again into a folder pytest later deletes.
 
 ## Isolation from the developer's machine
 
@@ -53,7 +107,9 @@ pytest --cov=chronicler --cov-report=term --cov-fail-under=80
 ```
 
 The tests run on Ubuntu and Windows; the other checks run once, on Ubuntu.
-All of them are blocking, with no per-module exemptions. Prefer a narrow
+All of them are blocking, with no per-module exemptions. The **Rendered UI** job runs
+`tests/ui/` on Ubuntu, and is not blocking until it has shown it is not flaky; when it
+fails, it uploads a grab of the screen for each failed test. Prefer a narrow
 `# type: ignore[code]` over widening the configuration. Run `ruff format chronicler tests`
 before pushing to clear a formatting failure.
 
