@@ -77,6 +77,10 @@ The usual causes: a `DatabaseManager` with no `close_all()` (give it a fixture t
 closes it), and `with sqlite3.connect(...)`, which commits but does not close. Use
 `with closing(sqlite3.connect(...)) as connection, connection:` for both.
 
+The guard only sees what Python warns about. Files and `aiosqlite` connections warn on
+Python 3.12, which CI runs. A plain `sqlite3` connection warns only from Python 3.13, so
+on 3.12 an unclosed one passes unnoticed: close it all the same.
+
 `faster-whisper` is deliberately **not** installed in CI. It is an optional extra,
 imported lazily, and ships no `py.typed` marker, so mypy has an `ignore_missing_imports`
 override for it.
