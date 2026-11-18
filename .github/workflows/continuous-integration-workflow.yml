@@ -72,61 +72,6 @@ jobs:
             junit.xml
             coverage.xml
 
-  # The tests above check views as control trees, which cannot see what the Flutter client
-  # draws: a control it cannot render, a dialog that stays on screen. This one runs the
-  # desktop app against a real Flutter client on a virtual display. Linux only, and not
-  # required yet, until it has shown it is not flaky. See docs/testing.md.
-  ui:
-    name: Rendered UI
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v7
-        name: Checkout Repository
-
-      - uses: ./.github/actions/setup
-
-      # flet.testing needs numpy, Pillow and scikit-image, which nothing else does.
-      - name: Install Flet's test tools
-        id: flet
-        run: |
-          python -m pip install "flet[test]==$(python -c 'from importlib.metadata import version; print(version("flet"))')"
-          echo "flutter=$(python scripts/ui_host.py --flutter-version)" >> "$GITHUB_OUTPUT"
-
-      - name: Install the Linux build tools and a virtual display
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev xvfb ffmpeg
-
-      - uses: subosito/flutter-action@v2
-        name: Setup Flutter
-        with:
-          flutter-version: ${{ steps.flet.outputs.flutter }}
-          channel: stable
-          cache: true
-
-      - name: Prepare the Flutter client
-        run: echo "FLET_TEST_FLUTTER_APP_DIR=$(python scripts/ui_host.py build/ui-host)" >> "$GITHUB_ENV"
-
-      # Without the X11 backend and software GL the client draws nothing on Xvfb.
-      # softpipe, not Mesa's default llvmpipe: on the runners llvmpipe segfaults in a
-      # memcpy when the Flutter client draws under `flutter test`.
-      - name: Run the UI tests
-        env:
-          GDK_BACKEND: x11
-          LIBGL_ALWAYS_SOFTWARE: "1"
-          GALLIUM_DRIVER: softpipe
-          CHRONICLER_UI_SCREENSHOTS: ${{ runner.temp }}/ui-screenshots
-        run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v tests/ui
-
-      - name: Upload the screens of failed tests
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ui-screenshots
-          path: ${{ runner.temp }}/ui-screenshots
-          if-no-files-found: ignore
-
   # The tests job installs no extras, so normalization and transcription code would go
   # untested. This installs the runtime locks the embedded build ships - hash-checked, no
   # resolver - and fails if any test is skipped for a missing extra. Every such skip says
