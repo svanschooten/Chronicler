@@ -30,7 +30,8 @@ fails them, which no control-tree test could see. About 25 s a test.
 
 They found a bug on the first run: clicking "Finish editing" right after typing showed
 the old text, because the blur's save had not landed when the view reloaded. Fixed in
-the follow-up PR, which also removes that test's `xfail`.
+this ticket's PR: leaving edit mode, paging and deleting a line now wait for every save
+still running, and the UI test for it passes.
 
 What it took:
 
