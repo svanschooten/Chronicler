@@ -66,3 +66,12 @@ def test_trim_pubspec_drops_extensions_and_lifts_jni():
 def test_trim_pubspec_fails_on_an_extension_it_cannot_remove():
     with pytest.raises(ValueError, match="../sdk/"):
         trim_pubspec("dependencies:\n  flet_x: {path: ../sdk/x}\n")
+
+
+def test_trim_pubspec_accepts_a_pubspec_without_the_jni_pin():
+    assert "jni" not in trim_pubspec("dependency_overrides:\n  flet:\n    path: ../x\n")
+
+
+def test_trim_pubspec_fails_on_a_jni_pin_it_cannot_lift():
+    with pytest.raises(ValueError, match="jni"):
+        trim_pubspec("dependency_overrides:\n  jni: 1.0.1\n")

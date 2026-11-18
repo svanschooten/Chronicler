@@ -38,6 +38,7 @@ JNI_LIFTED = "  jni: ^1.1.1\n"
 _EXTENSION_IMPORT = re.compile(r"""^import ['"]package:(flet_\w+)/[^;]*;\n""", re.MULTILINE)
 _EXTENSION_REGISTRATION = re.compile(r"^\s*\w+\.Extension\(\),\n", re.MULTILINE)
 _SDK_PATH_DEPENDENCY = re.compile(r"^  \w+:\n    path: \.\./sdk/[^\n]*\n", re.MULTILINE)
+_JNI_LINE = re.compile(r"^ *jni:.*$", re.MULTILINE)
 
 
 def trim_main(source: str) -> str:
@@ -55,7 +56,13 @@ def trim_pubspec(source: str) -> str:
     source = _SDK_PATH_DEPENDENCY.sub("", source)
     if "../sdk/" in source:
         raise ValueError("pubspec.yaml still depends on a package under ../sdk/")
-    return source.replace(JNI_PIN, JNI_LIFTED)
+    source = source.replace(JNI_PIN, JNI_LIFTED)
+    # No `jni` line at all is fine: upstream has dropped the pin. Any other form of it
+    # would be left in place and fail `flutter pub get` with a less helpful message.
+    for line in _JNI_LINE.findall(source):
+        if line != JNI_LIFTED.rstrip("\n"):
+            raise ValueError(f"pubspec.yaml pins jni in a form this script does not lift: {line}")
+    return source
 
 
 def fetch(tag: str, dest: Path) -> Path:
