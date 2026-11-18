@@ -115,7 +115,20 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
           FLET_TEST_VERBOSE: "1"
           CHRONICLER_UI_SCREENSHOTS: ${{ runner.temp }}/ui-screenshots
-        run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v -x tests/ui
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v -s -x tests/ui
+
+      # `flutter test` keeps the client's own stderr to itself, so a client that dies on
+      # start shows nothing above. Start it alone for a few seconds to see why.
+      - name: Start the client alone
+        if: failure()
+        env:
+          GDK_BACKEND: x11
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          (cd "$FLET_TEST_FLUTTER_APP_DIR" && flutter build linux --debug)
+          timeout 15 xvfb-run -a -s "-screen 0 1600x1000x24" \
+            "$FLET_TEST_FLUTTER_APP_DIR/build/linux/x64/debug/bundle/flet" tcp://127.0.0.1:9 \
+            || echo "exit code $?"
 
       - name: Upload the screens of failed tests
         if: failure()
