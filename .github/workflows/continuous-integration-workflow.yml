@@ -96,7 +96,7 @@ jobs:
       - name: Install the Linux build tools and a virtual display
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev xvfb ffmpeg
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libgl1-mesa-dri xvfb ffmpeg
 
       - uses: subosito/flutter-action@v2
         name: Setup Flutter
@@ -113,8 +113,9 @@ jobs:
         env:
           GDK_BACKEND: x11
           LIBGL_ALWAYS_SOFTWARE: "1"
+          FLET_TEST_VERBOSE: "1"
           CHRONICLER_UI_SCREENSHOTS: ${{ runner.temp }}/ui-screenshots
-        run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v tests/ui
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v -x tests/ui
 
       - name: Upload the screens of failed tests
         if: failure()

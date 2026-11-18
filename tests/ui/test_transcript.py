@@ -39,6 +39,7 @@ async def test_clicking_away_from_an_edited_line_saves_it(tester):
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="Clicking Finish blurs the field first. The blur starts the save, so the "
     "finish finds nothing open and reloads the read view before the save lands.",
 )
