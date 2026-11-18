@@ -108,7 +108,9 @@ pytest --cov=chronicler --cov-report=term --cov-fail-under=80
 
 The tests run on Ubuntu and Windows; the other checks run once, on Ubuntu.
 All of them are blocking, with no per-module exemptions. The **Rendered UI** job runs
-`tests/ui/` on Ubuntu, and is not blocking until it has shown it is not flaky; when it
+`tests/ui/` on Ubuntu 24.04, not `ubuntu-latest`: the Mesa on the newer image (26.0)
+segfaults in its software renderer when the Flutter client draws under `flutter test`.
+The job is not blocking until it has shown it is not flaky; when it
 fails, it uploads a grab of the screen for each failed test. Prefer a narrow
 `# type: ignore[code]` over widening the configuration. Run `ruff format chronicler tests`
 before pushing to clear a formatting failure.

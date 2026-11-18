@@ -78,7 +78,9 @@ jobs:
   # required yet, until it has shown it is not flaky. See docs/testing.md.
   ui:
     name: Rendered UI
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest: the Mesa there (26.0) segfaults in its software renderer when
+    # the Flutter client draws under `flutter test`. 24.04 ships Mesa 25.2, which works.
+    runs-on: ubuntu-24.04
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7
@@ -96,7 +98,7 @@ jobs:
       - name: Install the Linux build tools and a virtual display
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libgl1-mesa-dri xvfb ffmpeg gdb
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev xvfb ffmpeg
 
       - uses: subosito/flutter-action@v2
         name: Setup Flutter
@@ -108,47 +110,20 @@ jobs:
       - name: Prepare the Flutter client
         run: echo "FLET_TEST_FLUTTER_APP_DIR=$(python scripts/ui_host.py build/ui-host)" >> "$GITHUB_ENV"
 
-      # TEMPORARY diagnostics: flutter -v, logged in full.
-      - name: Wrap flutter
-        run: |
-          printf '#!/bin/bash\nflutter "$@" -v >> "%s/flutter.log" 2>&1\n' "$RUNNER_TEMP" > "$RUNNER_TEMP/flutter-v"
-          chmod +x "$RUNNER_TEMP/flutter-v"
-          echo "FLET_TEST_FLUTTER_EXE=$RUNNER_TEMP/flutter-v" >> "$GITHUB_ENV"
-
       # Without the X11 backend and software GL the client draws nothing on Xvfb.
       - name: Run the UI tests
         env:
           GDK_BACKEND: x11
           LIBGL_ALWAYS_SOFTWARE: "1"
-          FLET_TEST_VERBOSE: "1"
           CHRONICLER_UI_SCREENSHOTS: ${{ runner.temp }}/ui-screenshots
-        run: |
-          sudo sysctl -w kernel.core_pattern=/tmp/core.%p
-          ulimit -c unlimited
-          xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v -s -x -o log_cli=true --log-cli-level=WARNING tests/ui
-
-      - name: Show the verbose Flutter log
-        if: failure()
-        run: tail -n 120 "$RUNNER_TEMP/flutter.log"
-
-      # TEMPORARY: a backtrace from the client's core dump.
-      - name: Backtrace the client
-        if: failure()
-        run: |
-          for core in /tmp/core.*; do
-            gdb -batch -ex "bt 40" -ex "info sharedlibrary" \
-              "$FLET_TEST_FLUTTER_APP_DIR/build/linux/x64/debug/bundle/flet" "$core"
-            break
-          done
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" python -m pytest -v tests/ui
 
       - name: Upload the screens of failed tests
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: ui-screenshots
-          path: |
-            ${{ runner.temp }}/ui-screenshots
-            ${{ runner.temp }}/flutter.log
+          path: ${{ runner.temp }}/ui-screenshots
           if-no-files-found: ignore
 
   # The tests job installs no extras, so normalization and transcription code would go
