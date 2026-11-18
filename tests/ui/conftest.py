@@ -39,11 +39,12 @@ LONG_LINE = " ".join(["This line is long enough to wrap, so its middle is always
 
 if not os.environ.get(HOST_ENV_VAR):
     collect_ignore_glob = ["test_*.py"]
-
-# Every test points HOME at a temporary folder (`isolated_config`), and Flutter keeps its
-# package cache under HOME. Without this each test would download every Dart package
-# again into a folder pytest later deletes, and the build would break once it had.
-os.environ.setdefault("PUB_CACHE", str(Path.home() / ".pub-cache"))
+else:
+    # Every test points HOME at a temporary folder (`isolated_config`), and Flutter keeps
+    # its package cache under HOME. Without this each test would download every Dart
+    # package again into a folder pytest later deletes, and the build would break once it
+    # had. Set only here, so the ordinary run's environment is left alone.
+    os.environ.setdefault("PUB_CACHE", str(Path.home() / ".pub-cache"))
 
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
