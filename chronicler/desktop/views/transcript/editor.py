@@ -806,12 +806,18 @@ class TranscriptEditor(ft.Column):
     async def _finish_save(
         self, line: TranscriptLine, field: str, value: str, saves: _Saves
     ) -> bool:
-        stored = await self._save(line, **{field: value})
-        saves.pending -= 1
-        if stored is not None:
-            saves.confirmed = stored
+        stored: str | None = None
+        try:
+            stored = await self._save(line, **{field: value})
+        finally:
+            # Also when the save is cancelled, or the field's next save would count this
+            # one as still running and never settle.
+            saves.pending -= 1
+            if stored is not None:
+                saves.confirmed = stored
+            if saves.pending == 0:
+                self._saves.pop((field, str(line.id)), None)
         if saves.pending == 0:
-            self._saves.pop((field, str(line.id)), None)
             self._settle(line, field, saves.confirmed)
         return stored is not None
 

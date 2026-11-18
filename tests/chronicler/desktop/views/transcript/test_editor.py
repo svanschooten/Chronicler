@@ -892,6 +892,36 @@ class TestEditingText:
         await blurring
 
     @pytest.mark.asyncio
+    async def test_a_cancelled_save_does_not_hold_up_the_next_one(self, make_editor):
+        """
+        A cancelled save still counts as ended, or the field's next save would wait on
+        it forever and never settle the line.
+        """
+        editor, service = make_editor([_line("Old")])
+        await editor.load()
+        release = asyncio.Event()
+
+        async def stuck_save(*args, **kwargs):
+            await release.wait()
+
+        service.update_line.side_effect = stuck_save
+        await _open_text(editor)
+        editor.open.control.value = "Cancelled"
+        saving = editor._close(save=True)
+        await asyncio.sleep(0)
+        saving.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await saving
+
+        assert editor._saves == {}
+        assert not editor._running
+
+        service.update_line.side_effect = None
+        service.update_line.return_value = None
+        await _edit_text(editor, "Saved")
+        assert _shown_text(_row(editor)) == "Saved"
+
+    @pytest.mark.asyncio
     async def test_editing_does_not_reload_the_whole_list(self, make_editor):
         """Reloading on every save would throw away the scroll position."""
         editor, service = make_editor([_line("One")])
