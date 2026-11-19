@@ -2,22 +2,34 @@
 
 `chronicler/core/processing/`
 
-Three task handlers today: `IMPORT`, `CLEAN`, `TRANSCRIBE`. Each follows the same
-shape — look up the chronicle, open a session against its project database, rewrite
-transcript lines inside one transaction, then backfill whatever chronicle metadata the
-operation just made stale. That shape lives in `HandlerBase`, so each handler module
-contains only what makes it different.
+Five task handlers: `IMPORT`, `CLEAN`, `TRANSCRIBE`, `NORMALIZE` and `SUMMARIZE`. Each
+follows the same shape — look up the chronicle, open a session against its project
+database, rewrite transcript lines inside one transaction, then reconcile the chronicle's
+row with what the transcript now holds. The shared plumbing lives in `HandlerBase`, so each
+handler module contains only what makes it different.
 
-`WorkerHandlers` composes the three handler classes by inheritance rather than
-delegation, so they share one `db_manager`/`archive_sessions` pair with no forwarding
-boilerplate. The three classes are independent: they define disjoint `handle_*` methods
-and share only `HandlerBase`.
+Each handler is its own class over `HandlerBase`, and `build_worker_manager` makes one of
+each and registers its method for its `TaskType`. The one thing two handlers share beyond
+the base, normalizing a source, is a plain function in `handlers/normalizing.py` that
+`TRANSCRIBE` calls.
 
-`archive_sessions` is a session factory. `HandlerBase.chronicles()` opens a short session
-on it for each chronicle lookup or update, so no handler holds the archive open while it
-transcribes or summarizes. It is optional. Without it a handler still rewrites the
-transcript correctly; it just cannot tag the chronicle or backfill derived metadata.
-Tests that only care about transcript contents leave it out.
+`HandlerBase.chronicles()` opens a short archive session for each chronicle lookup or
+update, so no handler holds the archive open while it transcribes or summarizes. A
+handler needs a chronicle with a row in the archive: a task for a deleted chronicle fails
+with `LookupError` rather than creating one.
+
+## Reconciling the chronicle row
+
+`core/reconcile.py::reconcile` is the one place that derives a chronicle's speaker count,
+duration, tags and status from its transcript. Every handler that rewrites text calls it
+through `HandlerBase.reconcile`, and so do linking and restoring a snapshot, through
+`TranscriptService.refresh_speaker_count`. It sets:
+
+* the speaker count, the number of distinct speaker names on the lines;
+* the `Transcript` tag, once there are lines;
+* the duration, unless the timings are synthetic (see below);
+* the status: `Imported` becomes `Transcribed` once there are lines, and with summaries,
+  `Imported`, `Transcribed` and `Cleaned` become `Summarized`, which also adds that tag.
 
 ## Timestamps
 

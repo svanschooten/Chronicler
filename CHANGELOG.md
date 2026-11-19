@@ -62,6 +62,12 @@ holds the problem and its evidence.
   A new speaker can be added from the picker (084). Alt+arrows move the open field to the
   next or previous line (085).
 
+* **Wave 10, simplify the foundations.** The worker and its handlers: one class per task
+  type instead of one built by inheritance, one `reconcile` for a chronicle's derived
+  fields where five backfills were, a plain `claim_next`, and no sync-handler branch (040).
+  A speaker is counted once per name on the lines, so a speaker with no lines no longer
+  counts.
+
 Waves 9, 10 and 12 are still open.
 
 ## Sprints and earlier waves
