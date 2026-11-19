@@ -303,6 +303,11 @@ message rather than letting it reach Flet as an unhandled error.
   have no `ondelete=CASCADE` at the schema level, and SQLite does not enforce foreign
   keys by default here anyway, so orphaned task rows and tag associations are removed
   explicitly in the same transaction as the chronicle row.
+* **Tags are added and removed through `add_tag` and `remove_tag`.** Names match without
+  regard to case, so typing "Product" reuses "product". `remove_tag` deletes the tag row
+  once no chronicle links to it, so the workspace does not collect tags nothing uses. The
+  system tags (`Transcript`, `Summarized`) are ordinary tags that tasks add, and a user can
+  remove them like any other; `reconcile` puts them back the next time it runs.
 * **Chronicle search matches tags through a subquery, not a join**, so a chronicle
   carrying two matching tags is returned once rather than twice. A `DISTINCT` over the
   whole entity would work too, but only accidentally, and would need revisiting the
