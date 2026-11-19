@@ -63,12 +63,23 @@ def served_services() -> list[type]:
     """The service classes a server publishes. `RpcServer` serves only what it is given."""
     from chronicler.core.services import (
         ChronicleService,
+        ExportService,
+        SourceService,
+        SummaryService,
         SystemService,
         TaskService,
         TranscriptService,
     )
 
-    return [ChronicleService, SystemService, TaskService, TranscriptService]
+    return [
+        ChronicleService,
+        ExportService,
+        SourceService,
+        SummaryService,
+        SystemService,
+        TaskService,
+        TranscriptService,
+    ]
 
 
 def build_rpc_server(db_manager: DatabaseManager, settings: Settings) -> RpcServer:
