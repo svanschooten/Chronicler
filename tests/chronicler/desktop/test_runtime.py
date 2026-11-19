@@ -1,26 +1,33 @@
 import pytest
 
 from chronicler.core.config import Mode, Settings
-from chronicler.core.container import Container
 from chronicler.core.file_staging import LocalFileStager, RemoteFileStager
-from chronicler.core.remote import RemoteContainer
+from chronicler.core.remote import RemoteServiceProxy
+from chronicler.core.services import ChronicleService
 from chronicler.desktop.runtime import build_runtime
 
 
-def test_full_stack_settings_build_a_local_container(tmp_path):
+def _is_remote(runtime) -> bool:
+    """Whether the services this runtime makes are proxies for a server's."""
+    chronicles = runtime.new_services().chronicles
+    assert isinstance(chronicles, (RemoteServiceProxy, ChronicleService))
+    return isinstance(chronicles, RemoteServiceProxy)
+
+
+def test_full_stack_settings_build_local_services(tmp_path):
     settings = Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK)
     runtime = build_runtime(settings)
 
-    assert isinstance(runtime.resolver, Container)
+    assert not _is_remote(runtime)
     assert runtime.db_manager is not None
     assert isinstance(runtime.file_stager, LocalFileStager)
 
 
-def test_thin_client_settings_build_a_remote_container():
+def test_thin_client_settings_build_remote_services():
     settings = Settings(server_url="http://example.invalid", api_key="key", mode=Mode.THIN_CLIENT)
     runtime = build_runtime(settings)
 
-    assert isinstance(runtime.resolver, RemoteContainer)
+    assert _is_remote(runtime)
     assert runtime.db_manager is None
     assert isinstance(runtime.file_stager, RemoteFileStager)
 
@@ -35,14 +42,14 @@ def test_missing_mode_infers_thin_client_from_server_url_only(tmp_path):
     )
     runtime = build_runtime(settings)
 
-    assert isinstance(runtime.resolver, RemoteContainer)
+    assert _is_remote(runtime)
 
 
 def test_missing_mode_infers_full_stack_from_workspace_path(tmp_path):
     settings = Settings(workspace_path=tmp_path, mode=None)
     runtime = build_runtime(settings)
 
-    assert isinstance(runtime.resolver, Container)
+    assert not _is_remote(runtime)
 
 
 def test_thin_client_without_server_url_raises():
@@ -77,7 +84,7 @@ def test_a_web_client_config_starts_as_a_thin_client():
 
     runtime = build_runtime(settings)
 
-    assert isinstance(runtime.resolver, RemoteContainer)
+    assert _is_remote(runtime)
 
 
 @pytest.mark.asyncio
@@ -91,7 +98,7 @@ async def test_thin_client_shares_one_long_timeout_client():
     assert client.timeout.read == 600
     assert client.timeout.write == 600
     assert runtime.file_stager._client is client
-    assert runtime.resolver._client is client
+    assert runtime.new_services().chronicles._client is client
     await client.aclose()
 
 
@@ -120,4 +127,4 @@ def test_validation_and_build_runtime_agree(tmp_path, mode, server_url, has_work
     runtime = build_runtime(settings)
 
     thin = settings.desktop_mode is Mode.THIN_CLIENT
-    assert isinstance(runtime.resolver, RemoteContainer if thin else Container)
+    assert _is_remote(runtime) is thin

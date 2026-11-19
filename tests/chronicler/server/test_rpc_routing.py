@@ -10,19 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chronicler import __version__
 from chronicler.core.config import Settings
 from chronicler.core.config_sections import ServerSettings
-from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
-from chronicler.core.local_container import register_local_storage
 from chronicler.core.models import Chronicle, TranscriptLine
 from chronicler.core.rpc import RpcServer, TempFile, service
-from chronicler.core.services import (
-    ChronicleService,
-    TaskService,
-    TranscriptService,
-)
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
-    SQLiteKnownSpeakerRepository,
     SQLiteTaskRepository,
     SQLiteTranscriptRepository,
 )
@@ -59,6 +51,29 @@ class _SessionIdProbeService:
         return id(self.repository.session)  # type: ignore[attr-defined]
 
 
+def _probe_services(db_manager, service_cls, sessions=None):
+    """
+    The `new_services` for a probe service built on a task repository: each call opens a
+    session of its own, which `close` returns, as `local_services` does.
+    """
+
+    def new_services():
+        session = db_manager.get_archive_session()
+        if sessions is not None:
+            sessions.append(session)
+        instance = service_cls(SQLiteTaskRepository(session))
+
+        class _Set:
+            def of(self, _cls):
+                return instance
+
+            close = staticmethod(session.close)
+
+        return _Set()
+
+    return new_services
+
+
 def _build_server_app(tmp_path, api_key: str = "test-key", linked_chronicle_dirs=()):
     """The wiring `run_server` serves, from chronicler/server/main.py."""
     db_manager = DatabaseManager(tmp_path)
@@ -76,35 +91,6 @@ async def test_server_builds_without_error(tmp_path):
     try:
         await db_manager.init_archive()
         assert app is not None
-    finally:
-        await db_manager.close_all()
-
-
-@pytest.mark.asyncio
-async def test_the_local_registrations_are_enough_to_build_every_archive_repository(tmp_path):
-    """
-    The repositories are not registered: Container builds them from the archive session,
-    and they share that one session within a scope.
-    """
-    db_manager = DatabaseManager(tmp_path)
-    try:
-        await db_manager.init_archive()
-
-        container = Container()
-        register_local_storage(container, db_manager)
-
-        scope = container.create_scope()
-        session = scope.resolve(AsyncSession)
-        try:
-            repositories = (
-                SQLiteTaskRepository,
-                SQLiteChronicleRepository,
-                SQLiteKnownSpeakerRepository,
-            )
-
-            assert all(scope.resolve(cls).session is session for cls in repositories)
-        finally:
-            await session.close()
     finally:
         await db_manager.close_all()
 
@@ -173,15 +159,12 @@ async def test_each_request_gets_a_fresh_session(tmp_path):
         # Keep every session alive, so a freed one cannot pass its id() to the next.
         sessions: list[AsyncSession] = []
 
-        def make_session() -> AsyncSession:
-            sessions.append(db_manager.get_archive_session())
-            return sessions[-1]
-
-        container = Container()
-        container.register_instance(DatabaseManager, db_manager)
-        container.register_factory(AsyncSession, make_session)
-
-        server = RpcServer(container, services=[_SessionIdProbeService], api_key="probe-key")
+        server = RpcServer(
+            _probe_services(db_manager, _SessionIdProbeService, sessions),
+            db_manager,
+            services=[_SessionIdProbeService],
+            api_key="probe-key",
+        )
         app = server.build()
 
         headers = {"X-API-Key": "probe-key"}
@@ -202,11 +185,12 @@ async def test_request_scoped_session_is_closed_after_request(tmp_path, monkeypa
     try:
         await db_manager.init_archive()
 
-        container = Container()
-        container.register_instance(DatabaseManager, db_manager)
-        container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-
-        server = RpcServer(container, services=[_SessionIdProbeService], api_key="probe-key")
+        server = RpcServer(
+            _probe_services(db_manager, _SessionIdProbeService),
+            db_manager,
+            services=[_SessionIdProbeService],
+            api_key="probe-key",
+        )
         app = server.build()
 
         close_calls = 0
@@ -276,15 +260,15 @@ async def test_transcript_reachable_over_rpc(tmp_path):
 @pytest.mark.asyncio
 async def test_thin_client_full_flow_via_remote_container(tmp_path):
     """
-    End-to-end thin-client story through RemoteContainer specifically (not raw HTTP): create
+    End-to-end thin-client story through remote_services specifically (not raw HTTP): create
     a chronicle, queue a task, let the server's own WorkerManager pick it up, then read it
     back - exactly the flow a live smoke test against a real running server exercised, which
     is what surfaced two real bugs this covers as regressions: RemoteServiceProxy failing to
     serialize UUID arguments at all (test_remote.py), and queue_import/queue_clean missing
-    return type annotations, which silently made RemoteContainer callers get a raw dict back
+    return type annotations, which silently made remote service callers get a raw dict back
     instead of a Task (fixed in task_service.py).
     """
-    from chronicler.core.remote import RemoteContainer
+    from chronicler.core.services.services import remote_services
     from chronicler.core.worker_wiring import build_worker_manager
 
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
@@ -294,9 +278,9 @@ async def test_thin_client_full_flow_via_remote_container(tmp_path):
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
-            chronicle_service = remote.resolve(ChronicleService)
-            task_service = remote.resolve(TaskService)
+            remote = remote_services("http://test", "valid-key", client)
+            chronicle_service = remote.chronicles
+            task_service = remote.tasks
 
             chronicle = await chronicle_service.create_chronicle("Thin Client Flow")
             assert isinstance(chronicle, Chronicle)
@@ -316,7 +300,7 @@ async def test_thin_client_full_flow_via_remote_container(tmp_path):
 @pytest.mark.asyncio
 async def test_handshake_succeeds_against_a_real_server(tmp_path):
     from chronicler.core.handshake import perform_handshake
-    from chronicler.core.remote import RemoteContainer
+    from chronicler.core.services.services import remote_services
 
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
     try:
@@ -324,10 +308,10 @@ async def test_handshake_succeeds_against_a_real_server(tmp_path):
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
-            await remote.resolve(ChronicleService).create_chronicle("Existing")
+            remote = remote_services("http://test", "valid-key", client)
+            await remote.chronicles.create_chronicle("Existing")
 
-            info = await perform_handshake(remote)
+            info = await perform_handshake(remote.system)
 
             assert info.version == __version__
             assert info.chronicle_count == 1
@@ -339,7 +323,7 @@ async def test_handshake_succeeds_against_a_real_server(tmp_path):
 @pytest.mark.asyncio
 async def test_handshake_refuses_a_mismatched_server_version(tmp_path):
     from chronicler.core.handshake import HandshakeError, perform_handshake
-    from chronicler.core.remote import RemoteContainer
+    from chronicler.core.services.services import remote_services
 
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
     try:
@@ -347,11 +331,11 @@ async def test_handshake_refuses_a_mismatched_server_version(tmp_path):
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
+            remote = remote_services("http://test", "valid-key", client)
 
             with patch("chronicler.core.services.system_service.__version__", "9.9.9"):
                 with pytest.raises(HandshakeError, match="9.9.9"):
-                    await perform_handshake(remote)
+                    await perform_handshake(remote.system)
     finally:
         await db_manager.close_all()
 
@@ -359,18 +343,18 @@ async def test_handshake_refuses_a_mismatched_server_version(tmp_path):
 @pytest.mark.asyncio
 async def test_handshake_reports_an_unreachable_server(tmp_path):
     from chronicler.core.handshake import HandshakeError, perform_handshake
-    from chronicler.core.remote import RemoteContainer
+    from chronicler.core.services.services import remote_services
 
-    remote = RemoteContainer("http://127.0.0.1:9", api_key="valid-key")
+    remote = remote_services("http://127.0.0.1:9", "valid-key", AsyncClient())
 
     with pytest.raises(HandshakeError):
-        await perform_handshake(remote)
+        await perform_handshake(remote.system)
 
 
 @pytest.mark.asyncio
 async def test_handshake_rejects_a_wrong_api_key(tmp_path):
     from chronicler.core.handshake import HandshakeError, perform_handshake
-    from chronicler.core.remote import RemoteContainer
+    from chronicler.core.services.services import remote_services
 
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
     try:
@@ -378,10 +362,10 @@ async def test_handshake_rejects_a_wrong_api_key(tmp_path):
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            remote = RemoteContainer("http://test", client=client, api_key="wrong-key")
+            remote = remote_services("http://test", "wrong-key", client)
 
             with pytest.raises(HandshakeError):
-                await perform_handshake(remote)
+                await perform_handshake(remote.system)
     finally:
         await db_manager.close_all()
 
@@ -398,7 +382,7 @@ async def test_document_exports_reach_a_thin_client(tmp_path, monkeypatch):
     import zipfile
     from pathlib import Path
 
-    from chronicler.core.remote import RemoteContainer
+    from chronicler.core.services.services import remote_services
 
     scratch = tmp_path / "scratch"
     scratch.mkdir()
@@ -422,8 +406,8 @@ async def test_document_exports_reach_a_thin_client(tmp_path, monkeypatch):
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
-            transcripts = remote.resolve(TranscriptService)
+            remote = remote_services("http://test", "valid-key", client)
+            transcripts = remote.transcripts
 
             html = await transcripts.export_html(chronicle.id, "Remote Exports")
             pdf = await transcripts.export_pdf(chronicle.id, "Remote Exports")
@@ -535,7 +519,7 @@ async def test_a_thin_client_finds_a_spoken_phrase(tmp_path):
     import io
 
     from chronicler.core.models import TranscriptMatch
-    from chronicler.core.remote import RemoteContainer
+    from chronicler.core.services.services import remote_services
     from chronicler.core.worker_wiring import build_worker_manager
 
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
@@ -545,10 +529,10 @@ async def test_a_thin_client_finds_a_spoken_phrase(tmp_path):
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
-            chronicles = remote.resolve(ChronicleService)
-            tasks = remote.resolve(TaskService)
-            transcripts = remote.resolve(TranscriptService)
+            remote = remote_services("http://test", "valid-key", client)
+            chronicles = remote.chronicles
+            tasks = remote.tasks
+            transcripts = remote.transcripts
 
             chronicle = await chronicles.create_chronicle("Quarterly planning")
             transcript = b"Alice: Good morning everyone\nBob: Let's go over the budget for Q3\n"
@@ -578,25 +562,22 @@ async def test_a_refusal_reaches_a_thin_client_as_the_same_exception_and_message
     from uuid import uuid4
 
     from chronicler.core.processing.regex_guard import UnsafePatternError
-    from chronicler.core.remote import RemoteContainer
-    from chronicler.core.services.transcript_service import TranscriptService
+    from chronicler.core.services.services import remote_services
 
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
     try:
         await db_manager.init_archive()
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            remote = RemoteContainer("http://test", client=client, api_key="valid-key")
-            chronicle = await remote.resolve(ChronicleService).create_chronicle("Refusals")
+            remote = remote_services("http://test", "valid-key", client)
+            chronicle = await remote.chronicles.create_chronicle("Refusals")
 
             with pytest.raises(UnsafePatternError, match="Invalid regular expression"):
-                await remote.resolve(TaskService).queue_import(
-                    chronicle.id, "/imports/x.txt", regex="(unclosed"
-                )
+                await remote.tasks.queue_import(chronicle.id, "/imports/x.txt", regex="(unclosed")
 
             unknown = uuid4()
             with pytest.raises(LookupError, match=str(unknown)):
-                await remote.resolve(TranscriptService).get_transcript(unknown)
+                await remote.transcripts.get_transcript(unknown)
     finally:
         await db_manager.close_all()
 
@@ -639,10 +620,12 @@ async def test_only_a_temp_file_is_streamed_and_deleted(tmp_path):
         handed_over.write_bytes(b"PK")
         _PATH_PROBE_FILES.update(kept=kept, handed_over=handed_over)
 
-        container = Container()
-        container.register_instance(DatabaseManager, db_manager)
-        container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-        app = RpcServer(container, services=[_PathProbeService], api_key="probe-key").build()
+        app = RpcServer(
+            _probe_services(db_manager, _PathProbeService),
+            db_manager,
+            services=[_PathProbeService],
+            api_key="probe-key",
+        ).build()
 
         headers = {"X-API-Key": "probe-key"}
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

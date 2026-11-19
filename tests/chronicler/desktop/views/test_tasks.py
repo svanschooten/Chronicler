@@ -10,6 +10,7 @@ from chronicler.core.models import Chronicle, Task, TaskStatus, TaskType
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.tasks import TasksView
 from tests.chronicler.desktop.controls import find_controls, text_values
+from tests.services import fake_services
 
 
 @pytest.fixture
@@ -18,7 +19,9 @@ def make_view():
         if chronicle_service is None:
             chronicle_service = AsyncMock()
             chronicle_service.list_chronicles.return_value = chronicles or []
-        view = TasksView(task_service or AsyncMock(), chronicle_service, **kwargs)
+        view = TasksView(
+            fake_services(tasks=task_service or AsyncMock(), chronicles=chronicle_service), **kwargs
+        )
         view.update = MagicMock()
         return view
 

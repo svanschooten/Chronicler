@@ -15,6 +15,7 @@ from chronicler.core.workspace_lock import (
 )
 from chronicler.desktop import main as desktop_main
 from tests.chronicler.desktop.controls import text_values
+from tests.services import fake_services
 
 
 @pytest.fixture
@@ -26,6 +27,8 @@ def runtime_for(settings: Settings, db_manager=None) -> MagicMock:
     runtime = MagicMock()
     runtime.db_manager = db_manager
     runtime.settings = settings
+    services = fake_services()
+    runtime.new_services = lambda: services
     return runtime
 
 
@@ -125,7 +128,9 @@ async def test_open_services_handshakes_with_the_server_for_a_thin_client(monkey
 
     await desktop_main.open_services(runtime)
 
-    handshake.assert_awaited_once_with(runtime.resolver)
+    handshake.assert_awaited_once()
+    (system,) = handshake.await_args.args
+    assert system is runtime.new_services().system
 
 
 # -- failure ------------------------------------------------------------------

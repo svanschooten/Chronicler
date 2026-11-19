@@ -1,6 +1,6 @@
 """Tests for TranscriptView - layout, lifecycle and transcript rendering."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import flet as ft
 import pytest
@@ -24,17 +24,33 @@ from chronicler.desktop.views.transcript.view import (
 )
 from chronicler.i18n import t
 from tests.chronicler.desktop.controls import find_controls, text_values
+from tests.services import fake_services
+
+
+def _view_defaults():
+    return {
+        "file_stager": MagicMock(),
+        "settings": Settings(),
+        "available_models": lambda: [],
+        "model_error": lambda: None,
+        "on_reload": AsyncMock(),
+    }
 
 
 @pytest.fixture
 def make_view():
-    def _make(chronicle=None, transcript_service=None, task_service=None, **kwargs):
+    def _make(
+        chronicle=None, transcript_service=None, task_service=None, chronicle_service=None, **kwargs
+    ):
         view = TranscriptView(
             chronicle or Chronicle(title="Some Chronicle"),
+            fake_services(
+                transcripts=transcript_service or AsyncMock(),
+                tasks=task_service or AsyncMock(),
+                chronicles=chronicle_service or AsyncMock(),
+            ),
             AsyncMock(),
-            transcript_service or AsyncMock(),
-            task_service or AsyncMock(),
-            **kwargs,
+            **{**_view_defaults(), **kwargs},
         )
         view.file_picker = AsyncMock()
         view.transcript_area.update = MagicMock()
@@ -101,7 +117,7 @@ def test_did_mount_registers_the_file_picker_as_a_service_not_an_overlay(attach_
     control - the client fails with "Unknown control: FilePicker" if it's added to
     page.overlay.
     """
-    view = TranscriptView(Chronicle(title="T"), AsyncMock(), AsyncMock(), AsyncMock())
+    view = TranscriptView(Chronicle(title="T"), fake_services(), AsyncMock(), **_view_defaults())
     page = attach_page(TranscriptView)
     page.overlay = []
     page.services = []
@@ -516,6 +532,8 @@ class TestRefresh:
 
     @staticmethod
     def _stub_panels(view):
+        if isinstance(view.chronicle_service.get_chronicle.return_value, Mock):
+            view.chronicle_service.get_chronicle.return_value = view.chronicle.model_copy()
         view.sources.load = AsyncMock()
         view.summaries.load = AsyncMock()
         view.load_transcript = AsyncMock()
