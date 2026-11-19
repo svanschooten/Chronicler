@@ -13,7 +13,7 @@ flet pack chronicler/__main__.py \
             --icon assets/icon.png \
             --add-data "assets:assets" \
             --add-data "chronicler/migrations:chronicler/migrations" \
-            --add-data "chronicler/core/services/fonts:chronicler/core/services/fonts" \
+            --add-data "chronicler/core/exports/fonts:chronicler/core/exports/fonts" \
             --hidden-import aiosqlite \
             --hidden-import logging.config
 

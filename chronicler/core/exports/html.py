@@ -21,14 +21,12 @@ def format_html(
         speaker = line.speaker_name or "Unknown"
         safe_speaker = html.escape(speaker)
 
-        speaker_class = " gm" if speaker.strip().upper() == "GM" else ""
-        ts = getattr(line, "timestamp", None) or getattr(line, "start_time", None)
-        timestamp_str = format_timestamp(float(str(ts)))
+        timestamp_str = format_timestamp(line.start_time)
 
         entry = (
             f'        <div class="entry">\n'
             f'            <span class="timestamp">[{timestamp_str}]</span>\n'
-            f'            <span class="speaker{speaker_class}">{safe_speaker}</span>\n'
+            f'            <span class="speaker">{safe_speaker}</span>\n'
             f'            <span class="dialogue">{safe_text}</span>\n'
             f"        </div>"
         )
@@ -102,7 +100,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             flex-shrink: 0;
             font-size: 0.95em;
         }}
-        .speaker.gm {{ color: #8e44ad; }}
         .dialogue {{
             flex: 1;
             color: #444;
