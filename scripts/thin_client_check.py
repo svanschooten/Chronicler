@@ -20,6 +20,7 @@ import tempfile
 import time
 from pathlib import Path
 
+import httpx
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -27,8 +28,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from chronicler import __version__  # noqa: E402
 from chronicler.core.handshake import HandshakeError, perform_handshake  # noqa: E402
-from chronicler.core.remote import RemoteContainer  # noqa: E402
-from chronicler.core.services import ChronicleService  # noqa: E402
+from chronicler.core.remote import RPC_TIMEOUT  # noqa: E402
+from chronicler.core.services.services import Services, remote_services  # noqa: E402
 
 API_KEY = "thin-client-check-key"
 
@@ -57,9 +58,13 @@ def _wait_for_port(host: str, port: int, process: subprocess.Popen, timeout: flo
 
 
 async def _run_client(url: str) -> int:
-    remote = RemoteContainer(url, api_key=API_KEY)
+    async with httpx.AsyncClient(timeout=RPC_TIMEOUT) as client:
+        return await _check(remote_services(url, API_KEY, client))
+
+
+async def _check(remote: Services) -> int:
     try:
-        info = await perform_handshake(remote)
+        info = await perform_handshake(remote.system)
     except HandshakeError as error:
         print(f"  FAIL  handshake: {error}")
         return 1
@@ -71,7 +76,7 @@ async def _run_client(url: str) -> int:
     else:
         print(f"  ok    server holds {info.chronicle_count} chronicles")
 
-    chronicles = remote.resolve(ChronicleService)
+    chronicles = remote.chronicles
     created = await chronicles.create_chronicle("Thin client check")
     listed = await chronicles.list_chronicles()
     if not any(item.id == created.id for item in listed):

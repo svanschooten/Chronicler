@@ -2,14 +2,12 @@ import inspect
 import os
 import tempfile
 from collections.abc import Callable
-from typing import Any, TypeVar, get_type_hints
+from typing import get_type_hints
 
 import httpx
 from pydantic import TypeAdapter
 
 from chronicler.core.rpc import BINARY_RETURNS, FILE_RETURN, TempFile, exposed_methods, refusals
-
-T = TypeVar("T")
 
 # The server builds a zip or PDF before sending its first byte, so reads and writes need
 # minutes, not httpx's 5-second default.
@@ -119,23 +117,3 @@ class RemoteServiceProxy:
             return data
 
         return remote_method
-
-
-class RemoteContainer:
-    def __init__(
-        self,
-        base_url: str,
-        client: httpx.AsyncClient | None = None,
-        api_key: str | None = None,
-    ):
-        self._base_url = base_url
-        self._client = client
-        self._api_key = api_key
-        self._instances: dict[type, Any] = {}
-
-    def resolve(self, cls: type[T]) -> T:
-        if cls not in self._instances:
-            self._instances[cls] = RemoteServiceProxy(
-                self._base_url, cls, self._client, self._api_key
-            )
-        return self._instances[cls]  # type: ignore

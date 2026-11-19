@@ -2,7 +2,11 @@ import inspect
 import secrets
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from chronicler.core.database_manager import DatabaseManager
+    from chronicler.core.services.services import Services
 
 EXPOSED_ATTRIBUTE = "__rpc_exposed__"
 
@@ -159,11 +163,17 @@ class RpcServer:
 
     def __init__(
         self,
-        container: Any,
+        new_services: "Callable[[], Services]",
+        db_manager: "DatabaseManager",
         services: list[type],
         api_key: str | None = None,
     ):
-        self.container = container
+        """
+        `new_services` builds one set of services per request, and `services` names the
+        classes of that set to publish: nothing else is reachable over HTTP.
+        """
+        self.new_services = new_services
+        self.db_manager = db_manager
         self.services = services
         self.api_key = api_key or secrets.token_urlsafe(32)
         self._app: Any = None
@@ -187,7 +197,6 @@ class RpcServer:
     def _add_route(self, router: Any, service_cls: type, method: Callable, name: str):
         from fastapi import Body, HTTPException, Response
         from fastapi.responses import FileResponse
-        from sqlalchemy.ext.asyncio import AsyncSession
         from starlette.background import BackgroundTask
 
         sig = inspect.signature(method)
@@ -212,12 +221,9 @@ class RpcServer:
         new_sig = sig.replace(parameters=new_params)
 
         async def wrapper(*args, **kwargs):
-            if self.container is None:
-                raise RuntimeError("RpcServer has no container configured")
-            scope = self.container.create_scope()
+            request_services = self.new_services()
             try:
-                instance = scope.resolve(service_cls)
-                bound_method = getattr(instance, name)
+                bound_method = getattr(request_services.of(service_cls), name)
                 result = await bound_method(*args, **kwargs)
             except Exception as error:
                 refusal = refusal_for(error)
@@ -228,8 +234,7 @@ class RpcServer:
                     status_code, detail={"error": error_name, "message": str(error)}
                 ) from error
             finally:
-                if scope.is_registered(AsyncSession):
-                    await scope.resolve(AsyncSession).close()
+                await request_services.close()
 
             if returns_binary:
                 return Response(content=bytes(result), media_type=BINARY_MEDIA_TYPE)
@@ -260,7 +265,6 @@ class RpcServer:
         from fastapi import Depends, FastAPI, File, HTTPException, Security, UploadFile, status
         from fastapi.security import APIKeyHeader
 
-        from chronicler.core.database_manager import DatabaseManager
         from chronicler.core.file_staging import sanitize_stage_name
 
         api_key_header = APIKeyHeader(name="X-API-Key")
@@ -286,11 +290,7 @@ class RpcServer:
 
         @self._app.post("/upload")
         async def upload_file(file: UploadFile = File(...)):
-            if not self.container:
-                raise HTTPException(status_code=500, detail="Server not configured for uploads")
-
-            db_manager = self.container.resolve(DatabaseManager)
-            upload_dir = db_manager.get_imports_path()
+            upload_dir = self.db_manager.get_imports_path()
 
             file_path = upload_dir / sanitize_stage_name(file.filename)
 
@@ -314,8 +314,7 @@ class RpcServer:
 
             return {"file_path": str(file_path), "original_filename": file.filename}
 
-        if self.container:
-            for service_cls in self.services:
-                self._register_service(self._app, service_cls)
+        for service_cls in self.services:
+            self._register_service(self._app, service_cls)
 
         return self._app
