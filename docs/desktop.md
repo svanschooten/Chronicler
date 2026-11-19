@@ -123,8 +123,10 @@ values, before and after being shown rather than for the duration of one await.
   `Unknown control: FilePicker`. Views register theirs on mount with `attach_picker` and
   remove it on unmount with `detach_picker`, both in `desktop/picking.py`.
 * **Controls compare by value.** Flet controls are dataclasses, so two new `FilePicker`s
-  are `==`, and `in` or `list.remove` cannot tell them apart. Compare by identity, as
-  the picker helpers do.
+  are `==`, as are two dialogs built alike, and `in` or `list.remove` cannot tell them
+  apart. Register in `page.services` or `page.overlay` with `add_once` and `remove_exact`
+  from `desktop/widgets.py`, which go by identity. The picker helpers and the form dialogs
+  use them.
 * **A control off the page cannot `update()`.** It raises `RuntimeError`, or
   `AssertionError` from older code paths, and a background task can always race its view's
   unmount. `repaint(*controls)` in `desktop/widgets.py` skips such controls; other calls

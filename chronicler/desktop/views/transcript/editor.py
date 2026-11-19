@@ -279,7 +279,7 @@ class LineRow(ft.Container):
     def hover_changed(self, e) -> None:
         self.hovered = e.data is True or e.data == "true"
         self._paint_hover()
-        self.repaint()
+        repaint(self)
 
     def _paint_hover(self) -> None:
         """
@@ -296,9 +296,6 @@ class LineRow(ft.Container):
                 self.editor.colors.accent if self.is_open else ft.Colors.TRANSPARENT,
             )
         )
-
-    def repaint(self) -> None:
-        repaint(self)
 
 
 class TranscriptEditor(ft.Column):
@@ -420,7 +417,7 @@ class TranscriptEditor(ft.Column):
             rows.append(self.bottom_pager)
         self.line_list.controls = rows
 
-        self._refresh()
+        repaint(self)
         if moved:
             await self._scroll_to_top()
 
@@ -436,9 +433,6 @@ class TranscriptEditor(ft.Column):
         self.open = None
         self.rows = {}
         self.line_list.controls = [ft.Text(message, size=12, color=self.colors.muted)]
-        self._refresh()
-
-    def _refresh(self) -> None:
         repaint(self)
 
     # Opening and closing a part of a line
@@ -478,7 +472,7 @@ class TranscriptEditor(ft.Column):
             add_button = self._add_speaker_button(line)
             row.show_speaker_picker(line, control, add_button)
         self.open = _Open(line_id, part, control, add_button)
-        row.repaint()
+        repaint(row)
         try:
             await control.focus()
         except DETACHED:
@@ -620,7 +614,7 @@ class TranscriptEditor(ft.Column):
                 pending = self._start_save(line, "text", typed)
         if row is not None and line is not None:
             row.show_line(line)
-            row.repaint()
+            repaint(row)
         return pending
 
     async def save_unsaved(self) -> None:
@@ -839,7 +833,7 @@ class TranscriptEditor(ft.Column):
                 repaint(opened.control)
             return
         row.show_line(shown)
-        row.repaint()
+        repaint(row)
 
     async def _save(self, line: TranscriptLine, **changes) -> str | None:
         """

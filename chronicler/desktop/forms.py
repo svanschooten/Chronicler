@@ -7,6 +7,7 @@ import flet as ft
 
 from chronicler.core.models import Chronicle
 from chronicler.desktop.imports import TranscriptImportOptions
+from chronicler.desktop.widgets import add_once, remove_exact
 from chronicler.i18n import t
 
 
@@ -17,12 +18,10 @@ class OverlayForm:
         self.dialog = dialog
 
     def attach(self, page: ft.Page) -> None:
-        if self.dialog not in page.overlay:
-            page.overlay.append(self.dialog)
+        add_once(page.overlay, self.dialog)
 
     def detach(self, page: ft.Page) -> None:
-        if self.dialog in page.overlay:
-            page.overlay.remove(self.dialog)
+        remove_exact(page.overlay, self.dialog)
 
     def open(self, page: ft.Page) -> None:
         self.dialog.open = True

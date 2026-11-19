@@ -41,6 +41,24 @@ def test_detach_removes_the_dialog_and_tolerates_being_called_twice(any_form, pa
     assert page.overlay == []
 
 
+def test_a_second_form_built_alike_keeps_its_own_dialog(page):
+    """
+    Two forms built alike have dialogs that compare equal. When a new view attaches its
+    form before the old view detaches its own, the new dialog must stay in the overlay.
+    """
+    on_cancel, on_create = MagicMock(), MagicMock()
+    leaving = CreateChronicleForm(on_cancel, on_create)
+    arriving = CreateChronicleForm(on_cancel, on_create)
+    assert leaving.dialog == arriving.dialog
+
+    leaving.attach(page)
+    arriving.attach(page)
+    leaving.detach(page)
+
+    assert len(page.overlay) == 1
+    assert page.overlay[0] is arriving.dialog
+
+
 def test_open_and_close_toggle_the_dialog_and_refresh_the_page(any_form, page):
     any_form.open(page)
     assert any_form.dialog.open is True
