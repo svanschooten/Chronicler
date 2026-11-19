@@ -272,7 +272,7 @@ Internal only, and the most likely to conflict, so these come after the user-fac
 
 - [x] [040-S6 Simplify the worker and its handlers](040-S6_worker_and_handlers.md) · medium · M · after 007, 009, 022, 010, 011, 032
 
-- [ ] [051-L7 Speaker count has two definitions](051-L7_speaker_count_definition.md) · low · XS · after 040
+- [x] [051-L7 Speaker count has two definitions](051-L7_speaker_count_definition.md) · low · XS · after 040
 
 - [ ] [041-S3 Replace the DI container with an explicit Services object](041-S3_services_bundle.md) · medium · M · after 030, 023, 034, 025, 019, 027
 
