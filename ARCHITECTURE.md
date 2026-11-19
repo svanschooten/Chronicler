@@ -88,8 +88,7 @@ Where each part of the above actually lives.
 | `chronicler/core/remote.py` | `RemoteContainer` / `RemoteServiceProxy` — the thin client's stand-in for a container |
 | `chronicler/core/rpc.py` | The `@service` decorator, and the FastAPI app generated from the services `RpcServer` is given (plus `/upload`) |
 | `chronicler/core/models.py` | Pydantic domain models crossing every boundary |
-| `chronicler/core/repositories.py` | Repository interfaces |
-| `chronicler/core/sqlite/` | SQLite implementations of those interfaces |
+| `chronicler/core/sqlite/` | The repositories: SQLite access for the workspace and each chronicle |
 | `chronicler/core/database.py`, `project_database.py` | SQLAlchemy schema for the archive and project databases |
 | `chronicler/core/database_manager.py` | Engine/session ownership, workspace paths, Alembic migration runs |
 | `chronicler/core/services/` | Application services — the business logic |
@@ -266,6 +265,10 @@ No application logic is duplicated.
 Repositories abstract persistence.
 
 Application services and task handlers use repositories instead of interacting with the databases directly.
+
+There is one implementation, in `chronicler/core/sqlite/`, and services name those classes
+directly. There are no repository interfaces: remote operation works at the service level,
+so no second backend is planned. If one ever appears, add a `Protocol` then.
 
 The repository layer manages two different storage scopes:
 

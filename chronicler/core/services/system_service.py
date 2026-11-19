@@ -8,8 +8,8 @@ from chronicler.core import extras
 from chronicler.core.config import Settings, get_settings
 from chronicler.core.llm import discover_models
 from chronicler.core.models import ModelCheck, ServerInfo
-from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.rpc import service
+from chronicler.core.sqlite import SQLiteChronicleRepository
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class SystemService:
     def __init__(
         self,
-        chronicle_repository: ChronicleRepository | None = None,
+        chronicle_repository: SQLiteChronicleRepository | None = None,
         settings: Settings | None = None,
     ):
         self.chronicle_repository = chronicle_repository

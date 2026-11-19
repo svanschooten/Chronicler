@@ -8,7 +8,7 @@ import uvicorn
 from chronicler.core.config import Settings, get_settings
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager, NewerSchemaError
-from chronicler.core.local_container import register_local_repositories
+from chronicler.core.local_container import register_local_storage
 from chronicler.core.rpc import RpcServer
 from chronicler.core.worker_wiring import build_worker_manager
 from chronicler.core.workers import WorkerManager
@@ -77,7 +77,7 @@ def build_rpc_server(db_manager: DatabaseManager, settings: Settings) -> RpcServ
     from chronicler.core.services.chronicle_service import LinkPolicy
 
     container = Container()
-    register_local_repositories(container, db_manager)
+    register_local_storage(container, db_manager)
     # Every caller of a server is remote, so a chronicle's database may only be named
     # inside the configured folders. See docs/security.md.
     container.register_instance(LinkPolicy, LinkPolicy(settings.server.linked_chronicle_dirs))

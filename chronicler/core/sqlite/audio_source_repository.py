@@ -7,10 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.models import AudioSource, SourceState
 from chronicler.core.project_database import DBAudioSource
-from chronicler.core.repositories import AudioSourceRepository
 
 
-class SQLiteAudioSourceRepository(AudioSourceRepository):
+class SQLiteAudioSourceRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -47,6 +46,7 @@ class SQLiteAudioSourceRepository(AudioSourceRepository):
         content_hash: str | None = None,
         size_bytes: int | None = None,
     ) -> AudioSource:
+        """Creates the row for `filename`, or refreshes the content of an existing one."""
         row = await self._row(filename)
         if row is None:
             row = DBAudioSource(filename=filename, added_at=datetime.now())
@@ -66,6 +66,7 @@ class SQLiteAudioSourceRepository(AudioSourceRepository):
         await self.session.flush()
 
     async def set_start_offset(self, filename: str, start_offset: float) -> None:
+        """Seconds added to every timestamp this track produces."""
         row = await self._require(filename)
         row.start_offset = start_offset
         await self.session.flush()

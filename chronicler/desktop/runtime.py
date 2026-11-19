@@ -6,7 +6,7 @@ from chronicler.core.config import Mode, Settings
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.file_staging import FileStager, LocalFileStager, RemoteFileStager
-from chronicler.core.local_container import register_local_repositories
+from chronicler.core.local_container import register_local_storage
 from chronicler.core.remote import RPC_TIMEOUT, RemoteContainer
 from chronicler.i18n import set_locale
 
@@ -50,7 +50,7 @@ def build_runtime(settings: Settings) -> DesktopRuntime:
         raise ValueError("full_stack mode requires settings.workspace_path")
     db_manager = DatabaseManager(settings.workspace_path)
     container = Container()
-    register_local_repositories(container, db_manager)
+    register_local_storage(container, db_manager)
     local_stager: FileStager = LocalFileStager(db_manager.get_imports_path())
     return DesktopRuntime(
         resolver=container, db_manager=db_manager, file_stager=local_stager, settings=settings

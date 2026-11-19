@@ -2,26 +2,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
-from chronicler.core.repositories import (
-    ChronicleRepository,
-    KnownSpeakerRepository,
-    TaskRepository,
-)
-from chronicler.core.sqlite import (
-    SQLiteChronicleRepository,
-    SQLiteKnownSpeakerRepository,
-    SQLiteTaskRepository,
-)
 
 
-def register_local_repositories(container: Container, db_manager: DatabaseManager) -> None:
+def register_local_storage(container: Container, db_manager: DatabaseManager) -> None:
     """
     Registrations shared by every local (non-remote) Container - server mode and desktop
-    full-stack mode both need the archive session and repository factories wired the same
-    way.
+    full-stack mode both need the workspace and its archive session wired the same way.
+    The SQLite repositories need nothing more: Container builds them from the session.
     """
     container.register_instance(DatabaseManager, db_manager)
     container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-    container.register_factory(ChronicleRepository, SQLiteChronicleRepository)  # type: ignore[type-abstract]
-    container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
-    container.register_factory(KnownSpeakerRepository, SQLiteKnownSpeakerRepository)  # type: ignore[type-abstract]

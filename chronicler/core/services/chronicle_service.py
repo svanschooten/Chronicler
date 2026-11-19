@@ -14,9 +14,9 @@ from chronicler.core.database_manager import (
 from chronicler.core.file_staging import confine_to_directory, safe_display_name
 from chronicler.core.formatting import format_duration, looks_synthetic
 from chronicler.core.models import Chronicle, Snapshot
-from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.rpc import service
 from chronicler.core.services.transcript_service import TranscriptService
+from chronicler.core.sqlite import SQLiteChronicleRepository
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class LinkPolicy:
 class ChronicleService:
     def __init__(
         self,
-        repository: ChronicleRepository,
+        repository: SQLiteChronicleRepository,
         db_manager: DatabaseManager,
         transcripts: TranscriptService | None = None,
         link_policy: LinkPolicy | None = None,

@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.database import DBChronicle, DBTask
 from chronicler.core.models import Task, TaskStatus
-from chronicler.core.repositories import TaskRepository
 from chronicler.core.sqlite.patterns import LIKE_ESCAPE, contains_pattern
 
 _MAX_CLAIM_CANDIDATES = 5
@@ -20,7 +19,7 @@ RETRY_DELAYS = (30.0, 300.0)
 """Seconds before the first retry, then the second; any later retry waits the last one."""
 
 
-class SQLiteTaskRepository(TaskRepository):
+class SQLiteTaskRepository:
     # A class attribute, not a constructor argument: the container builds this class from
     # its constructor's type hints.
     retry_delays: tuple[float, ...] = RETRY_DELAYS
@@ -29,6 +28,7 @@ class SQLiteTaskRepository(TaskRepository):
         self.session = session
 
     async def get_all(self, include_finished: bool = True, limit: int | None = None) -> list[Task]:
+        """Newest first. Without `include_finished`, only PENDING and WORKING tasks."""
         query = select(DBTask).order_by(DBTask.created_at.desc())
         if not include_finished:
             query = query.where(DBTask.status.in_([TaskStatus.PENDING, TaskStatus.WORKING]))
@@ -38,6 +38,7 @@ class SQLiteTaskRepository(TaskRepository):
         return [Task.model_validate(t) for t in result.scalars().all()]
 
     async def delete_finished(self, include_failed: bool = False) -> int:
+        """Deletes DONE tasks, and FAILED ones too if asked. Returns how many went."""
         finished = [TaskStatus.DONE, TaskStatus.FAILED] if include_failed else [TaskStatus.DONE]
         result = cast(
             CursorResult,
@@ -81,6 +82,10 @@ class SQLiteTaskRepository(TaskRepository):
         return Task.model_validate(db_task)
 
     async def cancel(self, task_id: UUID, while_working: bool = False) -> bool:
+        """
+        Marks a PENDING task (and a WORKING one, if `while_working`) CANCELLED. Returns
+        whether it did; a task that already finished is left alone.
+        """
         cancellable = (
             [TaskStatus.PENDING, TaskStatus.WORKING] if while_working else [TaskStatus.PENDING]
         )
@@ -96,6 +101,10 @@ class SQLiteTaskRepository(TaskRepository):
         return result.rowcount == 1
 
     async def claim_next(self, worker_id: str) -> Task | None:
+        """
+        Atomically claim one PENDING task (PENDING -> WORKING, stamped with
+        worker_id/claimed_at) and return it, or None if there's nothing to claim.
+        """
         now = datetime.now()
         result = await self.session.execute(
             select(DBTask.id)
@@ -124,6 +133,7 @@ class SQLiteTaskRepository(TaskRepository):
         return None
 
     async def mark_failed_or_retry(self, task_id: UUID, error: str) -> None:
+        """Record a failed attempt."""
         result = await self.session.execute(select(DBTask).where(DBTask.id == str(task_id)))
         db_task = result.scalar_one_or_none()
         # A task cancelled while it ran must not be put back in the queue by the failure
@@ -145,6 +155,10 @@ class SQLiteTaskRepository(TaskRepository):
             await self.session.commit()
 
     async def recover_interrupted(self, error: str) -> list[Task]:
+        """
+        Puts every WORKING task back in the queue, or fails it once its attempts are used
+        up, recording `error`. Only safe while no worker is running. Returns the tasks.
+        """
         rows = (
             (await self.session.execute(select(DBTask).where(DBTask.status == TaskStatus.WORKING)))
             .scalars()

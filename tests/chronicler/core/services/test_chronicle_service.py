@@ -6,12 +6,12 @@ import pytest
 
 from chronicler.core.database_manager import LinkRefusedError
 from chronicler.core.models import Chronicle
-from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.services.chronicle_service import (
     ChronicleService,
     LinkPolicy,
     remove_directory,
 )
+from chronicler.core.sqlite import SQLiteChronicleRepository
 
 
 def _db_manager(workspace_path):
@@ -23,14 +23,14 @@ def _db_manager(workspace_path):
 
 def _plain_repo():
     """A repository for a chronicle with no external project path."""
-    repo = MagicMock(spec=ChronicleRepository)
+    repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.get_by_id = AsyncMock(return_value=None)
     return repo
 
 
 @pytest.mark.asyncio
 async def test_list_chronicles():
-    repo = MagicMock(spec=ChronicleRepository)
+    repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.get_all = AsyncMock(return_value=[])
 
     service = ChronicleService(repo, MagicMock())
@@ -42,7 +42,7 @@ async def test_list_chronicles():
 
 @pytest.mark.asyncio
 async def test_create_chronicle():
-    repo = MagicMock(spec=ChronicleRepository)
+    repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.create = AsyncMock(side_effect=lambda x: x)
 
     service = ChronicleService(repo, MagicMock())
@@ -54,7 +54,7 @@ async def test_create_chronicle():
 
 @pytest.mark.asyncio
 async def test_search_chronicles():
-    repo = MagicMock(spec=ChronicleRepository)
+    repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.search = AsyncMock(return_value=[])
 
     service = ChronicleService(repo, MagicMock())
@@ -70,7 +70,7 @@ async def test_delete_chronicle_removes_directory_for_non_linked_chronicle(tmp_p
     chronicle_dir.mkdir(parents=True)
     (chronicle_dir / "project.db").write_text("data")
 
-    repo = MagicMock(spec=ChronicleRepository)
+    repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.get_by_id = AsyncMock(return_value=Chronicle(id=chronicle_id, title="Local"))
     repo.delete = AsyncMock()
     db_manager = _db_manager(tmp_path)
@@ -93,7 +93,7 @@ async def test_delete_chronicle_does_not_touch_directory_for_linked_chronicle(tm
     external_dir.mkdir()
     (external_dir / "project.db").write_text("data")
 
-    repo = MagicMock(spec=ChronicleRepository)
+    repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.get_by_id = AsyncMock(
         return_value=Chronicle(
             id=chronicle_id, title="Linked", project_path=str(external_dir / "project.db")
@@ -121,7 +121,7 @@ async def test_delete_chronicle_closes_the_project_database_before_removing_it(t
     (chronicle_dir / "project.db").write_text("data")
 
     order = []
-    repo = MagicMock(spec=ChronicleRepository)
+    repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.get_by_id = AsyncMock(return_value=Chronicle(id=chronicle_id, title="Local"))
     repo.delete = AsyncMock(side_effect=lambda _id: order.append("deleted"))
     db_manager = _db_manager(tmp_path)
@@ -144,7 +144,7 @@ async def test_delete_chronicle_closes_a_linked_project_database_too(tmp_path):
     external_dir = tmp_path / "elsewhere"
     external_dir.mkdir()
 
-    repo = MagicMock(spec=ChronicleRepository)
+    repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.get_by_id = AsyncMock(
         return_value=Chronicle(
             id=chronicle_id, title="Linked", project_path=str(external_dir / "project.db")
@@ -159,7 +159,7 @@ async def test_delete_chronicle_closes_a_linked_project_database_too(tmp_path):
 
 
 def _repo_holding(chronicle: Chronicle):
-    repo = MagicMock(spec=ChronicleRepository)
+    repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.get_by_id = AsyncMock(return_value=chronicle)
     repo.update = AsyncMock(side_effect=lambda updated: updated)
     return repo
@@ -185,7 +185,7 @@ class TestLinkPolicy:
     """Ticket 076: a server confines the project paths its remote callers can name."""
 
     def _service(self, tmp_path, allowed):
-        repo = MagicMock(spec=ChronicleRepository)
+        repo = MagicMock(spec=SQLiteChronicleRepository)
         repo.create = AsyncMock(side_effect=lambda chronicle: chronicle)
         return ChronicleService(repo, _db_manager(tmp_path), link_policy=LinkPolicy(allowed))
 
@@ -228,7 +228,7 @@ class TestLinkPolicy:
     @pytest.mark.asyncio
     async def test_without_a_policy_any_path_is_allowed(self, tmp_path):
         """The full-stack app: the caller is the machine's own user."""
-        repo = MagicMock(spec=ChronicleRepository)
+        repo = MagicMock(spec=SQLiteChronicleRepository)
         repo.create = AsyncMock(side_effect=lambda chronicle: chronicle)
         service = ChronicleService(repo, _db_manager(tmp_path))
 
@@ -475,7 +475,7 @@ class TestEditChronicle:
 
     @pytest.mark.asyncio
     async def test_an_unknown_chronicle_is_refused(self, tmp_path):
-        repo = MagicMock(spec=ChronicleRepository)
+        repo = MagicMock(spec=SQLiteChronicleRepository)
         repo.get_by_id = AsyncMock(return_value=None)
 
         with pytest.raises(LookupError):

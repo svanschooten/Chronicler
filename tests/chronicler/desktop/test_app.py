@@ -387,7 +387,7 @@ async def test_thin_client_resolves_a_working_remote_service(tmp_path):
 
     from chronicler.core.container import Container
     from chronicler.core.database_manager import DatabaseManager
-    from chronicler.core.local_container import register_local_repositories
+    from chronicler.core.local_container import register_local_storage
     from chronicler.core.models import Chronicle
     from chronicler.core.rpc import RpcServer
     from chronicler.core.services import ChronicleService
@@ -396,7 +396,7 @@ async def test_thin_client_resolves_a_working_remote_service(tmp_path):
     upstream_db_manager = DatabaseManager(tmp_path)
     await upstream_db_manager.init_archive()
     upstream_container = Container()
-    register_local_repositories(upstream_container, upstream_db_manager)
+    register_local_storage(upstream_container, upstream_db_manager)
 
     archive_session = upstream_db_manager.get_archive_session()
     async with archive_session:

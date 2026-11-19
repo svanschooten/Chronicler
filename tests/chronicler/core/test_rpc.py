@@ -151,11 +151,6 @@ async def build_upload_app():
         from sqlalchemy.ext.asyncio import AsyncSession
 
         from chronicler.core.database_manager import DatabaseManager
-        from chronicler.core.repositories import ChronicleRepository, TaskRepository
-        from chronicler.core.sqlite import (
-            SQLiteChronicleRepository,
-            SQLiteTaskRepository,
-        )
 
         db_manager = DatabaseManager(tmp_path)
         managers.append(db_manager)
@@ -164,8 +159,6 @@ async def build_upload_app():
         container = Container()
         container.register_instance(DatabaseManager, db_manager)
         container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-        container.register_factory(ChronicleRepository, SQLiteChronicleRepository)
-        container.register_factory(TaskRepository, SQLiteTaskRepository)
 
         server = RpcServer(container=container, services=[], api_key="test-key")
         return server.build(), db_manager.get_imports_path()

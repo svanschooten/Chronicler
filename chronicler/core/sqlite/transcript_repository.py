@@ -6,14 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.models import Speaker, TranscriptLine
 from chronicler.core.project_database import DBSpeaker, DBTranscriptLine
-from chronicler.core.repositories import TranscriptRepository
 from chronicler.core.sqlite.known_speaker_repository import normalize_speaker_name
 from chronicler.core.sqlite.patterns import fts_query
 
 SEARCH_LIMIT = 200
 
 
-class SQLiteTranscriptRepository(TranscriptRepository):
+class SQLiteTranscriptRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -114,9 +113,14 @@ class SQLiteTranscriptRepository(TranscriptRepository):
         await self.session.flush()
 
     async def delete_all_lines(self) -> None:
+        """Delete every transcript line."""
         await self.session.execute(sa_delete(DBTranscriptLine))
 
     async def delete_track_lines(self, source_id: UUID) -> None:
+        """
+        Deletes the lines one audio source produced, before re-transcribing it. Lines with
+        no source are never touched: they were imported, or predate source tracking.
+        """
         await self.session.execute(
             sa_delete(DBTranscriptLine).where(DBTranscriptLine.source_id == str(source_id))
         )
