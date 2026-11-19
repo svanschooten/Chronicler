@@ -91,6 +91,8 @@ class TranscriptView(ft.Column):
         self.on_back = on_back
         transcript_service = self.transcript_service = services.transcripts
         task_service = self.task_service = services.tasks
+        self.source_service = services.sources
+        self.export_service = services.exports
         chronicle_service = self.chronicle_service = services.chronicles
         self.file_stager = file_stager
         self.settings = settings
@@ -138,13 +140,14 @@ class TranscriptView(ft.Column):
         self.transcript_body = ft.Container(expand=True, content=self.transcript_area)
         self.exporter = TranscriptExporter(
             chronicle,
-            transcript_service,
+            services.exports,
             self.show_snackbar,
             lambda: self.file_picker,
             lambda: self.page,
         )
         self.sources = SourcesPanel(
             chronicle,
+            services.sources,
             transcript_service,
             task_service,
             self.colors,
@@ -154,7 +157,7 @@ class TranscriptView(ft.Column):
         )
         self.summaries = SummariesPanel(
             chronicle,
-            transcript_service,
+            services.summaries,
             task_service,
             self.colors,
             self.show_snackbar,
@@ -463,7 +466,7 @@ class TranscriptView(ft.Column):
 
     async def open_folder_clicked(self, e):
         try:
-            directory = await self.transcript_service.chronicle_directory(self.chronicle.id)
+            directory = await self.source_service.chronicle_directory(self.chronicle.id)
             open_in_file_manager(Path(directory))
         except (RevealError, OSError) as error:
             self.show_snackbar(t("summaries.folder_failed", error=error))
@@ -474,7 +477,7 @@ class TranscriptView(ft.Column):
         fixed 760x520 that left most of a large monitor unused.
         """
         try:
-            text = await self.transcript_service.read_transcript_text(
+            text = await self.export_service.export_plaintext(
                 self.chronicle.id, include_timestamps=self.show_timestamps
             )
         except Exception as error:

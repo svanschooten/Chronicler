@@ -7,6 +7,7 @@ import flet as ft
 
 from chronicler.core.config import Settings, get_settings
 from chronicler.core.models import AudioSource, Chronicle, SourceState
+from chronicler.core.services.source_service import SourceService
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.theme import ThemeColors
@@ -23,6 +24,7 @@ class SourcesPanel(ft.Column):
     def __init__(
         self,
         chronicle: Chronicle,
+        source_service: SourceService,
         transcript_service: TranscriptService,
         task_service: TaskService,
         colors: ThemeColors,
@@ -31,6 +33,7 @@ class SourcesPanel(ft.Column):
         capabilities: Callable[[], set[str]] | None = None,
     ):
         self.chronicle = chronicle
+        self.source_service = source_service
         self.transcript_service = transcript_service
         self.task_service = task_service
         self.colors = colors
@@ -61,7 +64,7 @@ class SourcesPanel(ft.Column):
 
     async def load(self):
         try:
-            sources = await self.transcript_service.list_audio_sources(self.chronicle.id)
+            sources = await self.source_service.list_audio_sources(self.chronicle.id)
         except Exception as error:
             logger.exception(f"Error loading audio sources: {error}")
             sources = []
@@ -191,7 +194,7 @@ class SourcesPanel(ft.Column):
         if choice is None:
             return
 
-        await self.transcript_service.assign_speaker(self.chronicle.id, filename, choice.speaker)
+        await self.source_service.assign_speaker(self.chronicle.id, filename, choice.speaker)
         if not choice.transcribe:
             self.show_snackbar(t("sources.speaker_saved", speaker=choice.speaker))
             await self.load()

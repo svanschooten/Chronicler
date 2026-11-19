@@ -6,8 +6,8 @@ from collections.abc import Callable
 import flet as ft
 
 from chronicler.core.models import Chronicle, Summary
+from chronicler.core.services.summary_service import SummaryService
 from chronicler.core.services.task_service import TaskService
-from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.dialogs import await_dialog, confirm
 from chronicler.desktop.theme import ThemeColors
 from chronicler.desktop.widgets import chosen_value, searchable_dropdown
@@ -20,7 +20,7 @@ class SummariesPanel(ft.Column):
     def __init__(
         self,
         chronicle: Chronicle,
-        transcript_service: TranscriptService,
+        summary_service: SummaryService,
         task_service: TaskService,
         colors: ThemeColors,
         show_snackbar: Callable[[str], None],
@@ -30,7 +30,7 @@ class SummariesPanel(ft.Column):
         default_model: Callable[[], str | None] | None = None,
     ):
         self.chronicle = chronicle
-        self.transcript_service = transcript_service
+        self.summary_service = summary_service
         self.task_service = task_service
         self.colors = colors
         self.show_snackbar = show_snackbar
@@ -66,7 +66,7 @@ class SummariesPanel(ft.Column):
 
     async def load(self):
         try:
-            self.summaries = await self.transcript_service.list_summaries(self.chronicle.id)
+            self.summaries = await self.summary_service.list_summaries(self.chronicle.id)
         except Exception as error:
             logger.exception(f"Error loading summaries: {error}")
             self.summaries = []
@@ -132,7 +132,7 @@ class SummariesPanel(ft.Column):
             t("summaries.delete_message", number=summary.number),
         ):
             return
-        await self.transcript_service.delete_summary(self.chronicle.id, summary.id)
+        await self.summary_service.delete_summary(self.chronicle.id, summary.id)
         await self.load()
 
     async def generate_clicked(self, e):
