@@ -37,18 +37,18 @@ the light theme rather than a deliberate accent, so it is the same white as `sur
 `AMBER_300` reads fine against a dark surface but disappears against a light one, which
 is why `accent` differs per theme.
 
-## Scopes per navigation
+## Services per navigation
 
-Each navigation gets a fresh `Container` scope, closed when navigating away, rather
-than one held for the app's lifetime. Sequential reuse within one view visit is fine —
+Each navigation gets a fresh `Services` (see [services.md](services.md)), closed when
+navigating away, rather than one held for the app's lifetime. Sequential reuse within one view visit is fine —
 Flet handlers run one at a time. What is not safe is sharing it with the background
 worker loop, which opens its own short sessions.
 
-Scope creation is per-branch rather than unconditional: `SettingsView` does not touch
-the database, so it should not cause a session to be opened and immediately closed for
+Creation is per-branch rather than unconditional: `SettingsView` does not touch the
+database, so it should not cause a session to be opened and immediately closed for
 nothing.
 
-A `RemoteContainer` has no scope to manage — each remote call is already scoped
+A thin client's `Services` holds no session to manage — each remote call is already scoped
 per-request server-side.
 
 ## Re-fetching before rendering the transcript view
@@ -78,7 +78,7 @@ transcript out of edit mode along with whatever was being typed.
 already holds, because its panels and `state.selected_chronicle` share that object. A
 chronicle that no longer exists sends the user back to the archive.
 
-The refresh runs on the worker's task and reads through the view's scope, so it can
+The refresh runs on the worker's task and reads through the view's services, so it can
 overlap a load the user started in the same view. Ticket 032 gives project database
 access one owner; until then the views do not serialise their loads.
 

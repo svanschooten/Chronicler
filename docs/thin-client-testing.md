@@ -8,7 +8,7 @@ Three layers, from fastest to most realistic.
 ## 1. In-process integration tests
 
 `tests/chronicler/server/test_rpc_routing.py` boots the real server ASGI app and drives a
-real `RemoteContainer` against it — the same proxy the desktop thin client uses, not raw
+real `remote_services` against it — the same proxy the desktop thin client uses, not raw
 HTTP. It covers the handshake succeeding, a version mismatch being refused, an
 unreachable server, and a wrong API key.
 

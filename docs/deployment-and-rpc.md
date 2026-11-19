@@ -38,8 +38,7 @@ Every parameter becomes a body field. The method's own default is preserved, inc
 mandatory regardless of the actual signature, so any caller that omitted or explicitly
 passed `None` for a genuinely optional argument got a 422.
 
-Each request gets a fresh `Container` scope — see
-[dependency-injection.md](dependency-injection.md).
+Each request gets a fresh `Services` — see [services.md](services.md).
 
 ## Documents come back as bytes, not JSON
 
@@ -70,9 +69,6 @@ saved, and deletes it if they cancel. `export_zip` is the one method that does t
 plain `Path`, such as one naming a chronicle's audio, is answered as JSON like any other,
 so exposing it can never get that file deleted.
 
-Without a container there is nothing to resolve service instances from, so only
-`/upload` (which needs just a `DatabaseManager`) is registered in that case.
-
 ## Remote proxies
 
 `RemoteServiceProxy` mirrors a service class over HTTP. For each method in the class's
@@ -85,7 +81,7 @@ Pydantic models uniformly. The previous `hasattr(v, "model_dump")` check only ha
 Pydantic models, so a bare `UUID` chronicle id — the single most common argument shape
 in this codebase — fell through unserialised and failed httpx's JSON encoding outright.
 
-`RemoteContainer` resolves the same service classes to proxies, so a view cannot tell
+`remote_services` fills a `Services` with proxies for the same classes, so a view cannot tell
 whether it is talking to a local instance or a remote one.
 
 ## Refusals keep their message
