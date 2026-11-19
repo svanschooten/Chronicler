@@ -357,7 +357,7 @@ Either way the chronicle count is unchanged, and the error's `reason` lets the d
 why in the user's language. A thin client does not offer *Link*: the picker returns a path
 on the client's machine, and the server would look for it on its own disk.
 
-`hydrate_from_project` is separate from the link so it can be re-run — the chronicle
+`hydrate_from_project` (which runs `reconcile`) is separate from the link so it can be re-run — the chronicle
 view's *Identify speakers* covers the speaker half of the same job.
 
 ## Exporting a Chronicle as an archive
