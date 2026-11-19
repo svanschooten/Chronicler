@@ -158,3 +158,34 @@ class TestOptionalDependencies:
                 self.port = port
 
         assert Container().resolve(Needs).port is None
+
+    def test_a_registered_optional_abstract_dependency_still_resolves(self):
+        from abc import ABC, abstractmethod
+
+        class Port(ABC):
+            @abstractmethod
+            def go(self) -> None: ...
+
+        class Adapter(Port):
+            def go(self) -> None: ...
+
+        class Needs:
+            def __init__(self, port: Port | None):
+                self.port = port
+
+        container = Container()
+        container.register_factory(Port, Adapter)
+
+        assert isinstance(container.resolve(Needs).port, Adapter)
+
+    def test_a_constructor_bug_in_an_optional_dependency_is_not_swallowed(self):
+        class Broken:
+            def __init__(self) -> None:
+                raise TypeError("a real bug")
+
+        class Needs:
+            def __init__(self, thing: Broken | None):
+                self.thing = thing
+
+        with pytest.raises(TypeError, match="a real bug"):
+            Container().resolve(Needs)

@@ -95,14 +95,16 @@ async def test_the_local_registrations_are_enough_to_build_every_archive_reposit
 
         scope = container.create_scope()
         session = scope.resolve(AsyncSession)
-        repositories = (
-            SQLiteTaskRepository,
-            SQLiteChronicleRepository,
-            SQLiteKnownSpeakerRepository,
-        )
+        try:
+            repositories = (
+                SQLiteTaskRepository,
+                SQLiteChronicleRepository,
+                SQLiteKnownSpeakerRepository,
+            )
 
-        assert all(scope.resolve(cls).session is session for cls in repositories)
-        await session.close()
+            assert all(scope.resolve(cls).session is session for cls in repositories)
+        finally:
+            await session.close()
     finally:
         await db_manager.close_all()
 

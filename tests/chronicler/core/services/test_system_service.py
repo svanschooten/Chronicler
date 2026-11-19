@@ -7,6 +7,7 @@ import pytest
 
 from chronicler import __version__
 from chronicler.core.config import Settings
+from chronicler.core.container import Container
 from chronicler.core.services.system_service import SystemService, capabilities_for
 
 
@@ -148,3 +149,12 @@ class TestListModels:
         assert local_check.error is not None
         assert remote_check == local_check
         assert remote_check.models == ["qwen3"]
+
+
+def test_a_container_without_a_session_leaves_the_chronicle_count_out(isolated_config):
+    """
+    A container with no archive session (a bare one, as in a test) can't build
+    SQLiteChronicleRepository, so the optional dependency becomes None. That relies on
+    Container failing to build an unbound AsyncSession, so pin it here.
+    """
+    assert Container().resolve(SystemService).chronicle_repository is None

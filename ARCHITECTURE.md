@@ -262,7 +262,7 @@ No application logic is duplicated.
 
 # Repository layer
 
-Repositories abstract persistence.
+Repositories own persistence.
 
 Application services and task handlers use repositories instead of interacting with the databases directly.
 
