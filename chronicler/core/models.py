@@ -39,9 +39,6 @@ class Tag(BaseModel):
 class KnownSpeaker(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     name: str
-    uses: int = 0
-    first_seen: datetime = Field(default_factory=datetime.now)
-    last_used: datetime = Field(default_factory=datetime.now)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,7 +73,6 @@ class Chronicle(BaseModel):
     status: str = "Imported"
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
-    source_file: str | None = None
     project_path: str | None = None
     duration: str | None = None
     speakers_count: int = 0
@@ -122,7 +118,6 @@ class AudioSource(BaseModel):
     path: str | None = None
     content_hash: str | None = None
     size_bytes: int | None = None
-    duration_seconds: float | None = None
     added_at: datetime = Field(default_factory=datetime.now)
     start_offset: float = 0.0
     missing: bool = False

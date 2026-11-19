@@ -32,8 +32,8 @@ async def test_get_transcript_reads_from_the_chronicles_project_db(tmp_path):
         async with project_session:
             repo = SQLiteTranscriptRepository(project_session)
             speaker = await repo.get_or_create_speaker("Alice")
-            await repo.add_line(
-                TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Hi")
+            await repo.add_lines(
+                [TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Hi")]
             )
             await project_session.commit()
 
@@ -69,8 +69,8 @@ async def test_get_transcript_uses_custom_project_path_for_linked_chronicles(tmp
         async with external_session:
             repo = SQLiteTranscriptRepository(external_session)
             speaker = await repo.get_or_create_speaker("Bob")
-            await repo.add_line(
-                TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Yo")
+            await repo.add_lines(
+                [TranscriptLine(speaker_id=speaker.id, start_time=0.0, end_time=1.0, text="Yo")]
             )
             await external_session.commit()
 

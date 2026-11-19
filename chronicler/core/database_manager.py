@@ -324,14 +324,6 @@ class DatabaseManager:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    def get_chronicle_sources_path(self, chronicle_id: str) -> Path:
-        """
-        Durable per-chronicle storage for audio sources (as opposed to
-        get_imports_path()'s shared scratch space, which a worker is free to
-        overwrite/lose).
-        """
-        return self.ensure_sources_path_for(chronicle_id)
-
     def sources_path_for(self, chronicle_id: str, project_path: Path | None = None) -> Path:
         """
         A chronicle's audio directory: beside a linked project.db, otherwise in the

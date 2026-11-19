@@ -46,7 +46,7 @@ each group is merged with `condense_prompt`, repeating until they fit, and only 
 recap written. Each pass leaves fewer notes, so this ends. If no two notes fit one
 condensing request, it fails with an error naming `llm.context_window` before the recap is
 paid for, instead of sending a request that would overflow. The condensing calls count in
-the token totals; `chunk_summaries` still holds the first-level notes.
+the token totals.
 
 `chunk_transcript` splits on **speaker turns**, never mid-turn. A single turn longer than
 the budget becomes its own oversized chunk rather than being cut in half: losing speaker

@@ -9,7 +9,6 @@ from chronicler.core.models import ModelCheck
 from chronicler.desktop.reveal import describe_desktop_integration_error
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.settings.editor import SettingsEditor
-from chronicler.desktop.widgets import amber_button
 from chronicler.i18n import available_locales, set_locale, t
 
 logger = logging.getLogger(__name__)
@@ -492,4 +491,4 @@ class SettingsView(ft.Column):
             self.page.update()
 
 
-__all__ = ["SettingsView", "amber_button"]
+__all__ = ["SettingsView"]

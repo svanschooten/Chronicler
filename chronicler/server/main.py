@@ -60,14 +60,20 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
     asyncio.run(_serve_and_work(app, worker_manager, host, port))
 
 
-def build_rpc_server(db_manager: DatabaseManager, settings: Settings) -> RpcServer:
-    """The server's services over one workspace, as `run_server` serves them."""
+def served_services() -> list[type]:
+    """The service classes a server publishes. `RpcServer` serves only what it is given."""
     from chronicler.core.services import (
         ChronicleService,
         SystemService,
         TaskService,
         TranscriptService,
     )
+
+    return [ChronicleService, SystemService, TaskService, TranscriptService]
+
+
+def build_rpc_server(db_manager: DatabaseManager, settings: Settings) -> RpcServer:
+    """The server's services over one workspace, as `run_server` serves them."""
     from chronicler.core.services.chronicle_service import LinkPolicy
 
     container = Container()
@@ -78,12 +84,7 @@ def build_rpc_server(db_manager: DatabaseManager, settings: Settings) -> RpcServ
 
     return RpcServer(
         container,
-        services=[
-            ChronicleService,
-            SystemService,
-            TaskService,
-            TranscriptService,
-        ],
+        services=served_services(),
         api_key=settings.api_key,
     )
 

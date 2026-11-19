@@ -230,7 +230,7 @@ class TestExternalSources:
         db_manager, session, service, transcripts = await _workspace(tmp_path)
         try:
             chronicle = await service.create_chronicle("In the workspace")
-            path = db_manager.get_chronicle_sources_path(str(chronicle.id)) / "gm.wav"
+            path = db_manager.ensure_sources_path_for(str(chronicle.id)) / "gm.wav"
             path.write_bytes(b"audio")
 
             found = await transcripts.list_audio_sources(chronicle.id)

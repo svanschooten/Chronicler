@@ -42,13 +42,6 @@ class SQLiteSummaryRepository:
         result = await self.session.execute(select(DBSummary).order_by(DBSummary.number))
         return [Summary.model_validate(row) for row in result.scalars().all()]
 
-    async def get(self, summary_id: UUID) -> Summary | None:
-        result = await self.session.execute(
-            select(DBSummary).where(DBSummary.id == str(summary_id))
-        )
-        row = result.scalar_one_or_none()
-        return Summary.model_validate(row) if row else None
-
     async def delete(self, summary_id: UUID) -> None:
         await self.session.execute(sa_delete(DBSummary).where(DBSummary.id == str(summary_id)))
 

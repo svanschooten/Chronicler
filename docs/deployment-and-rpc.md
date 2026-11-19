@@ -24,7 +24,8 @@ The desktop then infers thin client from its server URL instead of failing to st
 
 ## The generated API
 
-`RpcServer` turns each method a `@service` class names in `expose=` into a `POST` route.
+`RpcServer` is given the service classes to publish (`served_services()` in `server/main.py`), and turns
+each method a `@service` class names in `expose=` into a `POST` route.
 `ChronicleService.list_chronicles` becomes `POST /chronicle/list_chronicles`; the
 `Service` suffix is stripped and the rest lowercased. Nothing else is published; see
 [Exposure is explicit](#exposure-is-explicit).

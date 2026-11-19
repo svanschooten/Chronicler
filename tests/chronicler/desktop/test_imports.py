@@ -75,8 +75,8 @@ async def test_import_audio_without_a_chronicle_creates_one_named_after_the_file
     make_coordinator, picked_file
 ):
     """
-    create_chronicle gets no source_file= - the file lives in the durable sources/ dir now,
-    and a single source_file field can't represent a chronicle with multiple tracks anyway.
+    create_chronicle gets only a title: the file goes into the chronicle's sources/ dir as
+    an audio source, which is how a chronicle holds several tracks.
     """
     chronicle_service = AsyncMock()
     chronicle_service.create_chronicle.return_value = Chronicle(title="recording")

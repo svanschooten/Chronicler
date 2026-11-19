@@ -70,17 +70,6 @@ class TestRegister:
         assert await repository.list_names() == ["Alice"]
 
     @pytest.mark.asyncio
-    async def test_re_registering_counts_a_use(self, repo):
-        repository, session = repo
-
-        await repository.register("Alice")
-        await repository.register("Alice")
-        await session.commit()
-
-        speakers = await repository.list_speakers()
-        assert speakers[0].uses == 2
-
-    @pytest.mark.asyncio
     async def test_names_differing_only_by_case_are_the_same_speaker(self, repo):
         repository, session = repo
 
@@ -118,24 +107,6 @@ class TestListing:
         await session.commit()
 
         assert await repository.list_names() == ["alice", "Bob", "Carol"]
-
-    @pytest.mark.asyncio
-    async def test_search_matches_a_substring_case_insensitively(self, repo):
-        repository, session = repo
-        for name in ("Alice", "Bob", "Malice"):
-            await repository.register(name)
-        await session.commit()
-
-        assert await repository.search("ali") == ["Alice", "Malice"]
-
-    @pytest.mark.asyncio
-    async def test_search_escapes_wildcards(self, repo):
-        repository, session = repo
-        for name in ("Alice", "100%"):
-            await repository.register(name)
-        await session.commit()
-
-        assert await repository.search("%") == ["100%"]
 
     @pytest.mark.asyncio
     async def test_an_empty_registry_lists_nothing(self, repo):

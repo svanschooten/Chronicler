@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table
+from sqlalchemy import Column, DateTime, ForeignKey, String, Table
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -37,7 +37,6 @@ class DBChronicle(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
     )
-    source_file: Mapped[str | None] = mapped_column(String(1024))
     project_path: Mapped[str | None] = mapped_column(String(1024))
     duration: Mapped[str | None] = mapped_column(String(50))
     speakers_count: Mapped[int] = mapped_column(default=0)
@@ -73,6 +72,3 @@ class DBKnownSpeaker(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(255), unique=True)
     normalized_name: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    uses: Mapped[int] = mapped_column(Integer, default=0)
-    first_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    last_used: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

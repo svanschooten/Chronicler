@@ -62,21 +62,6 @@ class SQLiteTranscriptRepository(TranscriptRepository):
             lines.append(line)
         return lines
 
-    async def add_line(self, line: TranscriptLine) -> TranscriptLine:
-        db_line = DBTranscriptLine(
-            id=str(line.id),
-            speaker_id=str(line.speaker_id) if line.speaker_id else None,
-            source_id=str(line.source_id) if line.source_id else None,
-            start_time=line.start_time,
-            end_time=line.end_time,
-            text=line.text,
-            synthetic_timing=line.synthetic_timing,
-        )
-        self.session.add(db_line)
-        await self.session.flush()
-        await self.session.refresh(db_line)
-        return TranscriptLine.model_validate(db_line)
-
     async def add_lines(self, lines: list[TranscriptLine]) -> None:
         db_lines = [
             DBTranscriptLine(

@@ -131,3 +131,65 @@ def test_synthetic_timing_column_is_added_and_old_rows_stay_null(tmp_path):
     with closing(sqlite3.connect(project_db)) as connection, connection:
         row = connection.execute("SELECT synthetic_timing FROM transcript_lines").fetchone()
     assert row == (None,)
+
+
+@pytest.mark.asyncio
+async def test_tracks_lines_and_search_survive_dropping_the_duration_column(tmp_path):
+    project_db = tmp_path / "project.db"
+    _project_db_at(project_db, "c5e8a1f3d920")
+    with closing(sqlite3.connect(project_db)) as connection, connection:
+        connection.execute("INSERT INTO speakers (id, name) VALUES (?, 'Alice')", (SPEAKER,))
+        connection.execute(
+            "INSERT INTO audio_sources (id, filename, added_at, duration_seconds, speaker_id, "
+            "transcription_state, normalization_state) "
+            "VALUES (?, 'alice.wav', '2026-01-01', 61.5, ?, 'DONE', 'PENDING')",
+            (SOURCE, SPEAKER),
+        )
+        connection.execute(
+            "INSERT INTO transcript_lines (id, speaker_id, source_id, start_time, end_time, "
+            "text) VALUES (?, ?, ?, 0.0, 1.0, 'The dragon wakes')",
+            (LINE, SPEAKER, SOURCE),
+        )
+
+    db_manager = DatabaseManager(tmp_path / "workspace")
+    try:
+        await register_chronicle(db_manager, "legacy", project_db)
+        session = await db_manager.get_project_session("legacy")
+        async with session:
+            (source,) = await SQLiteAudioSourceRepository(session).list_sources()
+            found = await SQLiteTranscriptRepository(session).search("dragon")
+            foreign_keys = (
+                await session.execute(text("PRAGMA foreign_key_list(transcript_lines)"))
+            ).all()
+    finally:
+        await db_manager.close_all()
+
+    assert (source.filename, source.speaker_name) == ("alice.wav", "Alice")
+    assert [(line.text, str(line.source_id)) for line in found] == [("The dragon wakes", SOURCE)]
+    assert {row[2] for row in foreign_keys} == {"speakers", "audio_sources"}
+    with closing(sqlite3.connect(project_db)) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(audio_sources)")}
+    assert "duration_seconds" not in columns
+
+
+def test_the_duration_column_comes_back_on_downgrade(tmp_path):
+    project_db = tmp_path / "project.db"
+    _project_db_at(project_db, "head")
+    with closing(sqlite3.connect(project_db)) as connection, connection:
+        connection.execute(
+            "INSERT INTO audio_sources (id, filename, added_at, transcription_state, "
+            "normalization_state) VALUES (?, 'alice.wav', '2026-01-01', 'DONE', 'PENDING')",
+            (SOURCE,),
+        )
+
+    engine = create_engine(f"sqlite:///{project_db}")
+    with engine.begin() as connection:
+        cfg = Config()
+        cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
+        cfg.attributes["connection"] = connection
+        command.downgrade(cfg, "c5e8a1f3d920")
+    engine.dispose()
+
+    with closing(sqlite3.connect(project_db)) as connection:
+        row = connection.execute("SELECT filename, duration_seconds FROM audio_sources").fetchone()
+    assert row == ("alice.wav", None)

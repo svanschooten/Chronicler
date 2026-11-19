@@ -21,7 +21,7 @@ async def _service(tmp_path):
 
 
 def _add_track(db_manager, chronicle_id, name, content=b"audio"):
-    path = db_manager.get_chronicle_sources_path(str(chronicle_id)) / name
+    path = db_manager.ensure_sources_path_for(str(chronicle_id)) / name
     path.write_bytes(content)
     return path
 

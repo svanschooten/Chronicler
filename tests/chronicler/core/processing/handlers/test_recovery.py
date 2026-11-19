@@ -31,7 +31,7 @@ async def workspace(tmp_path):
 
 
 async def _source(db_manager, chronicle_id, filename="track.wav", **states):
-    audio = db_manager.get_chronicle_sources_path(str(chronicle_id)) / filename
+    audio = db_manager.ensure_sources_path_for(str(chronicle_id)) / filename
     audio.write_bytes(b"audio")
     session = await db_manager.get_project_session(str(chronicle_id))
     async with session:
@@ -121,7 +121,7 @@ async def test_a_source_that_got_past_running_is_left_alone(workspace):
 @pytest.mark.asyncio
 async def test_a_source_that_was_never_registered_is_not_created(workspace):
     chronicle_id = uuid4()
-    audio = workspace.get_chronicle_sources_path(str(chronicle_id)) / "unseen.wav"
+    audio = workspace.ensure_sources_path_for(str(chronicle_id)) / "unseen.wav"
 
     await WorkerHandlers(workspace).abandon_transcribe(
         _task(TaskType.TRANSCRIBE, chronicle_id, audio)

@@ -14,7 +14,7 @@ same row and therefore the same id.
 ## The workspace registry
 
 `known_speakers` in the archive database records every name used anywhere in the
-workspace, with a use count and last-used timestamp.
+workspace, once each.
 
 It exists for one reason: **the speaker picker should offer everyone you have ever
 recorded, not just the people in this chronicle.** Without it, every new chronicle starts

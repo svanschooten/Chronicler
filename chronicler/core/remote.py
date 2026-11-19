@@ -41,7 +41,6 @@ class RemoteServiceProxy:
         api_key: str | None = None,
     ):
         self._base_url = base_url
-        self._cls = cls
         self._client = client or httpx.AsyncClient(timeout=RPC_TIMEOUT)
         self._api_key = api_key
 

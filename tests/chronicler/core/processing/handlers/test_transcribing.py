@@ -48,7 +48,7 @@ async def _make_transcribe_task(
     (see docs/audio-sources.md).
     """
     await register_chronicle(db_manager, chronicle_id)
-    sources_dir = db_manager.get_chronicle_sources_path(str(chronicle_id))
+    sources_dir = db_manager.ensure_sources_path_for(str(chronicle_id))
     audio_file = sources_dir / filename
     audio_file.write_bytes(b"fake audio bytes")
     return (
@@ -393,7 +393,7 @@ async def test_handle_transcribe_requires_speaker_name(tmp_path):
     try:
         handlers = WorkerHandlers(db_manager)
         chronicle_id = uuid4()
-        sources_dir = db_manager.get_chronicle_sources_path(str(chronicle_id))
+        sources_dir = db_manager.ensure_sources_path_for(str(chronicle_id))
         audio_file = sources_dir / "recording.mp3"
         audio_file.write_bytes(b"fake audio")
 

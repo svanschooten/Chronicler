@@ -4,9 +4,6 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-_services: list[type] = []
-
-
 EXPOSED_ATTRIBUTE = "__rpc_exposed__"
 
 BINARY_RETURNS = (bytes, bytearray)
@@ -59,7 +56,7 @@ def refusal_for(error: Exception) -> tuple[str, int] | None:
 
 def service[T](cls: type[T] | None = None, *, expose: Sequence[str] | None = None) -> Any:
     """
-    Registers a class as an RPC service, publishing only the methods it names.
+    Marks a class as an RPC service, publishing only the methods it names.
 
     Exposure is explicit because it used to be implicit: every public coroutine became an
     HTTP route, so making an internal helper async silently published it. See
@@ -68,8 +65,6 @@ def service[T](cls: type[T] | None = None, *, expose: Sequence[str] | None = Non
 
     def decorate(target: type[T]) -> type[T]:
         setattr(target, EXPOSED_ATTRIBUTE, _validated(target, expose or ()))
-        if target not in _services:
-            _services.append(target)
         return target
 
     return decorate if cls is None else decorate(cls)
@@ -88,10 +83,6 @@ def _validated(cls: type, names: Sequence[str]) -> tuple[str, ...]:
 def exposed_methods(cls: type) -> list[str]:
     """The method names this class publishes over RPC, in a stable order."""
     return list(cls.__dict__.get(EXPOSED_ATTRIBUTE, ()))
-
-
-def get_services() -> list[type]:
-    return _services
 
 
 class _UploadGuard:
@@ -168,8 +159,8 @@ class RpcServer:
 
     def __init__(
         self,
-        container: Any = None,
-        services: list[type] | None = None,
+        container: Any,
+        services: list[type],
         api_key: str | None = None,
     ):
         self.container = container
@@ -324,8 +315,7 @@ class RpcServer:
             return {"file_path": str(file_path), "original_filename": file.filename}
 
         if self.container:
-            target_services = self.services if self.services is not None else get_services()
-            for service_cls in target_services:
+            for service_cls in self.services:
                 self._register_service(self._app, service_cls)
 
         return self._app

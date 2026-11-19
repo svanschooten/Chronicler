@@ -96,30 +96,3 @@ async def confirm(
         ],
         dismissed=False,
     )
-
-
-async def ask_text(
-    page: ft.Page,
-    title: str,
-    message: str,
-    field: ft.TextField,
-    confirm_label: str | None = None,
-) -> str | None:
-    """
-    A modal that collects free text, resolving to the field's contents - or None if the user
-    cancelled.
-    """
-
-    def build(on_choice) -> ft.AlertDialog:
-        return ft.AlertDialog(
-            title=ft.Text(title),
-            content=ft.Column([ft.Text(message), field], tight=True),
-            actions=[
-                ft.TextButton(t("common.cancel"), on_click=on_choice(lambda: None)),
-                ft.FilledButton(
-                    confirm_label or t("common.ok"), on_click=on_choice(lambda: field.value)
-                ),
-            ],
-        )
-
-    return await await_dialog(page, build)
