@@ -14,7 +14,7 @@ import pytest
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
 from chronicler.core.processing.cleaners import TranscriptCleaner
-from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.handlers import CleanHandler, ImportHandler
 from chronicler.core.processing.handlers.cleaning import CLEAN_ATTEMPTS
 from chronicler.core.sqlite import (
     SQLiteAudioSourceRepository,
@@ -39,19 +39,20 @@ async def test_handle_clean_preserves_speaker_ids_across_runs(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = CleanHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
 
         transcript_file = imports_dir / "transcript.txt"
         transcript_file.write_text("Alice:   Hello   there\nBob: Hi Alice\n")
 
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         import_task = Task(
             type=TaskType.IMPORT,
             chronicle_id=chronicle_id,
             data=json.dumps({"file_path": str(transcript_file)}),
         )
-        await handlers.handle_import(import_task, _noop_progress)
+        await ImportHandler(handlers.db_manager).handle_import(import_task, _noop_progress)
 
         session = await db_manager.get_project_session(str(chronicle_id))
         async with session:
@@ -77,7 +78,7 @@ async def test_handle_clean_keeps_each_lines_track(tmp_path):
     """Cleaning rewrites every line, and must not drop which track each one came from."""
     db_manager = DatabaseManager(tmp_path)
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = CleanHandler(db_manager)
         chronicle_id = uuid4()
         await register_chronicle(db_manager, chronicle_id)
         session = await db_manager.get_project_session(str(chronicle_id))
@@ -132,7 +133,7 @@ async def test_handle_clean_backfills_speaker_count_without_retagging(tmp_path):
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Test Chronicle"))
 
-            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            handlers = CleanHandler(db_manager)
             imports_dir = db_manager.get_imports_path()
             transcript_file = imports_dir / "transcript.txt"
             transcript_file.write_text("Alice: Hello\nAlice: there\nBob: Hi\n")
@@ -142,7 +143,7 @@ async def test_handle_clean_backfills_speaker_count_without_retagging(tmp_path):
                 chronicle_id=chronicle.id,
                 data=json.dumps({"file_path": str(transcript_file)}),
             )
-            await handlers.handle_import(import_task, _noop_progress)
+            await ImportHandler(handlers.db_manager).handle_import(import_task, _noop_progress)
 
             clean_task = Task(type=TaskType.CLEAN, chronicle_id=chronicle.id)
             await handlers.handle_clean(clean_task, _noop_progress)
@@ -159,18 +160,19 @@ async def test_handle_clean_logs_line_counts_and_finish(tmp_path, caplog):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = CleanHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
         transcript_file = imports_dir / "transcript.txt"
         transcript_file.write_text("Alice: Hello\nAlice: there\nBob: Hi\n")
 
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         import_task = Task(
             type=TaskType.IMPORT,
             chronicle_id=chronicle_id,
             data=json.dumps({"file_path": str(transcript_file)}),
         )
-        await handlers.handle_import(import_task, _noop_progress)
+        await ImportHandler(handlers.db_manager).handle_import(import_task, _noop_progress)
 
         clean_task = Task(type=TaskType.CLEAN, chronicle_id=chronicle_id)
         with caplog.at_level("INFO", logger="chronicler.core.processing.handlers"):
@@ -192,19 +194,20 @@ async def test_handle_clean_reuses_the_speaker_ids_already_on_the_lines(tmp_path
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = CleanHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
 
         transcript_file = imports_dir / "transcript.txt"
         transcript_file.write_text("Alice: Hello\nAlice: there\nBob: Hi\n")
 
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         import_task = Task(
             type=TaskType.IMPORT,
             chronicle_id=chronicle_id,
             data=json.dumps({"file_path": str(transcript_file)}),
         )
-        await handlers.handle_import(import_task, _noop_progress)
+        await ImportHandler(handlers.db_manager).handle_import(import_task, _noop_progress)
 
         session = await db_manager.get_project_session(str(chronicle_id))
         async with session:
@@ -237,7 +240,7 @@ async def test_handle_clean_reuses_the_speaker_ids_already_on_the_lines(tmp_path
 async def _import_lines(handlers, chronicle_id, db_manager, text):
     transcript_file = db_manager.get_imports_path() / f"{uuid4().hex}.txt"
     transcript_file.write_text(text)
-    await handlers.handle_import(
+    await ImportHandler(handlers.db_manager).handle_import(
         Task(
             type=TaskType.IMPORT,
             chronicle_id=chronicle_id,
@@ -263,9 +266,10 @@ async def test_handle_clean_uses_the_configured_hallucination_phrases(tmp_path):
         settings = Settings()
         settings.cleaning.hallucination_phrases = ["Ondertiteling door"]
         settings.cleaning.merge_same_speaker = False
-        handlers = WorkerHandlers(db_manager, settings=settings)
+        handlers = CleanHandler(db_manager, settings=settings)
 
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         await _import_lines(
             handlers,
             chronicle_id,
@@ -291,9 +295,10 @@ async def test_handle_clean_accepts_a_per_task_override(tmp_path):
     try:
         settings = Settings()
         settings.cleaning.merge_same_speaker = False
-        handlers = WorkerHandlers(db_manager, settings=settings)
+        handlers = CleanHandler(db_manager, settings=settings)
 
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         await _import_lines(
             handlers, chronicle_id, db_manager, "Alice: Keep this\nAlice: Drop this\n"
         )
@@ -324,8 +329,9 @@ async def test_handle_clean_rejects_an_unsafe_override_pattern(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = CleanHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         await _import_lines(handlers, chronicle_id, db_manager, "Alice: Hello\n")
 
         with pytest.raises(ValueError):
@@ -368,9 +374,10 @@ class TestSnapshotBeforeCleaning:
         db_manager = DatabaseManager(tmp_path)
         try:
             chronicle_id = uuid4()
+            await register_chronicle(db_manager, chronicle_id)
             await _chronicle_with_lines(db_manager, chronicle_id, "You.", "We ride at dawn.")
 
-            await WorkerHandlers(db_manager).handle_clean(
+            await CleanHandler(db_manager).handle_clean(
                 Task(type=TaskType.CLEAN, chronicle_id=chronicle_id), _noop_progress
             )
 
@@ -387,8 +394,9 @@ class TestSnapshotBeforeCleaning:
         db_manager = DatabaseManager(tmp_path)
         try:
             chronicle_id = uuid4()
+            await register_chronicle(db_manager, chronicle_id)
             await _chronicle_with_lines(db_manager, chronicle_id, "We ride at dawn.")
-            handlers = WorkerHandlers(db_manager)
+            handlers = CleanHandler(db_manager)
 
             made = []
             for _ in range(5):
@@ -416,7 +424,7 @@ class TestSnapshotBeforeCleaning:
                     db_manager, chronicle.id, "We ride.", custom_path=project_db
                 )
 
-            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            handlers = CleanHandler(db_manager)
             await handlers.handle_clean(
                 Task(type=TaskType.CLEAN, chronicle_id=chronicle.id), _noop_progress
             )
@@ -438,7 +446,7 @@ class TestSnapshotBeforeCleaning:
                     Chronicle(title="Moved", project_path=str(gone))
                 )
 
-            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            handlers = CleanHandler(db_manager)
             with pytest.raises(FileNotFoundError):
                 await handlers.handle_clean(
                     Task(type=TaskType.CLEAN, chronicle_id=chronicle.id), _noop_progress
@@ -468,7 +476,7 @@ class TestSnapshotBeforeCleaning:
                     )
                     ids.append(chronicle.id)
 
-            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            handlers = CleanHandler(db_manager)
             first = await handlers.snapshot_before_clean(ids[0])
             for _ in range(5):
                 await handlers.snapshot_before_clean(ids[1])
@@ -496,6 +504,7 @@ class TestCleaningOutsideTheTransaction:
         db_manager = DatabaseManager(tmp_path, busy_timeout=0.2)
         try:
             chronicle_id = uuid4()
+            await register_chronicle(db_manager, chronicle_id)
             await _chronicle_with_lines(db_manager, chronicle_id, "We ride.", "At dawn.")
 
             started, release = threading.Event(), threading.Event()
@@ -511,7 +520,7 @@ class TestCleaningOutsideTheTransaction:
 
             with patch.object(TranscriptCleaner, "clean", slow_clean):
                 cleaning = asyncio.create_task(
-                    WorkerHandlers(db_manager).handle_clean(
+                    CleanHandler(db_manager).handle_clean(
                         Task(type=TaskType.CLEAN, chronicle_id=chronicle_id), _noop_progress
                     )
                 )
@@ -532,6 +541,7 @@ class TestCleaningOutsideTheTransaction:
         db_manager = DatabaseManager(tmp_path)
         try:
             chronicle_id = uuid4()
+            await register_chronicle(db_manager, chronicle_id)
             await _chronicle_with_lines(db_manager, chronicle_id, "We ride.")
             loop = asyncio.get_running_loop()
             edits = []
@@ -550,7 +560,7 @@ class TestCleaningOutsideTheTransaction:
 
             with patch.object(TranscriptCleaner, "clean", clean_while_editing):
                 with pytest.raises(RuntimeError, match="kept changing"):
-                    await WorkerHandlers(db_manager).handle_clean(
+                    await CleanHandler(db_manager).handle_clean(
                         Task(type=TaskType.CLEAN, chronicle_id=chronicle_id), _noop_progress
                     )
 

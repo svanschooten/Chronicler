@@ -13,13 +13,14 @@ import pytest_asyncio
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, SourceState, Task, TaskStatus, TaskType
-from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.handlers import NormalizeHandler, TranscribeHandler
 from chronicler.core.sqlite import (
     SQLiteAudioSourceRepository,
     SQLiteChronicleRepository,
     SQLiteTaskRepository,
 )
 from chronicler.core.worker_wiring import build_worker_manager
+from tests.projects import register_chronicle
 
 
 @pytest_asyncio.fixture
@@ -69,6 +70,7 @@ def _task(task_type, chronicle_id, audio, **fields):
 @pytest.mark.asyncio
 async def test_a_failed_transcribe_stops_showing_as_transcribing(workspace):
     chronicle_id = uuid4()
+    await register_chronicle(workspace, chronicle_id)
     audio = await _source(
         workspace,
         chronicle_id,
@@ -76,7 +78,7 @@ async def test_a_failed_transcribe_stops_showing_as_transcribing(workspace):
         normalization=SourceState.RUNNING,
     )
 
-    await WorkerHandlers(workspace).abandon_transcribe(
+    await TranscribeHandler(workspace).abandon_transcribe(
         _task(TaskType.TRANSCRIBE, chronicle_id, audio)
     )
 
@@ -89,6 +91,7 @@ async def test_a_failed_transcribe_stops_showing_as_transcribing(workspace):
 @pytest.mark.asyncio
 async def test_a_failed_normalize_leaves_the_transcription_state_alone(workspace):
     chronicle_id = uuid4()
+    await register_chronicle(workspace, chronicle_id)
     audio = await _source(
         workspace,
         chronicle_id,
@@ -96,7 +99,7 @@ async def test_a_failed_normalize_leaves_the_transcription_state_alone(workspace
         normalization=SourceState.RUNNING,
     )
 
-    await WorkerHandlers(workspace).abandon_normalize(
+    await NormalizeHandler(workspace).abandon_normalize(
         _task(TaskType.NORMALIZE, chronicle_id, audio)
     )
 
@@ -109,9 +112,10 @@ async def test_a_failed_normalize_leaves_the_transcription_state_alone(workspace
 async def test_a_source_that_got_past_running_is_left_alone(workspace):
     """The crash came after the transcript was saved, so the source really is done."""
     chronicle_id = uuid4()
+    await register_chronicle(workspace, chronicle_id)
     audio = await _source(workspace, chronicle_id, transcription=SourceState.DONE)
 
-    await WorkerHandlers(workspace).abandon_transcribe(
+    await TranscribeHandler(workspace).abandon_transcribe(
         _task(TaskType.TRANSCRIBE, chronicle_id, audio)
     )
 
@@ -121,9 +125,10 @@ async def test_a_source_that_got_past_running_is_left_alone(workspace):
 @pytest.mark.asyncio
 async def test_a_source_that_was_never_registered_is_not_created(workspace):
     chronicle_id = uuid4()
+    await register_chronicle(workspace, chronicle_id)
     audio = workspace.ensure_sources_path_for(str(chronicle_id)) / "unseen.wav"
 
-    await WorkerHandlers(workspace).abandon_transcribe(
+    await TranscribeHandler(workspace).abandon_transcribe(
         _task(TaskType.TRANSCRIBE, chronicle_id, audio)
     )
 
@@ -162,7 +167,7 @@ async def test_the_wired_worker_clears_the_source_of_a_task_recovery_fails(works
 @pytest.mark.asyncio
 async def test_a_task_for_a_deleted_chronicle_does_not_recreate_its_folder(workspace):
     chronicle_id = uuid4()
-    handlers = WorkerHandlers(workspace, archive_sessions=workspace.get_archive_session)
+    handlers = TranscribeHandler(workspace)
 
     with pytest.raises(LookupError):
         await handlers.project_session(chronicle_id)

@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
-from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.handlers import TranscribeHandler
 from chronicler.core.sqlite import (
     SQLiteAudioSourceRepository,
     SQLiteChronicleRepository,
@@ -32,7 +32,13 @@ def _fake_transcription(*segments):
 
     def _transcribe(_path: str, speaker_name: str, **_kwargs) -> list[TranscriptLine]:
         return [
-            TranscriptLine(speaker_name=speaker_name, text=text, start_time=start, end_time=end)
+            TranscriptLine(
+                speaker_name=speaker_name,
+                text=text,
+                start_time=start,
+                end_time=end,
+                synthetic_timing=False,
+            )
             for text, start, end in segments
         ]
 
@@ -75,7 +81,7 @@ async def test_handle_transcribe_creates_lines_for_assigned_speaker(tmp_path):
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Recording"))
 
-            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            handlers = TranscribeHandler(db_manager)
             task, audio_file = await _make_transcribe_task(db_manager, chronicle.id, "Alice")
 
             with patch(
@@ -119,7 +125,7 @@ async def test_handle_transcribe_duration_reflects_longest_track(tmp_path):
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Podcast"))
 
-            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            handlers = TranscribeHandler(db_manager)
 
             alice_task, _ = await _make_transcribe_task(
                 db_manager, chronicle.id, "Alice", "alice.mp3"
@@ -153,7 +159,7 @@ async def test_handle_transcribe_does_not_overwrite_a_non_default_status(tmp_pat
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Custom", status="Archived"))
 
-            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            handlers = TranscribeHandler(db_manager)
             task, _ = await _make_transcribe_task(db_manager, chronicle.id, "Alice")
             with patch(
                 "chronicler.core.processing.transcriber.transcribe_audio",
@@ -176,7 +182,7 @@ async def test_handle_transcribe_keeps_other_speakers_lines(tmp_path):
         async with archive_session:
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Podcast"))
-            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            handlers = TranscribeHandler(db_manager)
 
             await _transcribe(handlers, db_manager, chronicle.id, "Alice", "alice.mp3", "Hi")
             await _transcribe(handlers, db_manager, chronicle.id, "Bob", "bob.mp3", "Hello")
@@ -216,8 +222,9 @@ class TestTwoTracksForOneSpeaker:
     @pytest.mark.asyncio
     async def test_both_tracks_are_kept(self, tmp_path):
         db_manager = DatabaseManager(tmp_path)
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         try:
             await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "One")
             await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two")
@@ -229,8 +236,9 @@ class TestTwoTracksForOneSpeaker:
     @pytest.mark.asyncio
     async def test_rerunning_one_track_replaces_only_its_lines(self, tmp_path):
         db_manager = DatabaseManager(tmp_path)
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         try:
             await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "One")
             await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two")
@@ -246,8 +254,9 @@ class TestTwoTracksForOneSpeaker:
     @pytest.mark.asyncio
     async def test_each_line_records_its_track(self, tmp_path):
         db_manager = DatabaseManager(tmp_path)
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         try:
             await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "One")
             await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two")
@@ -293,8 +302,9 @@ class TestLinesWithNoRecordedTrack:
     async def test_an_imported_line_survives_rerunning_the_speakers_only_track(self, tmp_path):
         """Review repro: the old 'only track owns untracked lines' rule deleted this."""
         db_manager = DatabaseManager(tmp_path)
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         try:
             await _import_line(db_manager, chronicle_id, "Alice", "Imported")
             await _transcribe(handlers, db_manager, chronicle_id, "Alice", "alice.wav", "Heard")
@@ -310,8 +320,9 @@ class TestLinesWithNoRecordedTrack:
     @pytest.mark.asyncio
     async def test_they_are_kept_when_the_speaker_has_two_tracks(self, tmp_path):
         db_manager = DatabaseManager(tmp_path)
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         try:
             await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "One")
             await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two")
@@ -330,8 +341,9 @@ class TestLinesWithNoRecordedTrack:
     @pytest.mark.asyncio
     async def test_an_imported_transcript_survives_a_first_transcription(self, tmp_path):
         db_manager = DatabaseManager(tmp_path)
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         try:
             await register_chronicle(db_manager, chronicle_id)
             session = await db_manager.get_project_session(str(chronicle_id))
@@ -357,8 +369,9 @@ class TestStartOffset:
     @pytest.mark.asyncio
     async def test_it_shifts_the_tracks_timestamps(self, tmp_path):
         db_manager = DatabaseManager(tmp_path)
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         try:
             await _transcribe(
                 handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two", start_offset=60
@@ -372,8 +385,9 @@ class TestStartOffset:
     @pytest.mark.asyncio
     async def test_a_rerun_keeps_the_stored_offset(self, tmp_path):
         db_manager = DatabaseManager(tmp_path)
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         try:
             await _transcribe(
                 handlers, db_manager, chronicle_id, "Alice", "part2.wav", "Two", start_offset=60
@@ -391,8 +405,9 @@ async def test_handle_transcribe_requires_speaker_name(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         sources_dir = db_manager.ensure_sources_path_for(str(chronicle_id))
         audio_file = sources_dir / "recording.mp3"
         audio_file.write_bytes(b"fake audio")
@@ -414,7 +429,7 @@ async def test_handle_transcribe_rejects_file_path_outside_sources_dir(tmp_path)
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         outside_file = tmp_path / "secrets.mp3"
         outside_file.write_bytes(b"not really audio")
 
@@ -435,8 +450,9 @@ async def test_handle_transcribe_raises_helpful_error_without_transcription_extr
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         task, _ = await _make_transcribe_task(db_manager, chronicle_id, "Alice")
 
         with patch(
@@ -458,8 +474,9 @@ async def test_handle_transcribe_passes_the_assigned_speaker_to_the_transcriber(
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = TranscribeHandler(db_manager)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         task, audio_file = await _make_transcribe_task(db_manager, chronicle_id, "Alice")
 
         transcribe = MagicMock(side_effect=_fake_transcription(("Hello", 0.0, 1.0)))
@@ -476,8 +493,9 @@ class TestTranscriptionParameters:
     async def _run(self, tmp_path, settings=None, task_overrides=None):
         db_manager = DatabaseManager(tmp_path)
         await db_manager.init_archive()
-        handlers = WorkerHandlers(db_manager, settings=settings)
+        handlers = TranscribeHandler(db_manager, settings=settings)
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         task, audio_file = await _make_transcribe_task(db_manager, chronicle_id, "GM")
         if task_overrides:
             data = json.loads(task.data)
@@ -571,8 +589,9 @@ class TestTranscriptionParameters:
         db_manager = DatabaseManager(tmp_path)
         await db_manager.init_archive()
         try:
-            handlers = WorkerHandlers(db_manager)
+            handlers = TranscribeHandler(db_manager)
             chronicle_id = uuid4()
+            await register_chronicle(db_manager, chronicle_id)
             task, _ = await _make_transcribe_task(db_manager, chronicle_id, "GM")
 
             with patch(
@@ -595,8 +614,9 @@ class TestTranscriptionParameters:
 @pytest.mark.asyncio
 async def test_re_transcribing_a_track_keeps_a_copy_to_restore_from(tmp_path):
     db_manager = DatabaseManager(tmp_path)
-    handlers = WorkerHandlers(db_manager)
+    handlers = TranscribeHandler(db_manager)
     chronicle_id = uuid4()
+    await register_chronicle(db_manager, chronicle_id)
     try:
         await _transcribe(handlers, db_manager, chronicle_id, "Alice", "part1.wav", "First pass")
         assert await db_manager.list_snapshots(chronicle_id) == []
@@ -615,8 +635,9 @@ async def test_re_transcribing_a_track_keeps_a_copy_to_restore_from(tmp_path):
 async def test_progress_moves_through_the_transcription(tmp_path):
     """The transcriber reports from its own thread; each step reaches update_progress."""
     db_manager = DatabaseManager(tmp_path)
-    handlers = WorkerHandlers(db_manager)
+    handlers = TranscribeHandler(db_manager)
     chronicle_id = uuid4()
+    await register_chronicle(db_manager, chronicle_id)
     reported: list[int] = []
 
     async def record(progress: int) -> None:
@@ -644,8 +665,9 @@ async def test_a_cancelled_transcription_marks_the_source_and_writes_no_lines(tm
     from chronicler.core.cancellation import TaskCancelledError
 
     db_manager = DatabaseManager(tmp_path)
-    handlers = WorkerHandlers(db_manager)
+    handlers = TranscribeHandler(db_manager)
     chronicle_id = uuid4()
+    await register_chronicle(db_manager, chronicle_id)
 
     def transcribe(*_args, **_kwargs):
         raise TaskCancelledError("The task was cancelled")

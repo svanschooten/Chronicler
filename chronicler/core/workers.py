@@ -29,6 +29,7 @@ INTERRUPTED = "Interrupted before finishing"
 CANCEL_POLL_SECONDS = 1.0
 """How often a running task's row is checked for a cancel request."""
 
+Handler = Callable[[Task, Callable[[int], Awaitable[None]]], Awaitable[Any]]
 Cleanup = Callable[[Task], Awaitable[None]]
 
 T = TypeVar("T")
@@ -56,16 +57,14 @@ class WorkerManager:
     ):
         self.sessions = sessions
         self.worker_id = worker_id or str(uuid.uuid4())
-        self.handlers: dict[TaskType, Callable[[Task, Callable[[int], Any]], Any]] = {}
+        self.handlers: dict[TaskType, Handler] = {}
         self.cleanups: dict[TaskType, Cleanup] = {}
         self._recovered = False
         self._running = False
         self.event_bus = event_bus
         self.status_write_timeout = status_write_timeout
 
-    def register_handler(
-        self, task_type: TaskType, handler: Callable[[Task, Callable[[int], Any]], Any]
-    ):
+    def register_handler(self, task_type: TaskType, handler: Handler):
         self.handlers[task_type] = handler
 
     def register_cleanup(self, task_type: TaskType, cleanup: Cleanup):
@@ -162,11 +161,7 @@ class WorkerManager:
         token = cancel_event.set(cancelled)
         watcher = asyncio.create_task(self._watch_for_cancel(task, cancelled))
         try:
-            handler = self.handlers[task.type]
-            if asyncio.iscoroutinefunction(handler):
-                await handler(task, update_progress)
-            else:
-                handler(task, update_progress)
+            await self.handlers[task.type](task, update_progress)
         except asyncio.CancelledError:
             await self._return_to_queue(task)
             raise

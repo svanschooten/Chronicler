@@ -8,12 +8,11 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from chronicler.core.config import Settings, get_settings
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.file_staging import confine_to_directory
 from chronicler.core.models import Task, TranscriptLine
+from chronicler.core.reconcile import reconcile
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
 
 logger = logging.getLogger(__name__)
@@ -25,21 +24,15 @@ class HandlerBase:
     def __init__(
         self,
         db_manager: DatabaseManager,
-        archive_sessions: Callable[[], AsyncSession] | None = None,
         settings: Settings | None = None,
     ):
         self.db_manager = db_manager
-        self.archive_sessions = archive_sessions
         self.settings = settings or get_settings()
 
     @asynccontextmanager
     async def chronicles(self) -> AsyncIterator[SQLiteChronicleRepository]:
-        """
-        A chronicle repository on a short archive session of its own. Without
-        `archive_sessions` a handler skips its chronicle bookkeeping, so check that first.
-        """
-        assert self.archive_sessions is not None
-        async with self.archive_sessions() as session:
+        """A chronicle repository on a short archive session of its own."""
+        async with self.db_manager.get_archive_session() as session:
             yield SQLiteChronicleRepository(session)
 
     @staticmethod
@@ -75,18 +68,13 @@ class HandlerBase:
         A project database transaction - see `DatabaseManager.transaction`. Raises
         LookupError for a chronicle with no row (deleted while the task waited) and
         FileNotFoundError for a linked one whose file has moved, instead of creating a
-        new empty database. Without `archive_sessions` (tests only) that check is skipped,
-        but the location is still read from the archive, so the chronicle needs a row.
+        new empty database.
         """
-        return self.db_manager.transaction(
-            chronicle_id, must_exist=self.archive_sessions is not None
-        )
+        return self.db_manager.transaction(chronicle_id, must_exist=True)
 
     async def project_session(self, chronicle_id: UUID):
         """A read-only project session, checked like `transaction`. The caller closes it."""
-        return await self.db_manager.get_project_session(
-            chronicle_id, must_exist=self.archive_sessions is not None
-        )
+        return await self.db_manager.get_project_session(chronicle_id, must_exist=True)
 
     async def snapshot_before(self, chronicle_id: UUID, kind: str) -> Path:
         """
@@ -94,9 +82,7 @@ class HandlerBase:
         import, transcribe) replaces its text. A failed snapshot fails the task, so nothing
         is rewritten without a copy to go back to. See docs/storage.md.
         """
-        return await self.db_manager.snapshot_before(
-            chronicle_id, kind, must_exist=self.archive_sessions is not None
-        )
+        return await self.db_manager.snapshot_before(chronicle_id, kind, must_exist=True)
 
     @staticmethod
     async def attach_speakers(
@@ -114,16 +100,9 @@ class HandlerBase:
             line.speaker_id = speaker_map[line.speaker_name]
         return speaker_map
 
-    async def tag_as_transcript(self, chronicle_id: UUID) -> None:
-        if self.archive_sessions:
-            async with self.chronicles() as chronicles:
-                await chronicles.add_tag(chronicle_id, "Transcript")
-
-    async def backfill_speakers_count(self, chronicle_id: UUID, count: int) -> None:
-        if not self.archive_sessions:
-            return
+    async def reconcile(self, chronicle_id: UUID, summaries: int = 0) -> None:
+        """Brings the chronicle's archive row up to date with its transcript - see `reconcile`."""
+        async with await self.project_session(chronicle_id) as session:
+            lines = await SQLiteTranscriptRepository(session).get_lines()
         async with self.chronicles() as chronicles:
-            chronicle = await chronicles.get_by_id(chronicle_id)
-            if chronicle and chronicle.speakers_count != count:
-                chronicle.speakers_count = count
-                await chronicles.update(chronicle)
+            await reconcile(chronicles, chronicle_id, lines, summaries)

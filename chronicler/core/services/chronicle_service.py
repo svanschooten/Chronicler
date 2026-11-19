@@ -12,7 +12,6 @@ from chronicler.core.database_manager import (
     check_linkable_project,
 )
 from chronicler.core.file_staging import confine_to_directory, safe_display_name
-from chronicler.core.formatting import format_duration, looks_synthetic
 from chronicler.core.models import Chronicle, Snapshot
 from chronicler.core.rpc import service
 from chronicler.core.services.transcript_service import TranscriptService
@@ -122,20 +121,8 @@ class ChronicleService:
         if self.transcripts is None:
             return chronicle
 
-        speakers = await self.transcripts.refresh_speaker_count(chronicle_id)
-        lines = await self.transcripts.get_transcript(chronicle_id)
-
-        if lines:
-            await self.repository.add_tag(chronicle_id, "Transcript")
-
-        chronicle = await self.repository.get_by_id(chronicle_id) or chronicle
-        chronicle.speakers_count = speakers
-        if lines and not looks_synthetic(lines):
-            chronicle.duration = format_duration(max(line.end_time for line in lines))
-        if lines:
-            chronicle.status = "Transcribed"
-        logger.info(f"Hydrated chronicle {chronicle_id}: {speakers} speakers, {len(lines)} lines")
-        return await self.repository.update(chronicle)
+        await self.transcripts.refresh_speaker_count(chronicle_id)
+        return await self.repository.get_by_id(chronicle_id) or chronicle
 
     async def edit_chronicle(
         self,

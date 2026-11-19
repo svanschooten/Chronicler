@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -9,13 +10,20 @@ import pytest_asyncio
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Task, TaskType
-from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.handlers import CleanHandler, ImportHandler
 from chronicler.core.sqlite import SQLiteTranscriptRepository
 from tests.projects import register_chronicle
 
 
 async def _noop(_progress: int) -> None:
     pass
+
+
+def _handlers(db_manager):
+    return SimpleNamespace(
+        handle_import=ImportHandler(db_manager).handle_import,
+        handle_clean=CleanHandler(db_manager).handle_clean,
+    )
 
 
 async def _import(handlers, db_manager, chronicle_id, text, append=False):
@@ -44,7 +52,7 @@ async def workspace(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     chronicle_id = uuid4()
     await register_chronicle(db_manager, chronicle_id)
-    yield db_manager, WorkerHandlers(db_manager), chronicle_id
+    yield db_manager, _handlers(db_manager), chronicle_id
     await db_manager.close_all()
 
 
@@ -153,8 +161,11 @@ async def test_another_chronicles_snapshot_in_a_shared_folder_is_refused(tmp_pat
     folder = tmp_path / "shared"
     await register_chronicle(db_manager, first, folder / "a.db")
     await register_chronicle(db_manager, second, folder / "b.db")
-    handlers = WorkerHandlers(db_manager)
+    handlers = _handlers(db_manager)
     try:
+        for chronicle_id in (first, second):  # a linked project is opened, never created
+            async with await db_manager.get_project_session(str(chronicle_id)):
+                pass
         await _import(handlers, db_manager, second, "Bob: Other\n")
         await _import(handlers, db_manager, first, "Alice: One\n")
         await _import(handlers, db_manager, first, "Alice: Two\n")
@@ -195,7 +206,7 @@ async def test_restoring_through_the_service_refreshes_the_workspace_record(tmp_
 
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
-    handlers = WorkerHandlers(db_manager)
+    handlers = _handlers(db_manager)
     try:
         async with db_manager.get_archive_session() as session:
             repository = SQLiteChronicleRepository(session)

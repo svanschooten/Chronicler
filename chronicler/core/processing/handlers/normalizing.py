@@ -25,7 +25,9 @@ class NormalizeHandler(HandlerBase):
         )
 
         await update_progress(10)
-        result = await self.ensure_normalized(chronicle_id, resolved, force=bool(data.get("force")))
+        result = await ensure_normalized(
+            self, chronicle_id, resolved, force=bool(data.get("force"))
+        )
         await update_progress(100)
 
         if result is None:
@@ -34,96 +36,98 @@ class NormalizeHandler(HandlerBase):
 
     async def abandon_normalize(self, task: Task) -> None:
         """Recovery failed this task, so its source must stop showing as normalizing."""
-        await self.release_source(task, transcription=False)
+        await release_source(self, task, transcription=False)
 
-    async def release_source(self, task: Task, transcription: bool) -> None:
-        """
-        Marks the task's source FAILED wherever it still says RUNNING. A crash skipped the
-        handler's own failure path, so without this the Sources panel shows the work as
-        running for good. A state that got past RUNNING is left alone.
-        """
-        chronicle_id = self.require_chronicle_id(task)
-        file_path = self.require_field(self.task_data(task), "file_path", task.type.value)
-        resolved = self.confine_to(
-            file_path,
-            await self.sources_root_for(chronicle_id),
-            "the chronicle's sources directory",
+
+async def release_source(handler: HandlerBase, task: Task, transcription: bool) -> None:
+    """
+    Marks the task's source FAILED wherever it still says RUNNING. A crash skipped the
+    handler's own failure path, so without this the Sources panel shows the work as
+    running for good. A state that got past RUNNING is left alone.
+    """
+    chronicle_id = handler.require_chronicle_id(task)
+    file_path = handler.require_field(handler.task_data(task), "file_path", task.type.value)
+    resolved = handler.confine_to(
+        file_path,
+        await handler.sources_root_for(chronicle_id),
+        "the chronicle's sources directory",
+    )
+    async with handler.transaction(chronicle_id) as session:
+        repo = SQLiteAudioSourceRepository(session)
+        source = await repo.get_by_filename(resolved.name)
+        if source is None:
+            return
+        error = task.error or "Interrupted before finishing"
+        if transcription and source.transcription_state == SourceState.RUNNING:
+            await repo.mark_transcription_failed(resolved.name, error)
+        if source.normalization_state == SourceState.RUNNING:
+            await repo.mark_normalization_failed(resolved.name, error)
+
+
+async def ensure_normalized(
+    handler: HandlerBase, chronicle_id: UUID, source: Path, force: bool = False
+) -> Path | None:
+    """
+    Normalizes `source` unless a current normalized copy already exists.
+
+    Returns the normalized file's path when this call produced one, and None when the
+    work was skipped - so a caller can tell a fresh run from a no-op.
+    """
+    from chronicler.core.processing import normalizer
+
+    record = await _source_record(handler, chronicle_id, source)
+    if not force and record is not None and record.is_normalized:
+        existing = source.parent / str(record.normalized_filename)
+        if existing.exists():
+            return None
+
+    async with handler.transaction(chronicle_id) as session:
+        await SQLiteAudioSourceRepository(session).mark_normalizing(source.name)
+    try:
+        result = await asyncio.to_thread(
+            normalizer.normalize_audio, source, handler.settings.normalization
         )
-        async with self.transaction(chronicle_id) as session:
-            repo = SQLiteAudioSourceRepository(session)
-            source = await repo.get_by_filename(resolved.name)
-            if source is None:
-                return
-            error = task.error or "Interrupted before finishing"
-            if transcription and source.transcription_state == SourceState.RUNNING:
-                await repo.mark_transcription_failed(resolved.name, error)
-            if source.normalization_state == SourceState.RUNNING:
-                await repo.mark_normalization_failed(resolved.name, error)
+    except Exception as error:
+        await _mark_failed(handler, chronicle_id, source.name, str(error))
+        raise
 
-    async def ensure_normalized(
-        self, chronicle_id: UUID, source: Path, force: bool = False
-    ) -> Path | None:
-        """
-        Normalizes `source` unless a current normalized copy already exists.
+    async with handler.transaction(chronicle_id) as session:
+        repo = SQLiteAudioSourceRepository(session)
+        await repo.mark_normalized(
+            source.name,
+            content_hash=fingerprint_file(source),
+            normalized_filename=result.output_path.name,
+            loudness_before=result.loudness_before,
+            loudness_after=result.loudness_after,
+        )
+    return result.output_path
 
-        Returns the normalized file's path when this call produced one, and None when the
-        work was skipped - so a caller can tell a fresh run from a no-op.
-        """
-        from chronicler.core.processing import normalizer
 
-        record = await self._source_record(chronicle_id, source)
-        if not force and record is not None and record.is_normalized:
-            existing = source.parent / str(record.normalized_filename)
-            if existing.exists():
-                return None
+async def transcription_source(handler: HandlerBase, chronicle_id: UUID, source: Path) -> Path:
+    """The normalized copy of `source` when there is a current one, else `source`."""
+    record = await _source_record(handler, chronicle_id, source)
+    if record is None or not record.is_normalized or not record.normalized_filename:
+        return source
+    normalized = source.parent / record.normalized_filename
+    return normalized if normalized.exists() else source
 
-        await self._mark_running(chronicle_id, source)
-        try:
-            result = await asyncio.to_thread(
-                normalizer.normalize_audio, source, self.settings.normalization
-            )
-        except Exception as error:
-            await self._mark_failed(chronicle_id, source.name, str(error))
-            raise
 
-        async with self.transaction(chronicle_id) as session:
-            repo = SQLiteAudioSourceRepository(session)
-            await repo.mark_normalized(
-                source.name,
-                content_hash=fingerprint_file(source),
-                normalized_filename=result.output_path.name,
-                loudness_before=result.loudness_before,
-                loudness_after=result.loudness_after,
-            )
-        return result.output_path
+async def _source_record(
+    handler: HandlerBase, chronicle_id: UUID, source: Path
+) -> AudioSource | None:
+    content_hash, size_bytes = await asyncio.to_thread(_fingerprint_if_present, source)
+    async with handler.transaction(chronicle_id) as session:
+        repo = SQLiteAudioSourceRepository(session)
+        await repo.register(source.name, content_hash=content_hash, size_bytes=size_bytes)
+        return await repo.get_by_filename(source.name)
 
-    async def transcription_source(self, chronicle_id: UUID, source: Path) -> Path:
-        """The normalized copy of `source` when there is a current one, else `source`."""
-        record = await self._source_record(chronicle_id, source)
-        if record is None or not record.is_normalized or not record.normalized_filename:
-            return source
-        normalized = source.parent / record.normalized_filename
-        return normalized if normalized.exists() else source
 
-    async def _source_record(self, chronicle_id: UUID, source: Path) -> AudioSource | None:
-        content_hash, size_bytes = await asyncio.to_thread(_fingerprint_if_present, source)
-        async with self.transaction(chronicle_id) as session:
-            repo = SQLiteAudioSourceRepository(session)
-            await repo.register(source.name, content_hash=content_hash, size_bytes=size_bytes)
-            return await repo.get_by_filename(source.name)
-
-    async def _mark_running(self, chronicle_id: UUID, source: Path) -> None:
-        async with self.transaction(chronicle_id) as session:
-            await SQLiteAudioSourceRepository(session).mark_normalizing(source.name)
-
-    async def _mark_failed(self, chronicle_id: UUID, filename: str, error: str) -> None:
-        try:
-            async with self.transaction(chronicle_id) as session:
-                await SQLiteAudioSourceRepository(session).mark_normalization_failed(
-                    filename, error
-                )
-        except KeyError:
-            pass  # the source row is gone, so there is nothing to mark
+async def _mark_failed(handler: HandlerBase, chronicle_id: UUID, filename: str, error: str) -> None:
+    try:
+        async with handler.transaction(chronicle_id) as session:
+            await SQLiteAudioSourceRepository(session).mark_normalization_failed(filename, error)
+    except KeyError:
+        pass  # the source row is gone, so there is nothing to mark
 
 
 def _fingerprint_if_present(source: Path) -> tuple[str | None, int | None]:

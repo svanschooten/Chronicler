@@ -6,7 +6,7 @@ import pytest
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
-from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.handlers import ImportHandler
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
 from tests.paths import EXAMPLES_DIR
@@ -33,7 +33,7 @@ async def test_export_plaintext_preserves_raw_turn_structure_from_real_example(t
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Example"))
 
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         staged_file = db_manager.get_imports_path() / "example_transcript_001.txt"
         staged_file.write_bytes((EXAMPLES_DIR / "example_transcript_001.txt").read_bytes())
 

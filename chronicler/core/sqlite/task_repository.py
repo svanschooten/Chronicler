@@ -11,8 +11,6 @@ from chronicler.core.database import DBChronicle, DBTask
 from chronicler.core.models import Task, TaskStatus
 from chronicler.core.sqlite.patterns import LIKE_ESCAPE, contains_pattern
 
-_MAX_CLAIM_CANDIDATES = 5
-
 CANCELLED_MESSAGE = "Cancelled"
 
 RETRY_DELAYS = (30.0, 300.0)
@@ -102,35 +100,29 @@ class SQLiteTaskRepository:
 
     async def claim_next(self, worker_id: str) -> Task | None:
         """
-        Atomically claim one PENDING task (PENDING -> WORKING, stamped with
-        worker_id/claimed_at) and return it, or None if there's nothing to claim.
+        Claims one due PENDING task (PENDING -> WORKING, stamped with worker_id/claimed_at)
+        and returns it, or None if there is nothing to claim. Only one process opens a
+        workspace and one coroutine runs its worker, so nothing claims concurrently.
         """
         now = datetime.now()
-        result = await self.session.execute(
-            select(DBTask.id)
-            .where(
-                DBTask.status == TaskStatus.PENDING,
-                or_(DBTask.not_before.is_(None), DBTask.not_before <= now),
+        db_task = (
+            await self.session.execute(
+                select(DBTask)
+                .where(
+                    DBTask.status == TaskStatus.PENDING,
+                    or_(DBTask.not_before.is_(None), DBTask.not_before <= now),
+                )
+                .order_by(DBTask.priority.desc(), DBTask.created_at.asc())
+                .limit(1)
             )
-            .order_by(DBTask.priority.desc(), DBTask.created_at.asc())
-            .limit(_MAX_CLAIM_CANDIDATES)
-        )
-        candidate_ids = [row[0] for row in result.all()]
-
-        for candidate_id in candidate_ids:
-            update_result = cast(
-                CursorResult,
-                await self.session.execute(
-                    sa_update(DBTask)
-                    .where(DBTask.id == candidate_id, DBTask.status == TaskStatus.PENDING)
-                    .values(status=TaskStatus.WORKING, claimed_by=worker_id, claimed_at=now)
-                ),
-            )
-            await self.session.commit()
-            if update_result.rowcount == 1:
-                return await self.get_by_id(UUID(candidate_id))
-
-        return None
+        ).scalar_one_or_none()
+        if db_task is None:
+            return None
+        db_task.status = TaskStatus.WORKING
+        db_task.claimed_by = worker_id
+        db_task.claimed_at = now
+        await self.session.commit()
+        return Task.model_validate(db_task)
 
     async def mark_failed_or_retry(self, task_id: UUID, error: str) -> None:
         """Record a failed attempt."""

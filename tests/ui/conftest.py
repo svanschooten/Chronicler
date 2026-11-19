@@ -19,7 +19,7 @@ import pytest_asyncio
 
 from chronicler.core.config import Mode, Settings
 from chronicler.core.models import Chronicle, Task, TaskType
-from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.handlers import ImportHandler
 from chronicler.core.sqlite import SQLiteChronicleRepository
 from chronicler.desktop.app import DesktopApp
 from chronicler.desktop.runtime import build_runtime
@@ -99,7 +99,7 @@ async def _seed(runtime) -> Chronicle:
         chronicle_id=chronicle.id,
         data=json.dumps({"file_path": str(staged)}),
     )
-    await WorkerHandlers(db).handle_import(task, _noop)
+    await ImportHandler(db).handle_import(task, _noop)
     return chronicle
 
 
