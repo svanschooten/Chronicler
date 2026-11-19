@@ -274,7 +274,7 @@ Internal only, and the most likely to conflict, so these come after the user-fac
 
 - [x] [051-L7 Speaker count has two definitions](051-L7_speaker_count_definition.md) · low · XS · after 040
 
-- [ ] [041-S3 Replace the DI container with an explicit Services object](041-S3_services_bundle.md) · medium · M · after 030, 023, 034, 025, 019, 027
+- [x] [041-S3 Replace the DI container with an explicit Services object](041-S3_services_bundle.md) · medium · M · after 030, 023, 034, 025, 019, 027
 
 - [ ] [066-F4 Tag management](066-F4_tag_management.md) · low · M · after 029
 
