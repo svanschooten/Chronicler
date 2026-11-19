@@ -1,7 +1,7 @@
 import pytest
 
 from chronicler.core.database_manager import DatabaseManager
-from chronicler.core.models import Chronicle, SourceState
+from chronicler.core.models import Chronicle, SourceState, TranscriptLine
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
@@ -299,8 +299,19 @@ async def test_identifying_speakers_backfills_the_workspace_registry(tmp_path):
         project = await db_manager.get_project_session(str(chronicle.id))
         async with project:
             repo = Transcripts(project)
-            await repo.get_or_create_speaker("Alice")
-            await repo.get_or_create_speaker("Bob")
+            for name in ("Alice", "Bob"):
+                speaker = await repo.get_or_create_speaker(name)
+                await repo.add_lines(
+                    [
+                        TranscriptLine(
+                            speaker_id=speaker.id,
+                            speaker_name=name,
+                            text="Hi",
+                            start_time=0.0,
+                            end_time=1.0,
+                        )
+                    ]
+                )
             await project.commit()
 
         assert await service.list_known_speakers() == []

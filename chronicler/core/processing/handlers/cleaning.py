@@ -46,14 +46,11 @@ class CleanHandler(HandlerBase):
         logger.info(f"Saved the transcript before cleaning to {snapshot}")
 
         cleaned_lines = await self._clean_lines(chronicle_id, cleaning, update_progress)
-
-        speakers_count = len({line.speaker_name for line in cleaned_lines})
-        await self.backfill_speakers_count(chronicle_id, speakers_count)
+        await self.reconcile(chronicle_id)
 
         await update_progress(100)
         logger.info(
-            f"Transcript clean finished for chronicle {chronicle_id}: "
-            f"{len(cleaned_lines)} lines, {speakers_count} speakers"
+            f"Transcript clean finished for chronicle {chronicle_id}: {len(cleaned_lines)} lines"
         )
 
     async def _clean_lines(

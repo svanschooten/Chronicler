@@ -9,7 +9,7 @@ import pytest
 from chronicler.core.config import Settings
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
-from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.handlers import SummarizeHandler
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
     SQLiteSummaryRepository,
@@ -83,7 +83,7 @@ class TestHandleSummarize:
         await db_manager.init_archive()
         try:
             chronicle = await _chronicle_with_transcript(db_manager)
-            handlers = WorkerHandlers(db_manager, settings=_settings())
+            handlers = SummarizeHandler(db_manager, settings=_settings())
 
             with patch(
                 "chronicler.core.llm.client.OpenAiCompatibleClient._request",
@@ -113,7 +113,7 @@ class TestHandleSummarize:
         await db_manager.init_archive()
         try:
             chronicle = await _chronicle_with_transcript(db_manager)
-            handlers = WorkerHandlers(db_manager, settings=_settings())
+            handlers = SummarizeHandler(db_manager, settings=_settings())
             task = Task(type=TaskType.SUMMARIZE, chronicle_id=chronicle.id, data="{}")
 
             with patch(
@@ -133,7 +133,7 @@ class TestHandleSummarize:
         await db_manager.init_archive()
         try:
             chronicle = await _chronicle_with_transcript(db_manager)
-            handlers = WorkerHandlers(db_manager, settings=_settings())
+            handlers = SummarizeHandler(db_manager, settings=_settings())
             task = Task(
                 type=TaskType.SUMMARIZE,
                 chronicle_id=chronicle.id,
@@ -172,9 +172,7 @@ class TestHandleSummarize:
         session = db_manager.get_archive_session()
         try:
             chronicle = await _chronicle_with_transcript(db_manager)
-            handlers = WorkerHandlers(
-                db_manager, archive_sessions=db_manager.get_archive_session, settings=_settings()
-            )
+            handlers = SummarizeHandler(db_manager, settings=_settings())
 
             with patch(
                 "chronicler.core.llm.client.OpenAiCompatibleClient._request",
@@ -203,7 +201,7 @@ class TestHandleSummarize:
                     Chronicle(title="Empty")
                 )
                 await session.commit()
-            handlers = WorkerHandlers(db_manager, settings=_settings())
+            handlers = SummarizeHandler(db_manager, settings=_settings())
 
             with pytest.raises(ValueError, match="no transcript"):
                 await handlers.handle_summarize(
@@ -219,7 +217,7 @@ class TestHandleSummarize:
         await db_manager.init_archive()
         try:
             chronicle = await _chronicle_with_transcript(db_manager)
-            handlers = WorkerHandlers(db_manager, settings=Settings())
+            handlers = SummarizeHandler(db_manager, settings=Settings())
 
             with pytest.raises(RuntimeError, match="provider"):
                 await handlers.handle_summarize(
@@ -239,9 +237,7 @@ class TestHandleSummarize:
         try:
             chronicle = await _chronicle_with_transcript(db_manager)
             repo = SQLiteChronicleRepository(session)
-            handlers = WorkerHandlers(
-                db_manager, archive_sessions=db_manager.get_archive_session, settings=_settings()
-            )
+            handlers = SummarizeHandler(db_manager, settings=_settings())
 
             with patch(
                 "chronicler.core.llm.client.OpenAiCompatibleClient._request",

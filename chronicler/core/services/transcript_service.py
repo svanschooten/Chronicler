@@ -20,6 +20,7 @@ from chronicler.core.models import (
     TranscriptMatch,
 )
 from chronicler.core.processing.fingerprint import fingerprint_file
+from chronicler.core.reconcile import reconcile
 from chronicler.core.rpc import TempFile, service
 from chronicler.core.services.bundle import (
     DATABASE_NAME,
@@ -403,19 +404,15 @@ class TranscriptService:
 
     async def refresh_speaker_count(self, chronicle_id: UUID) -> int:
         """
-        Recompute Chronicle.speakers_count from the project db's speakers table - a
-        manual reconciliation action for chronicles imported before this existed, or
-        whose transcript was hand-edited since.
+        Reconciles the chronicle's row with its transcript and returns the speaker count - a
+        manual action for chronicles imported before this existed, or whose transcript was
+        hand-edited since.
         """
         async with await self._project_session(chronicle_id) as session:
-            speakers = await SQLiteTranscriptRepository(session).get_speakers()
-        count = len(speakers)
-
+            repo = SQLiteTranscriptRepository(session)
+            speakers = await repo.get_speakers()
+            lines = await repo.get_lines()
         for speaker in speakers:
             await self._remember_speaker(speaker.name)
-
-        chronicle = await self.chronicle_repository.get_by_id(chronicle_id)
-        if chronicle and chronicle.speakers_count != count:
-            chronicle.speakers_count = count
-            await self.chronicle_repository.update(chronicle)
-        return count
+        chronicle = await reconcile(self.chronicle_repository, chronicle_id, lines)
+        return chronicle.speakers_count if chronicle else len({line.speaker_name for line in lines})

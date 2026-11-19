@@ -10,7 +10,7 @@ import pytest
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Task, TaskType
-from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.handlers import NormalizeHandler
 from chronicler.core.processing.normalizer import NORMALIZED_SUFFIX, NormalizationError
 from chronicler.core.sqlite import SQLiteAudioSourceRepository
 from tests.extras import require_extra
@@ -38,7 +38,7 @@ def write_tone(path, seconds=1.0, amplitude=0.03, rate=16000):
 async def _fixture(tmp_path, settings=None):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
-    handlers = WorkerHandlers(db_manager, settings=settings)
+    handlers = NormalizeHandler(db_manager, settings=settings)
     chronicle_id = uuid4()
     sources = db_manager.ensure_sources_path_for(str(chronicle_id))
     audio = write_tone(sources / "gm.wav")

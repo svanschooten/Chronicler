@@ -7,11 +7,6 @@ from chronicler.core.processing.handlers.normalizing import NormalizeHandler
 from chronicler.core.processing.handlers.summarizing import SummarizeHandler
 from chronicler.core.processing.handlers.transcribing import TranscribeHandler
 
-
-class WorkerHandlers(ImportHandler, CleanHandler, TranscribeHandler, SummarizeHandler):
-    """Every task handler on one object."""
-
-
 __all__ = [
     "CleanHandler",
     "HandlerBase",
@@ -20,5 +15,4 @@ __all__ = [
     "ProgressCallback",
     "SummarizeHandler",
     "TranscribeHandler",
-    "WorkerHandlers",
 ]

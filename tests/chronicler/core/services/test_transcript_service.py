@@ -104,8 +104,19 @@ async def test_refresh_speaker_count_backfills_from_project_db(tmp_path):
         project_session = await db_manager.get_project_session(str(chronicle.id))
         async with project_session:
             repo = SQLiteTranscriptRepository(project_session)
-            await repo.get_or_create_speaker("Alice")
-            await repo.get_or_create_speaker("Bob")
+            for name in ("Alice", "Bob"):
+                speaker = await repo.get_or_create_speaker(name)
+                await repo.add_lines(
+                    [
+                        TranscriptLine(
+                            speaker_id=speaker.id,
+                            speaker_name=name,
+                            text="Hi",
+                            start_time=0.0,
+                            end_time=1.0,
+                        )
+                    ]
+                )
             await project_session.commit()
 
         archive_session = db_manager.get_archive_session()

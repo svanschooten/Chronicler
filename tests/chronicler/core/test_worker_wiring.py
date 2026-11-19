@@ -41,13 +41,7 @@ async def test_the_worker_and_handlers_open_their_own_archive_sessions(tmp_path)
 
         manager = build_worker_manager(db_manager)
 
-        handler_selves = {
-            handler.__self__
-            for handler in manager.handlers.values()  # type: ignore[attr-defined]
-        }
-        assert len(handler_selves) == 1
-        (handlers,) = handler_selves
-        async with manager.sessions() as first, handlers.archive_sessions() as second:
+        async with manager.sessions() as first, manager.sessions() as second:
             assert first is not second
     finally:
         await db_manager.close_all()

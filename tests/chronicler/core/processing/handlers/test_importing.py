@@ -11,10 +11,11 @@ import pytest
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
-from chronicler.core.processing.handlers import WorkerHandlers
+from chronicler.core.processing.handlers import ImportHandler
 from chronicler.core.processing.importers import DefaultImporter, RegexImporter
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
 from tests.chronicler.core.processing.handlers.helpers import read_chronicle
+from tests.projects import register_chronicle
 
 
 async def _noop_progress(_progress: int) -> None:
@@ -26,7 +27,7 @@ async def test_handle_import_rejects_file_path_outside_imports_dir(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
 
         outside_file = tmp_path / "secrets.txt"
         outside_file.write_text("top secret")
@@ -48,7 +49,7 @@ async def test_handle_import_rejects_traversal_relative_to_imports_dir(tmp_path)
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
 
         escaping_path = imports_dir / ".." / ".." / "secrets.txt"
@@ -70,13 +71,14 @@ async def test_handle_import_accepts_file_path_inside_imports_dir(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
 
         good_file = imports_dir / "transcript.txt"
         good_file.write_text("Alice: Hello\nBob: Hi\n")
 
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         task = Task(
             type=TaskType.IMPORT,
             chronicle_id=chronicle_id,
@@ -99,13 +101,14 @@ async def test_handle_import_with_timestamp_group_uses_real_seconds(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
 
         transcript_file = imports_dir / "transcript.txt"
         transcript_file.write_text("[00:00:05] Alice: Hello\n[00:01:00] Bob: Hi Alice\n")
 
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         task = Task(
             type=TaskType.IMPORT,
             chronicle_id=chronicle_id,
@@ -137,13 +140,14 @@ async def test_handle_import_rolls_back_on_failure(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
 
         transcript_file = imports_dir / "transcript.txt"
         transcript_file.write_text("Alice: Original line\n")
 
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         task = Task(
             type=TaskType.IMPORT,
             chronicle_id=chronicle_id,
@@ -185,7 +189,7 @@ async def test_handle_import_tags_chronicle_and_backfills_speaker_count(tmp_path
             chronicle = await chronicle_repo.create(Chronicle(title="Test Chronicle"))
             assert chronicle.speakers_count == 0
 
-            handlers = WorkerHandlers(db_manager, archive_sessions=db_manager.get_archive_session)
+            handlers = ImportHandler(db_manager)
             imports_dir = db_manager.get_imports_path()
             transcript_file = imports_dir / "transcript.txt"
             transcript_file.write_text("Alice: Hello\nBob: Hi\nAlice: How are you?\n")
@@ -209,9 +213,10 @@ async def test_handle_import_append_mode_keeps_existing_lines_and_orders_after(t
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
 
         first_file = imports_dir / "part1.txt"
         first_file.write_text("Alice: Hello\nBob: Hi\n")
@@ -247,9 +252,10 @@ async def test_handle_import_without_append_still_overwrites(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
 
         first_file = imports_dir / "part1.txt"
         first_file.write_text("Alice: Original\n")
@@ -289,12 +295,13 @@ async def test_handle_import_logs_parse_count_and_finish(tmp_path, caplog):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
         transcript_file = imports_dir / "transcript.txt"
         transcript_file.write_text("Alice: Hello\nBob: Hi\n")
 
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         task = Task(
             type=TaskType.IMPORT,
             chronicle_id=chronicle_id,
@@ -306,7 +313,7 @@ async def test_handle_import_logs_parse_count_and_finish(tmp_path, caplog):
 
         assert "Parsed 2 lines" in caplog.text
         assert "Transcript import finished" in caplog.text
-        assert "2 lines, 2 speakers" in caplog.text
+        assert "2 lines" in caplog.text
     finally:
         await db_manager.close_all()
 
@@ -321,9 +328,10 @@ async def test_handle_import_append_hands_the_offset_to_the_importer(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
 
         first_file = imports_dir / "part1.txt"
         first_file.write_text("Alice: Hello\nBob: Hi\n")
@@ -372,9 +380,10 @@ async def test_handle_import_without_append_parses_from_zero(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
 
         first_file = imports_dir / "part1.txt"
         first_file.write_text("Alice: Hello\nBob: Hi\n")
@@ -426,7 +435,7 @@ async def test_a_slow_pattern_does_not_stall_the_event_loop_during_an_import(tmp
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         transcript_file = db_manager.get_imports_path() / "transcript.txt"
         transcript_file.write_text("\n".join(["a" * 5000 + "!"] * 50))
         task = Task(
@@ -468,9 +477,10 @@ async def test_handle_import_parses_without_holding_the_database(tmp_path):
     db_manager = DatabaseManager(tmp_path, busy_timeout=0.2)
     await db_manager.init_archive()
     try:
-        handlers = WorkerHandlers(db_manager)
+        handlers = ImportHandler(db_manager)
         imports_dir = db_manager.get_imports_path()
         chronicle_id = uuid4()
+        await register_chronicle(db_manager, chronicle_id)
         first_file = imports_dir / "part1.txt"
         first_file.write_text("Alice: Hello\nBob: Hi\n")
         await handlers.handle_import(

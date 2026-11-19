@@ -55,24 +55,15 @@ class ImportHandler(HandlerBase):
                     line.start_time += shift
                     line.end_time += shift
             else:
-                existing_lines = []
                 await repo.delete_all_lines()
 
-            speaker_map = await self.attach_speakers(repo, lines)
+            await self.attach_speakers(repo, lines)
             await repo.add_lines(lines)
 
-            final_speaker_count = len(
-                {line.speaker_name for line in existing_lines} | set(speaker_map)
-            )
-
-        await self.tag_as_transcript(chronicle_id)
-        await self.backfill_speakers_count(chronicle_id, final_speaker_count)
+        await self.reconcile(chronicle_id)
 
         await update_progress(100)
-        logger.info(
-            f"Transcript import finished for chronicle {chronicle_id}: "
-            f"{len(lines)} lines, {final_speaker_count} speakers"
-        )
+        logger.info(f"Transcript import finished for chronicle {chronicle_id}: {len(lines)} lines")
 
     async def _has_lines(self, chronicle_id: UUID) -> bool:
         async with await self.project_session(chronicle_id) as session:
