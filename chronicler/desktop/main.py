@@ -138,7 +138,11 @@ async def open_services(runtime: DesktopRuntime) -> None:
         return
 
     logger.info(f"Thin client starting against {runtime.settings.server_url}")
-    await perform_handshake(runtime.resolver)
+    services = runtime.new_services()
+    try:
+        await perform_handshake(services.system)
+    finally:
+        await services.close()
 
 
 def show_startup_failure(
