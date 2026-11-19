@@ -87,9 +87,13 @@ class Container:
         inner = self._optional_inner(annotation)
         if inner is None:
             return self.resolve(annotation)
+        if inspect.isabstract(inner) and not self.is_registered(inner):
+            return None
         try:
             return self.resolve(inner)
-        except (ValueError, TypeError):
+        except ValueError:
+            # Only "cannot resolve". A TypeError raised inside a constructor is a bug,
+            # and must not quietly turn the dependency into None.
             return None
 
     def _build_instance(self, cls: type[T]) -> T:
