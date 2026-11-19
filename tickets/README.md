@@ -264,7 +264,7 @@ Internal only, and the most likely to conflict, so these come after the user-fac
 
 - [x] [029-S1 Remove dead code and unused columns](029-S1_remove_dead_code.md) · medium · S
 
-- [ ] [030-S2 Remove the repository interfaces](030-S2_remove_repository_abcs.md) · medium · S · after 029
+- [x] [030-S2 Remove the repository interfaces](030-S2_remove_repository_abcs.md) · medium · S · after 029
 
 - [ ] [034-S8 Reduce the handshake to one function](034-S8_simplify_handshake.md) · low · XS
 
