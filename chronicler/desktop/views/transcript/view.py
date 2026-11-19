@@ -31,6 +31,7 @@ from chronicler.desktop.views.transcript.recording import RecordingDialog
 from chronicler.desktop.views.transcript.sources import SourcesPanel
 from chronicler.desktop.views.transcript.style import TRANSCRIPT_STYLE
 from chronicler.desktop.views.transcript.summaries import SummariesPanel
+from chronicler.desktop.views.transcript.tags import TagsPanel
 from chronicler.desktop.widgets import repaint
 from chronicler.i18n import t
 
@@ -192,7 +193,7 @@ class TranscriptView(ft.Column):
         self.subtitle_text = ft.Text(color=self.colors.muted)
         self.status_text = ft.Text(color=self.colors.accent)
         self.speakers_text = ft.Text(color=self.colors.muted)
-        self.tags_text = ft.Text(color=self.colors.muted)
+        self.tags = TagsPanel(chronicle, chronicle_service, self.colors, self.show_snackbar)
         self._show_chronicle()
         self.detail_panel = self._detail_panel()
 
@@ -230,8 +231,7 @@ class TranscriptView(ft.Column):
         self.speakers_text.value = t(
             "transcript.speakers_identified", count=chronicle.speakers_count
         )
-        tags = " · ".join(tag.name for tag in chronicle.tags)
-        self.tags_text.value = tags or t("archive.no_tags")
+        self.tags.show()
 
     def _can_summarize(self) -> bool:
         """
@@ -376,7 +376,7 @@ class TranscriptView(ft.Column):
                     t_bold(t("transcript.speakers"), self.colors.text),
                     self.speakers_text,
                     t_bold(t("transcript.tags"), self.colors.text),
-                    self.tags_text,
+                    self.tags,
                     ft.Divider(color=self.colors.border),
                     ft.Row(controls=[self._record_button()]),
                     self.sources,
@@ -448,7 +448,7 @@ class TranscriptView(ft.Column):
             self.subtitle_text,
             self.status_text,
             self.speakers_text,
-            self.tags_text,
+            self.tags,
         )
         return True
 

@@ -10,6 +10,12 @@ MESSAGES = {
         "tasks": "Aufgaben",
         "settings": "Einstellungen",
     },
+    "tags": {
+        "add": "Schlagwort hinzufügen",
+        "failed": "Die Schlagwörter konnten nicht geändert werden: {error}",
+        "filter": "Nach Schlagwort filtern",
+        "all": "Alle Schlagwörter",
+    },
     "common": {
         "cancel": "Abbrechen",
         "save": "Speichern",
