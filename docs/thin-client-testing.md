@@ -37,7 +37,7 @@ Starting server...
 Connecting thin client...
   ok    server version <version> matches client <version>
   ok    capabilities: clean, export, import, normalize, transcribe
-  ok    pulled chronicle list (0 chronicles)
+  ok    server holds 0 chronicles
   ok    round-tripped a chronicle over RPC (Thin client check)
   ok    cleaned up
 
@@ -108,20 +108,22 @@ install on the same machine.
 
 ## The handshake
 
-A thin client verifies its server before showing any UI:
+A thin client verifies its server before showing any UI, with one call:
+`perform_handshake(resolver)` asks `SystemService.get_server_info()` and returns the
+`ServerInfo`: the version, what the server can do, and how many chronicles it holds.
 
-1. `SystemService.get_server_info()` — reachable, and what it can do
-2. **Versions must match exactly.** `HandshakeError` on mismatch, and the desktop entry
-   point exits with a clear message rather than failing later in a confusing way
-3. `ChronicleService.list_chronicles()` — opening state, pulled once
+1. **The server must answer.** Anything that stops the call, a refused connection or a
+   wrong API key, raises `HandshakeError`
+2. **Versions must match exactly.** `HandshakeError` on mismatch too, and the desktop shows
+   it as a startup error rather than failing later in a confusing way
 
 Exact version matching is deliberate. The HTTP API is *generated* from the service
 classes, so a signature change on either side silently changes the wire contract; there
 is no independently versioned API surface to negotiate against. Matching versions is the
 only honest compatibility statement available today.
 
-A failure to list chronicles is logged but does not fail the handshake — the connection
-is established, and an empty archive is a normal state.
+The chronicle count is a `SELECT count(*)` on the server. If it fails, the server logs it
+and reports no count, and the handshake still succeeds: the connection is established.
 
 The success line is deliberately greppable for log monitoring:
 

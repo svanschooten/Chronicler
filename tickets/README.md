@@ -266,7 +266,7 @@ Internal only, and the most likely to conflict, so these come after the user-fac
 
 - [x] [030-S2 Remove the repository interfaces](030-S2_remove_repository_abcs.md) · medium · S · after 029
 
-- [ ] [034-S8 Reduce the handshake to one function](034-S8_simplify_handshake.md) · low · XS
+- [x] [034-S8 Reduce the handshake to one function](034-S8_simplify_handshake.md) · low · XS
 
 - [ ] [036-S13 Share the desktop's repeated helpers](036-S13_desktop_helpers.md) · low · XS
 

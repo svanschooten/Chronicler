@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.database import DBChronicle, DBTag, DBTask, chronicle_tags
@@ -19,6 +19,10 @@ class SQLiteChronicleRepository:
         )
         db_chronicles = result.scalars().all()
         return [Chronicle.model_validate(db) for db in db_chronicles]
+
+    async def count(self) -> int:
+        result = await self.session.execute(select(func.count()).select_from(DBChronicle))
+        return int(result.scalar_one())
 
     async def get_by_id(self, chronicle_id: UUID) -> Chronicle | None:
         result = await self.session.execute(

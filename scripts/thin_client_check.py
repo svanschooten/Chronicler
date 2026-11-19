@@ -59,14 +59,17 @@ def _wait_for_port(host: str, port: int, process: subprocess.Popen, timeout: flo
 async def _run_client(url: str) -> int:
     remote = RemoteContainer(url, api_key=API_KEY)
     try:
-        result = await perform_handshake(remote)
+        info = await perform_handshake(remote)
     except HandshakeError as error:
         print(f"  FAIL  handshake: {error}")
         return 1
 
-    print(f"  ok    server version {result.server_info.version} matches client {__version__}")
-    print(f"  ok    capabilities: {', '.join(result.server_info.capabilities)}")
-    print(f"  ok    pulled chronicle list ({result.chronicle_count} chronicles)")
+    print(f"  ok    server version {info.version} matches client {__version__}")
+    print(f"  ok    capabilities: {', '.join(info.capabilities)}")
+    if info.chronicle_count is None:
+        print("  warn  server reported no chronicle count (see the server log)")
+    else:
+        print(f"  ok    server holds {info.chronicle_count} chronicles")
 
     chronicles = remote.resolve(ChronicleService)
     created = await chronicles.create_chronicle("Thin client check")

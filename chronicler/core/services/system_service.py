@@ -32,7 +32,7 @@ class SystemService:
         chronicle_count = None
         if self.chronicle_repository is not None:
             try:
-                chronicle_count = len(await self.chronicle_repository.get_all())
+                chronicle_count = await self.chronicle_repository.count()
             except Exception:
                 logger.warning("Could not count chronicles for server info", exc_info=True)
 

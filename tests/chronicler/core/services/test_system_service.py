@@ -101,7 +101,7 @@ class TestServerInfo:
     @pytest.mark.asyncio
     async def test_it_counts_chronicles_when_it_can(self, settings):
         repository = AsyncMock()
-        repository.get_all.return_value = [object(), object()]
+        repository.count.return_value = 2
         service = SystemService(chronicle_repository=repository, settings=settings)
 
         assert (await service.get_server_info()).chronicle_count == 2
@@ -109,7 +109,7 @@ class TestServerInfo:
     @pytest.mark.asyncio
     async def test_a_failing_count_does_not_take_the_handshake_down(self, settings):
         repository = AsyncMock()
-        repository.get_all.side_effect = RuntimeError("database locked")
+        repository.count.side_effect = RuntimeError("database locked")
         service = SystemService(chronicle_repository=repository, settings=settings)
 
         info = await service.get_server_info()
