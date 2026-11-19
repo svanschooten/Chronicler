@@ -2,11 +2,13 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import flet as ft
+import pytest
 
 from chronicler.desktop.widgets import (
     MENU_HEIGHT,
     amber_button,
     chosen_value,
+    repaint,
     searchable_dropdown,
 )
 
@@ -185,3 +187,25 @@ class TestChosenValue:
 
     def test_an_empty_control_is_an_empty_string(self):
         assert chosen_value(ft.TextField()) == ""
+
+
+def test_repaint_updates_every_control_and_skips_detached_ones():
+    attached = MagicMock()
+    detached = MagicMock()
+    detached.update.side_effect = RuntimeError("Control must be added to the page first")
+    stale = MagicMock()
+    stale.update.side_effect = AssertionError()
+    after = MagicMock()
+
+    repaint(attached, detached, stale, after)
+
+    attached.update.assert_called_once_with()
+    after.update.assert_called_once_with()
+
+
+def test_repaint_lets_other_errors_through():
+    broken = MagicMock()
+    broken.update.side_effect = ValueError("a real bug")
+
+    with pytest.raises(ValueError):
+        repaint(broken)

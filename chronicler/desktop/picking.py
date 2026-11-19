@@ -11,6 +11,32 @@ from chronicler.i18n import t
 logger = logging.getLogger(__name__)
 
 
+# Flet controls are dataclasses, so two new FilePickers compare equal. `in` and `remove`
+# would then mistake one view's picker for another's: a view mounting while the last one's
+# picker was still registered would skip its own, and the last view's unmount would take
+# away the only one left. These compare by identity instead.
+
+
+def attach_picker(page: ft.Page, picker: ft.FilePicker | None) -> ft.FilePicker:
+    """
+    `picker`, or a new one, registered in `page.services`: a FilePicker is a service, not
+    a visual control, and opens no dialog until it is registered there.
+    """
+    if picker is None:
+        picker = ft.FilePicker()
+    if not any(service is picker for service in page.services):
+        page.services.append(picker)
+    return picker
+
+
+def detach_picker(page: ft.Page, picker: ft.FilePicker | None) -> None:
+    """Unregisters a view's picker, so the views that come next register their own."""
+    for index, service in enumerate(page.services):
+        if service is picker:
+            del page.services[index]
+            return
+
+
 class FilePickerFlow:
     """
     A picker call plus the error handling every caller needs.

@@ -18,6 +18,7 @@ from chronicler.core.recording import InputDevice, Recorder, RecordingError, lis
 from chronicler.desktop.dialogs import await_dialog
 from chronicler.desktop.extras_prompt import ExtraInstaller
 from chronicler.desktop.theme import ThemeColors
+from chronicler.desktop.widgets import repaint
 from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ class RecordingDialog:
         status.value = t("recording.recording")
         button.content = t("recording.stop")
         device_field.disabled = True
-        _refresh(status, button, device_field)
+        repaint(status, button, device_field)
 
     async def _stop(self, status, button) -> None:
         if self.recorder is None:
@@ -144,7 +145,7 @@ class RecordingDialog:
             return
         status.value = t("recording.recorded", seconds=int(self.recorder.seconds_recorded))
         button.content = t("recording.start")
-        _refresh(status, button)
+        repaint(status, button)
 
     async def _finish(self, name: str) -> bool:
         """Saves the recording. False if that failed and the recording is still unsaved."""
@@ -167,11 +168,3 @@ class RecordingDialog:
 
         self.show_snackbar(t("recording.saved", name=filename))
         return True
-
-
-def _refresh(*controls: ft.Control) -> None:
-    for control in controls:
-        try:
-            control.update()
-        except (RuntimeError, AssertionError):
-            pass

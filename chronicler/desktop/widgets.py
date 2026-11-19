@@ -79,7 +79,7 @@ def searchable_dropdown(
         typed_since_focus = False
         control.hint_text = remembered
         control.value = None
-        _repaint(control)
+        repaint(control)
 
     def note_typing(event):
         nonlocal typed_since_focus
@@ -93,7 +93,7 @@ def searchable_dropdown(
             # Bookkeeping only: what the client last reported is not what it shows now,
             # and `chosen_value` must not read it as typed.
             control.text = None
-        _repaint(control)
+        repaint(control)
 
     return ft.Dropdown(
         label=label,
@@ -141,8 +141,16 @@ def _reported_text(event) -> str:
     return getattr(event.control, "text", None) or ""
 
 
-def _repaint(control: ft.Control) -> None:
-    try:
-        control.update()
-    except (RuntimeError, AssertionError):
-        pass
+# What Flet raises when a control is used before it is on a page, or after it left one:
+# RuntimeError from `update()` and `.page`, AssertionError from older code paths. A view
+# that repaints from a background task can always race its own unmount.
+DETACHED = (RuntimeError, AssertionError)
+
+
+def repaint(*controls: ft.Control) -> None:
+    """Updates each control, skipping any that is not on a page."""
+    for control in controls:
+        try:
+            control.update()
+        except DETACHED:
+            pass

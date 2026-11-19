@@ -11,7 +11,7 @@ from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.desktop.forms import CreateChronicleForm
 from chronicler.desktop.imports import ImportCoordinator
 from chronicler.desktop.operations import ChronicleOperations
-from chronicler.desktop.picking import FilePickerFlow
+from chronicler.desktop.picking import FilePickerFlow, attach_picker, detach_picker
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.archive.cards import (
     ChronicleCardHandlers,
@@ -155,10 +155,7 @@ class ArchiveView(ft.Column):
 
     async def mount_async(self):
         logger.debug("ArchiveView.mount_async started")
-        if self.file_picker is None:
-            self.file_picker = ft.FilePicker()
-        if self.file_picker not in self.page.services:
-            self.page.services.append(self.file_picker)
+        self.file_picker = attach_picker(self.page, self.file_picker)
 
         for form in self._forms:
             form.attach(self.page)
@@ -171,8 +168,7 @@ class ArchiveView(ft.Column):
         logger.debug("ArchiveView unloaded")
         for form in self._forms:
             form.detach(self.page)
-        if self.file_picker and self.file_picker in self.page.services:
-            self.page.services.remove(self.file_picker)
+        detach_picker(self.page, self.file_picker)
         self.page.update()
 
     def show_snackbar(self, message: str):

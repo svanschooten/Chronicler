@@ -16,7 +16,7 @@ import flet as ft
 from chronicler.core.config import Settings
 from chronicler.core.config_sections import AUTO_LANGUAGE, WHISPER_MODEL_SIZES, language_choices
 from chronicler.core.models import AudioSource
-from chronicler.desktop.widgets import chosen_value, searchable_dropdown
+from chronicler.desktop.widgets import chosen_value, repaint, searchable_dropdown
 from chronicler.i18n import available_locales, t
 
 logger = logging.getLogger(__name__)
@@ -170,7 +170,7 @@ class TranscribeDialog:
         start_offset = self._start_offset()
 
         self._mark_speaker(None if speaker else t("transcribe.speaker_required"))
-        self._refresh(self.speaker, self.threshold, self.start_offset)
+        repaint(self.speaker, self.threshold, self.start_offset)
         if not speaker or threshold is None or start_offset is None:
             return None
 
@@ -231,11 +231,3 @@ class TranscribeDialog:
 
         self.start_offset.error = None
         return value
-
-    @staticmethod
-    def _refresh(*controls: ft.Control) -> None:
-        for control in controls:
-            try:
-                control.update()
-            except (RuntimeError, AssertionError):
-                pass

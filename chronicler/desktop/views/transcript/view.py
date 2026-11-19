@@ -14,7 +14,7 @@ from chronicler.desktop.dialogs import await_dialog
 from chronicler.desktop.extras_prompt import ExtraInstaller
 from chronicler.desktop.imports import ImportCoordinator
 from chronicler.desktop.operations import ChronicleOperations
-from chronicler.desktop.picking import FilePickerFlow
+from chronicler.desktop.picking import FilePickerFlow, attach_picker, detach_picker
 from chronicler.desktop.reveal import RevealError, open_in_file_manager
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.transcript.actions import (
@@ -30,6 +30,7 @@ from chronicler.desktop.views.transcript.recording import RecordingDialog
 from chronicler.desktop.views.transcript.sources import SourcesPanel
 from chronicler.desktop.views.transcript.style import TRANSCRIPT_STYLE
 from chronicler.desktop.views.transcript.summaries import SummariesPanel
+from chronicler.desktop.widgets import repaint
 from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
@@ -350,7 +351,7 @@ class TranscriptView(ft.Column):
         self.find_field.disabled = self.editing
         self.transcript_body.content = self.editor if self.editing else self.transcript_area
 
-        _repaint(self.edit_toggle, self.timestamps_checkbox, self.find_field, self.transcript_body)
+        repaint(self.edit_toggle, self.timestamps_checkbox, self.find_field, self.transcript_body)
 
         if self.editing:
             # With a find showing, editing opens on its first match rather than on
@@ -388,11 +389,8 @@ class TranscriptView(ft.Column):
         )
 
     def did_mount(self):
-        if self.file_picker is None:
-            self.file_picker = ft.FilePicker()
-        if self.file_picker not in self.page.services:
-            self.page.services.append(self.file_picker)
-            self.page.update()
+        self.file_picker = attach_picker(self.page, self.file_picker)
+        self.page.update()
         for form in self.actions.forms:
             form.attach(self.page)
         self.page.on_resize = self.page_resized
@@ -406,16 +404,12 @@ class TranscriptView(ft.Column):
             form.detach(self.page)
         if self.page.on_resize is self.page_resized:
             self.page.on_resize = None
-        if self.file_picker and self.file_picker in self.page.services:
-            self.page.services.remove(self.file_picker)
-            self.page.update()
+        detach_picker(self.page, self.file_picker)
+        self.page.update()
 
     def page_resized(self, _event) -> None:
         self.detail_panel.width = detail_panel_width(getattr(self.page, "width", None))
-        try:
-            self.detail_panel.update()
-        except (RuntimeError, AssertionError):
-            pass
+        repaint(self.detail_panel)
 
     async def reload(self) -> None:
         """Rebuilds the whole view after something changed the chronicle."""
@@ -456,7 +450,7 @@ class TranscriptView(ft.Column):
         for name in type(fresh).model_fields:
             setattr(self.chronicle, name, getattr(fresh, name))
         self._show_chronicle()
-        _repaint(
+        repaint(
             self.title_text,
             self.subtitle_text,
             self.status_text,
@@ -583,7 +577,7 @@ class TranscriptView(ft.Column):
             self.transcript_lines = await self.transcript_service.get_transcript(self.chronicle.id)
         except Exception as e:
             self.transcript_text.value = describe_transcript_error(e)
-            _repaint(self.transcript_text, self.transcript_area)
+            repaint(self.transcript_text, self.transcript_area)
             return
         if self.find_query.strip():
             await self._find()
@@ -632,7 +626,7 @@ class TranscriptView(ft.Column):
         line. See docs/transcript-editing.md.
         """
         self.transcript_text.value = self._transcript_body()
-        _repaint(self.transcript_text, self.transcript_area)
+        repaint(self.transcript_text, self.transcript_area)
 
     def _transcript_body(self) -> str:
         if self.found_lines is not None:
@@ -671,11 +665,3 @@ class TranscriptView(ft.Column):
 async def _no_stager(path: str) -> str:
     """Staging is unavailable, so an import can only report why - see docs/desktop.md."""
     raise RuntimeError("File staging is not available in this view")
-
-
-def _repaint(*controls: ft.Control) -> None:
-    for control in controls:
-        try:
-            control.update()
-        except (RuntimeError, AssertionError):
-            pass
