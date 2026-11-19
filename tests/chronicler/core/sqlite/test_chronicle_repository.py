@@ -238,3 +238,14 @@ async def test_chronicle_project_path(async_session):
 
     fetched = await repo.get_by_id(chronicle.id)
     assert fetched.project_path == "/external/path/project.db"
+
+
+@pytest.mark.asyncio
+async def test_count_counts_without_loading_the_chronicles(async_session):
+    repo = SQLiteChronicleRepository(async_session)
+    assert await repo.count() == 0
+
+    await repo.create(Chronicle(title="One"))
+    await repo.create(Chronicle(title="Two"))
+
+    assert await repo.count() == 2

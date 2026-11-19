@@ -327,19 +327,18 @@ async def test_handshake_succeeds_against_a_real_server(tmp_path):
             remote = RemoteContainer("http://test", client=client, api_key="valid-key")
             await remote.resolve(ChronicleService).create_chronicle("Existing")
 
-            result = await perform_handshake(remote)
+            info = await perform_handshake(remote)
 
-            assert result.version_matches is True
-            assert result.server_info.version == __version__
-            assert result.chronicle_count == 1
-            assert "import" in result.server_info.capabilities
+            assert info.version == __version__
+            assert info.chronicle_count == 1
+            assert "import" in info.capabilities
     finally:
         await db_manager.close_all()
 
 
 @pytest.mark.asyncio
 async def test_handshake_refuses_a_mismatched_server_version(tmp_path):
-    from chronicler.core.handshake import VersionMismatchError, perform_handshake
+    from chronicler.core.handshake import HandshakeError, perform_handshake
     from chronicler.core.remote import RemoteContainer
 
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
@@ -351,7 +350,7 @@ async def test_handshake_refuses_a_mismatched_server_version(tmp_path):
             remote = RemoteContainer("http://test", client=client, api_key="valid-key")
 
             with patch("chronicler.core.services.system_service.__version__", "9.9.9"):
-                with pytest.raises(VersionMismatchError):
+                with pytest.raises(HandshakeError, match="9.9.9"):
                     await perform_handshake(remote)
     finally:
         await db_manager.close_all()
@@ -359,18 +358,18 @@ async def test_handshake_refuses_a_mismatched_server_version(tmp_path):
 
 @pytest.mark.asyncio
 async def test_handshake_reports_an_unreachable_server(tmp_path):
-    from chronicler.core.handshake import ServerUnreachableError, perform_handshake
+    from chronicler.core.handshake import HandshakeError, perform_handshake
     from chronicler.core.remote import RemoteContainer
 
     remote = RemoteContainer("http://127.0.0.1:9", api_key="valid-key")
 
-    with pytest.raises(ServerUnreachableError):
+    with pytest.raises(HandshakeError):
         await perform_handshake(remote)
 
 
 @pytest.mark.asyncio
 async def test_handshake_rejects_a_wrong_api_key(tmp_path):
-    from chronicler.core.handshake import ServerUnreachableError, perform_handshake
+    from chronicler.core.handshake import HandshakeError, perform_handshake
     from chronicler.core.remote import RemoteContainer
 
     db_manager, app = _build_server_app(tmp_path, api_key="valid-key")
@@ -381,7 +380,7 @@ async def test_handshake_rejects_a_wrong_api_key(tmp_path):
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             remote = RemoteContainer("http://test", client=client, api_key="wrong-key")
 
-            with pytest.raises(ServerUnreachableError):
+            with pytest.raises(HandshakeError):
                 await perform_handshake(remote)
     finally:
         await db_manager.close_all()
