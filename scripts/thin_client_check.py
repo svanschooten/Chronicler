@@ -66,7 +66,10 @@ async def _run_client(url: str) -> int:
 
     print(f"  ok    server version {info.version} matches client {__version__}")
     print(f"  ok    capabilities: {', '.join(info.capabilities)}")
-    print(f"  ok    server holds {info.chronicle_count} chronicles")
+    if info.chronicle_count is None:
+        print("  warn  server reported no chronicle count (see the server log)")
+    else:
+        print(f"  ok    server holds {info.chronicle_count} chronicles")
 
     chronicles = remote.resolve(ChronicleService)
     created = await chronicles.create_chronicle("Thin client check")

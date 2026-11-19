@@ -3,15 +3,11 @@
 Where Chronicler goes next. What has landed is in [CHANGELOG.md](CHANGELOG.md).
 
 **Concrete work is in [tickets/](tickets/README.md)**, which also gives the order to take
-it in. As of 2026-11-17 these waves are open:
+it in. As of 2026-11-19 these waves are open:
 
-- **Wave 9, CI and test hygiene:** Ruff rules (045), warning-free tests under coverage
-  (080), tests before a release builds (081), two tests that pass for the wrong reason
-  (071), checks against the real rendered UI (058).
-- **Wave 10, simpler foundations:** dead code (029), the repository interfaces (030), the
-  handshake (034), the desktop helpers (036), the worker and handlers (040), speaker count
-  (051), the DI container (041), tag management (066), and splitting `TranscriptService`
-  (043).
+- **Wave 10, simpler foundations:** the desktop helpers (036), the worker and handlers
+  (040), speaker count (051), the DI container (041), tag management (066), and splitting
+  `TranscriptService` (043).
 - **Wave 12, waiting on a decision:** retiring the PyInstaller build (059).
 
 Everything below is direction without a ticket yet. When one is picked up, it gets a
