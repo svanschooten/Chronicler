@@ -18,7 +18,7 @@ import flet as ft
 
 from chronicler.core.config import Mode, Settings
 from chronicler.core.wizard import LANGUAGE_NAMES, default_workspace_path, supported_languages
-from chronicler.desktop.picking import FilePickerFlow
+from chronicler.desktop.picking import FilePickerFlow, attach_picker, detach_picker
 from chronicler.desktop.theme import theme_colors
 from chronicler.i18n import set_locale, t
 
@@ -79,15 +79,11 @@ class FletSetupWizard:
 
     def _ensure_picker(self) -> None:
         """The workspace step needs a native folder dialog; it lives in `page.services`."""
-        if self.file_picker is None:
-            self.file_picker = ft.FilePicker()
-        if self.file_picker not in self.page.services:
-            self.page.services.append(self.file_picker)
+        self.file_picker = attach_picker(self.page, self.file_picker)
 
     def _release_picker(self) -> None:
         """The views that come next register pickers of their own; this one is done."""
-        if self.file_picker is not None and self.file_picker in self.page.services:
-            self.page.services.remove(self.file_picker)
+        detach_picker(self.page, self.file_picker)
 
     def show_snackbar(self, message: str) -> None:
         self.page.show_dialog(ft.SnackBar(ft.Text(message)))

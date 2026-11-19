@@ -268,7 +268,7 @@ Internal only, and the most likely to conflict, so these come after the user-fac
 
 - [x] [034-S8 Reduce the handshake to one function](034-S8_simplify_handshake.md) · low · XS
 
-- [ ] [036-S13 Share the desktop's repeated helpers](036-S13_desktop_helpers.md) · low · XS
+- [x] [036-S13 Share the desktop's repeated helpers](036-S13_desktop_helpers.md) · low · XS
 
 - [ ] [040-S6 Simplify the worker and its handlers](040-S6_worker_and_handlers.md) · medium · M · after 007, 009, 022, 010, 011, 032
 

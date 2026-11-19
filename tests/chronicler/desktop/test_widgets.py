@@ -2,11 +2,15 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import flet as ft
+import pytest
 
 from chronicler.desktop.widgets import (
     MENU_HEIGHT,
+    add_once,
     amber_button,
     chosen_value,
+    remove_exact,
+    repaint,
     searchable_dropdown,
 )
 
@@ -185,3 +189,57 @@ class TestChosenValue:
 
     def test_an_empty_control_is_an_empty_string(self):
         assert chosen_value(ft.TextField()) == ""
+
+
+def test_repaint_updates_every_control_and_skips_detached_ones():
+    attached = MagicMock()
+    detached = MagicMock()
+    detached.update.side_effect = RuntimeError("Control must be added to the page first")
+    stale = MagicMock()
+    stale.update.side_effect = AssertionError()
+    after = MagicMock()
+
+    repaint(attached, detached, stale, after)
+
+    attached.update.assert_called_once_with()
+    after.update.assert_called_once_with()
+
+
+def test_repaint_lets_other_errors_through():
+    broken = MagicMock()
+    broken.update.side_effect = ValueError("a real bug")
+
+    with pytest.raises(ValueError):
+        repaint(broken)
+
+
+class TestRegisteringByIdentity:
+    def test_two_new_controls_compare_equal_which_is_why_these_exist(self):
+        assert ft.FilePicker() == ft.FilePicker()
+
+    def test_add_once_adds_an_equal_but_different_control(self):
+        first, second = ft.FilePicker(), ft.FilePicker()
+        controls: list = [first]
+
+        add_once(controls, second)
+        add_once(controls, second)
+
+        assert len(controls) == 2
+        assert controls[1] is second
+
+    def test_remove_exact_leaves_an_equal_control_in_place(self):
+        first, second = ft.FilePicker(), ft.FilePicker()
+        controls: list = [first, second]
+
+        remove_exact(controls, second)
+        remove_exact(controls, second)
+
+        assert len(controls) == 1
+        assert controls[0] is first
+
+    def test_remove_exact_ignores_none(self):
+        controls: list = [ft.FilePicker()]
+
+        remove_exact(controls, None)
+
+        assert len(controls) == 1

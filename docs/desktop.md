@@ -120,7 +120,17 @@ values, before and after being shown rather than for the duration of one await.
 
 * **`FilePicker` is a Service, not a visual control.** It belongs in `page.services`,
   not `page.overlay`. Putting it in overlay makes the client choke with
-  `Unknown control: FilePicker`.
+  `Unknown control: FilePicker`. Views register theirs on mount with `attach_picker` and
+  remove it on unmount with `detach_picker`, both in `desktop/picking.py`.
+* **Controls compare by value.** Flet controls are dataclasses, so two new `FilePicker`s
+  are `==`, as are two dialogs built alike, and `in` or `list.remove` cannot tell them
+  apart. Register in `page.services` or `page.overlay` with `add_once` and `remove_exact`
+  from `desktop/widgets.py`, which go by identity. The picker helpers and the form dialogs
+  use them.
+* **A control off the page cannot `update()`.** It raises `RuntimeError`, or
+  `AssertionError` from older code paths, and a background task can always race its view's
+  unmount. `repaint(*controls)` in `desktop/widgets.py` skips such controls; other calls
+  that need a page (`focus`, `scroll_to`) catch `widgets.DETACHED`.
 * **`ft.Page` has no `snack_bar` attribute** in 0.86.4 — that was a pre-0.70 API. A
   `SnackBar` is shown through the same dialog stack as `ft.AlertDialog`.
 * **Async handlers are bound directly.** Flet awaits them itself; wrapping one in a

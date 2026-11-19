@@ -28,7 +28,7 @@ from chronicler.core.sqlite.known_speaker_repository import normalize_speaker_na
 from chronicler.desktop.dialogs import confirm
 from chronicler.desktop.theme import ThemeColors
 from chronicler.desktop.views.transcript.style import TRANSCRIPT_STYLE, TRANSCRIPT_TEXT_SIZE
-from chronicler.desktop.widgets import MENU_HEIGHT
+from chronicler.desktop.widgets import DETACHED, MENU_HEIGHT, repaint
 from chronicler.i18n import format_count, t
 
 logger = logging.getLogger(__name__)
@@ -279,7 +279,7 @@ class LineRow(ft.Container):
     def hover_changed(self, e) -> None:
         self.hovered = e.data is True or e.data == "true"
         self._paint_hover()
-        self.repaint()
+        repaint(self)
 
     def _paint_hover(self) -> None:
         """
@@ -296,12 +296,6 @@ class LineRow(ft.Container):
                 self.editor.colors.accent if self.is_open else ft.Colors.TRANSPARENT,
             )
         )
-
-    def repaint(self) -> None:
-        try:
-            self.update()
-        except (RuntimeError, AssertionError):
-            pass
 
 
 class TranscriptEditor(ft.Column):
@@ -423,7 +417,7 @@ class TranscriptEditor(ft.Column):
             rows.append(self.bottom_pager)
         self.line_list.controls = rows
 
-        self._refresh()
+        repaint(self)
         if moved:
             await self._scroll_to_top()
 
@@ -431,7 +425,7 @@ class TranscriptEditor(ft.Column):
         """A new window should start at its first line, not where the last one was left."""
         try:
             await self.line_list.scroll_to(offset=0)
-        except (RuntimeError, AssertionError):
+        except DETACHED:
             pass
 
     def _show_message(self, message: str) -> None:
@@ -439,13 +433,7 @@ class TranscriptEditor(ft.Column):
         self.open = None
         self.rows = {}
         self.line_list.controls = [ft.Text(message, size=12, color=self.colors.muted)]
-        self._refresh()
-
-    def _refresh(self) -> None:
-        try:
-            self.update()
-        except (RuntimeError, AssertionError):
-            pass
+        repaint(self)
 
     # Opening and closing a part of a line
 
@@ -484,10 +472,10 @@ class TranscriptEditor(ft.Column):
             add_button = self._add_speaker_button(line)
             row.show_speaker_picker(line, control, add_button)
         self.open = _Open(line_id, part, control, add_button)
-        row.repaint()
+        repaint(row)
         try:
             await control.focus()
-        except (RuntimeError, AssertionError):
+        except DETACHED:
             pass
         if pending is not None:
             await pending
@@ -572,7 +560,7 @@ class TranscriptEditor(ft.Column):
         button.content = t("transcript.add_speaker", name=name)
         button.opacity = 1 if is_new else 0
         button.disabled = not is_new
-        self._repaint(button)
+        repaint(button)
 
     async def add_speaker_clicked(self, e) -> None:
         """
@@ -626,7 +614,7 @@ class TranscriptEditor(ft.Column):
                 pending = self._start_save(line, "text", typed)
         if row is not None and line is not None:
             row.show_line(line)
-            row.repaint()
+            repaint(row)
         return pending
 
     async def save_unsaved(self) -> None:
@@ -709,7 +697,7 @@ class TranscriptEditor(ft.Column):
         """
         try:
             page = self.page
-        except (RuntimeError, AssertionError):
+        except DETACHED:
             return
         if page is None or self._keys_page is page:
             return
@@ -772,7 +760,7 @@ class TranscriptEditor(ft.Column):
         """
         try:
             await self.line_list.scroll_to(scroll_key=line_id, duration=STEP_SCROLL_MS)
-        except (RuntimeError, AssertionError):
+        except DETACHED:
             pass
 
     # Saving
@@ -842,10 +830,10 @@ class TranscriptEditor(ft.Column):
         if opened is not None and opened.line_id == key:
             if field == "text" and opened.part == TEXT and opened.control.value != confirmed:
                 opened.control.value = confirmed
-                self._repaint(opened.control)
+                repaint(opened.control)
             return
         row.show_line(shown)
-        row.repaint()
+        repaint(row)
 
     async def _save(self, line: TranscriptLine, **changes) -> str | None:
         """
@@ -901,10 +889,3 @@ class TranscriptEditor(ft.Column):
 
         await self.load()
         await self.on_changed()
-
-    @staticmethod
-    def _repaint(control: ft.Control) -> None:
-        try:
-            control.update()
-        except (RuntimeError, AssertionError):
-            pass

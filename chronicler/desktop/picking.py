@@ -6,9 +6,27 @@ from collections.abc import Callable
 import flet as ft
 
 from chronicler.desktop.reveal import describe_desktop_integration_error
+from chronicler.desktop.widgets import add_once, remove_exact
 from chronicler.i18n import t
 
 logger = logging.getLogger(__name__)
+
+
+def attach_picker(page: ft.Page, picker: ft.FilePicker | None) -> ft.FilePicker:
+    """
+    `picker`, or a new one, registered in `page.services`: a FilePicker is a service, not
+    a visual control, and opens no dialog until it is registered there. By identity, as
+    two new FilePickers compare equal; see `widgets.add_once`.
+    """
+    if picker is None:
+        picker = ft.FilePicker()
+    add_once(page.services, picker)
+    return picker
+
+
+def detach_picker(page: ft.Page, picker: ft.FilePicker | None) -> None:
+    """Unregisters a view's picker, so the views that come next register their own."""
+    remove_exact(page.services, picker)
 
 
 class FilePickerFlow:

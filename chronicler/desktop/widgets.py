@@ -1,5 +1,40 @@
 import flet as ft
 
+# What Flet raises when a control is used before it is on a page, or after it left one:
+# RuntimeError from `update()` and `.page`, AssertionError from older code paths. A view
+# that repaints from a background task can always race its own unmount.
+DETACHED = (RuntimeError, AssertionError)
+
+
+def repaint(*controls: ft.Control) -> None:
+    """Updates each control, skipping any that is not on a page."""
+    for control in controls:
+        try:
+            control.update()
+        except DETACHED:
+            pass
+
+
+# Flet controls are dataclasses that compare by value: two new FilePickers are `==`, and
+# so are two dialogs built alike. `in` and `list.remove` would then mistake one view's
+# control for another's, so registering in `page.services` or `page.overlay` goes by
+# identity instead.
+
+
+def add_once(controls: list, control: object) -> None:
+    """Appends `control` unless this very object is already in `controls`."""
+    if not any(item is control for item in controls):
+        controls.append(control)
+
+
+def remove_exact(controls: list, control: object) -> None:
+    """Removes this very object from `controls`, leaving any equal one in place."""
+    for index, item in enumerate(controls):
+        if item is control:
+            del controls[index]
+            return
+
+
 AMBER_BUTTON_PADDING = ft.Padding(left=16, top=8, right=16, bottom=8)
 
 
@@ -79,7 +114,7 @@ def searchable_dropdown(
         typed_since_focus = False
         control.hint_text = remembered
         control.value = None
-        _repaint(control)
+        repaint(control)
 
     def note_typing(event):
         nonlocal typed_since_focus
@@ -93,7 +128,7 @@ def searchable_dropdown(
             # Bookkeeping only: what the client last reported is not what it shows now,
             # and `chosen_value` must not read it as typed.
             control.text = None
-        _repaint(control)
+        repaint(control)
 
     return ft.Dropdown(
         label=label,
@@ -139,10 +174,3 @@ def _reported_text(event) -> str:
     if isinstance(data, str):
         return data
     return getattr(event.control, "text", None) or ""
-
-
-def _repaint(control: ft.Control) -> None:
-    try:
-        control.update()
-    except (RuntimeError, AssertionError):
-        pass

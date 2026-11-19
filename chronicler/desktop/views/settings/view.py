@@ -6,9 +6,11 @@ import flet as ft
 from chronicler.core.config import Mode, Settings
 from chronicler.core.config_sections import WHISPER_MODEL_SIZES, language_choices
 from chronicler.core.models import ModelCheck
+from chronicler.desktop.picking import attach_picker, detach_picker
 from chronicler.desktop.reveal import describe_desktop_integration_error
 from chronicler.desktop.theme import theme_colors
 from chronicler.desktop.views.settings.editor import SettingsEditor
+from chronicler.desktop.widgets import repaint
 from chronicler.i18n import available_locales, set_locale, t
 
 logger = logging.getLogger(__name__)
@@ -397,11 +399,11 @@ class SettingsView(ft.Column):
         """Swapping providers changes which fields are worth showing at all."""
         await self._value_changed(e)
         self.llm_fields.controls = self._llm_fields()
-        self._refresh(self.llm_fields)
+        repaint(self.llm_fields)
 
     async def test_llm_clicked(self, e):
         self.llm_status.value = t("settings.llm.testing")
-        self._refresh(self.llm_status)
+        repaint(self.llm_status)
         await self._llm_reconfigured()
 
     async def _llm_reconfigured(self) -> None:
@@ -427,7 +429,7 @@ class SettingsView(ft.Column):
             )
         else:
             self.llm_status.value = t("settings.llm.test_empty")
-        self._refresh(self.llm_status)
+        repaint(self.llm_status)
 
     async def _dark_mode_changed(self, e):
         await self.apply("dark_mode", e.control.value)
@@ -462,15 +464,7 @@ class SettingsView(ft.Column):
             return
         if await self.apply("workspace_path", chosen):
             self.workspace_text.value = t("settings.workspace.changed", path=chosen)
-            self._refresh(self.workspace_text)
-
-    @staticmethod
-    def _refresh(control: ft.Control) -> None:
-        """Repaints a control, tolerating one that is not attached to a page yet."""
-        try:
-            control.update()
-        except (RuntimeError, AssertionError):
-            pass
+            repaint(self.workspace_text)
 
     def show_snackbar(self, message: str):
         if self.page is not None:
@@ -479,16 +473,12 @@ class SettingsView(ft.Column):
     # -- lifecycle ------------------------------------------------------------
 
     def did_mount(self):
-        if self.file_picker is None:
-            self.file_picker = ft.FilePicker()
-        if self.file_picker not in self.page.services:
-            self.page.services.append(self.file_picker)
-            self.page.update()
+        self.file_picker = attach_picker(self.page, self.file_picker)
+        self.page.update()
 
     def will_unmount(self):
-        if self.file_picker and self.file_picker in self.page.services:
-            self.page.services.remove(self.file_picker)
-            self.page.update()
+        detach_picker(self.page, self.file_picker)
+        self.page.update()
 
 
 __all__ = ["SettingsView"]

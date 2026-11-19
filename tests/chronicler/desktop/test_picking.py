@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import flet as ft
 import pytest
 
-from chronicler.desktop.picking import FilePickerFlow
+from chronicler.desktop.picking import FilePickerFlow, attach_picker, detach_picker
 
 
 def _flow(picker=None, snackbar=None):
@@ -104,3 +104,49 @@ class TestFailures:
 
         assert await flow.pick_directory("Choose") is None
         assert "enable-linger" in snackbar.call_args[0][0]
+
+
+class TestRegistration:
+    def test_attach_creates_and_registers_a_picker(self):
+        page = MagicMock(services=[])
+
+        picker = attach_picker(page, None)
+
+        assert isinstance(picker, ft.FilePicker)
+        assert page.services == [picker]
+
+    def test_attaching_again_keeps_one_registration(self):
+        page = MagicMock(services=[])
+        picker = attach_picker(page, None)
+
+        assert attach_picker(page, picker) is picker
+        assert page.services == [picker]
+
+    def test_detach_removes_only_its_own_picker(self):
+        """Two new FilePickers compare equal, so this has to go by identity."""
+        other = ft.FilePicker()
+        page = MagicMock(services=[other])
+        picker = attach_picker(page, None)
+
+        detach_picker(page, picker)
+
+        assert len(page.services) == 1
+        assert page.services[0] is other
+
+    def test_a_view_mounting_before_the_last_one_leaves_still_gets_its_picker(self):
+        page = MagicMock(services=[])
+        leaving = attach_picker(page, None)
+        arriving = attach_picker(page, None)
+
+        detach_picker(page, leaving)
+
+        assert len(page.services) == 1
+        assert page.services[0] is arriving
+
+    def test_detaching_a_picker_never_attached_is_harmless(self):
+        page = MagicMock(services=[])
+
+        detach_picker(page, None)
+        detach_picker(page, ft.FilePicker())
+
+        assert page.services == []
