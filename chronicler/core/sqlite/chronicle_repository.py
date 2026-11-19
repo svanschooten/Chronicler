@@ -6,11 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.database import DBChronicle, DBTag, DBTask, chronicle_tags
 from chronicler.core.models import Chronicle
-from chronicler.core.repositories import ChronicleRepository
 from chronicler.core.sqlite.patterns import LIKE_ESCAPE, contains_pattern
 
 
-class SQLiteChronicleRepository(ChronicleRepository):
+class SQLiteChronicleRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -100,6 +99,10 @@ class SQLiteChronicleRepository(ChronicleRepository):
         return [Chronicle.model_validate(db) for db in db_chronicles]
 
     async def add_tag(self, chronicle_id: UUID, tag_name: str) -> None:
+        """
+        Attach a tag to a chronicle, creating the tag if a tag with this name doesn't
+        exist yet.
+        """
         result = await self.session.execute(
             select(DBChronicle).where(DBChronicle.id == str(chronicle_id))
         )

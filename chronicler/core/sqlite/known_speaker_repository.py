@@ -3,14 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.database import DBKnownSpeaker
 from chronicler.core.models import KnownSpeaker
-from chronicler.core.repositories import KnownSpeakerRepository
 
 
 def normalize_speaker_name(name: str) -> str:
     return " ".join(name.split()).casefold()
 
 
-class SQLiteKnownSpeakerRepository(KnownSpeakerRepository):
+class SQLiteKnownSpeakerRepository:
+    """Speaker names seen anywhere in the workspace, so a picker can offer them all."""
+
     def __init__(self, session: AsyncSession):
         self.session = session
 

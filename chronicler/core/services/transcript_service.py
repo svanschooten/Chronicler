@@ -20,7 +20,6 @@ from chronicler.core.models import (
     TranscriptMatch,
 )
 from chronicler.core.processing.fingerprint import fingerprint_file
-from chronicler.core.repositories import ChronicleRepository, KnownSpeakerRepository
 from chronicler.core.rpc import TempFile, service
 from chronicler.core.services.bundle import (
     DATABASE_NAME,
@@ -32,6 +31,8 @@ from chronicler.core.services.html import format_html
 from chronicler.core.services.srt import format_srt
 from chronicler.core.sqlite import (
     SQLiteAudioSourceRepository,
+    SQLiteChronicleRepository,
+    SQLiteKnownSpeakerRepository,
     SQLiteSummaryRepository,
     SQLiteTranscriptRepository,
 )
@@ -79,8 +80,8 @@ class TranscriptService:
     def __init__(
         self,
         db_manager: DatabaseManager,
-        chronicle_repository: ChronicleRepository,
-        known_speakers: KnownSpeakerRepository | None = None,
+        chronicle_repository: SQLiteChronicleRepository,
+        known_speakers: SQLiteKnownSpeakerRepository | None = None,
     ):
         self.db_manager = db_manager
         self.chronicle_repository = chronicle_repository

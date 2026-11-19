@@ -6,20 +6,20 @@ import pytest
 
 from chronicler.core.models import TaskStatus, TaskType
 from chronicler.core.processing.regex_guard import UnsafePatternError
-from chronicler.core.repositories import TaskRepository
 from chronicler.core.services.task_service import TaskService
+from chronicler.core.sqlite import SQLiteTaskRepository
 
 
 def _repository():
     """A task repository that hands back whatever it was asked to create."""
-    repo = MagicMock(spec=TaskRepository)
+    repo = MagicMock(spec=SQLiteTaskRepository)
     repo.create = AsyncMock(side_effect=lambda task: task)
     return repo
 
 
 @pytest.mark.asyncio
 async def test_search_tasks():
-    repo = MagicMock(spec=TaskRepository)
+    repo = MagicMock(spec=SQLiteTaskRepository)
     repo.search = AsyncMock(return_value=[])
 
     service = TaskService(repo)
@@ -30,7 +30,7 @@ async def test_search_tasks():
 
 @pytest.mark.asyncio
 async def test_queue_import_rejects_an_invalid_regex():
-    repo = MagicMock(spec=TaskRepository)
+    repo = MagicMock(spec=SQLiteTaskRepository)
     repo.create = AsyncMock(side_effect=lambda x: x)
 
     service = TaskService(repo)
@@ -45,7 +45,7 @@ async def test_queue_import_rejects_an_invalid_regex():
 
 @pytest.mark.asyncio
 async def test_queue_import_accepts_safe_regex():
-    repo = MagicMock(spec=TaskRepository)
+    repo = MagicMock(spec=SQLiteTaskRepository)
     repo.create = AsyncMock(side_effect=lambda x: x)
 
     service = TaskService(repo)
@@ -59,7 +59,7 @@ async def test_queue_import_accepts_safe_regex():
 
 @pytest.mark.asyncio
 async def test_queue_import_records_timestamp_group_when_given():
-    repo = MagicMock(spec=TaskRepository)
+    repo = MagicMock(spec=SQLiteTaskRepository)
     repo.create = AsyncMock(side_effect=lambda x: x)
 
     service = TaskService(repo)
@@ -77,7 +77,7 @@ async def test_queue_import_records_timestamp_group_when_given():
 
 @pytest.mark.asyncio
 async def test_queue_import_omits_timestamp_group_by_default():
-    repo = MagicMock(spec=TaskRepository)
+    repo = MagicMock(spec=SQLiteTaskRepository)
     repo.create = AsyncMock(side_effect=lambda x: x)
 
     service = TaskService(repo)
@@ -90,7 +90,7 @@ async def test_queue_import_omits_timestamp_group_by_default():
 
 @pytest.mark.asyncio
 async def test_queue_import_defaults_to_not_appending():
-    repo = MagicMock(spec=TaskRepository)
+    repo = MagicMock(spec=SQLiteTaskRepository)
     repo.create = AsyncMock(side_effect=lambda x: x)
 
     service = TaskService(repo)
@@ -101,7 +101,7 @@ async def test_queue_import_defaults_to_not_appending():
 
 @pytest.mark.asyncio
 async def test_queue_import_append_true_is_recorded_in_task_data():
-    repo = MagicMock(spec=TaskRepository)
+    repo = MagicMock(spec=SQLiteTaskRepository)
     repo.create = AsyncMock(side_effect=lambda x: x)
 
     service = TaskService(repo)
@@ -112,7 +112,7 @@ async def test_queue_import_append_true_is_recorded_in_task_data():
 
 @pytest.mark.asyncio
 async def test_retry_task_puts_it_back_on_the_queue():
-    repo = MagicMock(spec=TaskRepository)
+    repo = MagicMock(spec=SQLiteTaskRepository)
     repo.update_status = AsyncMock()
     task_id = uuid4()
 
@@ -123,7 +123,7 @@ async def test_retry_task_puts_it_back_on_the_queue():
 
 @pytest.mark.asyncio
 async def test_queue_transcribe_creates_transcribe_task():
-    repo = MagicMock(spec=TaskRepository)
+    repo = MagicMock(spec=SQLiteTaskRepository)
     repo.create = AsyncMock(side_effect=lambda x: x)
 
     service = TaskService(repo)
@@ -139,7 +139,7 @@ async def test_queue_transcribe_creates_transcribe_task():
 class TestTranscribeParameters:
     @pytest.mark.asyncio
     async def test_language_and_threshold_are_carried_on_the_task(self):
-        repo = MagicMock(spec=TaskRepository)
+        repo = MagicMock(spec=SQLiteTaskRepository)
         repo.create = AsyncMock(side_effect=lambda task: task)
         service = TaskService(repo)
 
@@ -154,7 +154,7 @@ class TestTranscribeParameters:
 
     @pytest.mark.asyncio
     async def test_a_start_offset_is_carried_and_an_omitted_one_is_absent(self):
-        repo = MagicMock(spec=TaskRepository)
+        repo = MagicMock(spec=SQLiteTaskRepository)
         repo.create = AsyncMock(side_effect=lambda task: task)
         service = TaskService(repo)
 
@@ -166,7 +166,7 @@ class TestTranscribeParameters:
 
     @pytest.mark.asyncio
     async def test_omitted_parameters_are_absent_so_settings_apply(self):
-        repo = MagicMock(spec=TaskRepository)
+        repo = MagicMock(spec=SQLiteTaskRepository)
         repo.create = AsyncMock(side_effect=lambda task: task)
         service = TaskService(repo)
 
@@ -179,7 +179,7 @@ class TestTranscribeParameters:
 
     @pytest.mark.asyncio
     async def test_auto_language_is_recorded_so_it_beats_a_configured_default(self):
-        repo = MagicMock(spec=TaskRepository)
+        repo = MagicMock(spec=SQLiteTaskRepository)
         repo.create = AsyncMock(side_effect=lambda task: task)
         service = TaskService(repo)
 
@@ -189,7 +189,7 @@ class TestTranscribeParameters:
 
     @pytest.mark.asyncio
     async def test_normalize_first_is_carried(self):
-        repo = MagicMock(spec=TaskRepository)
+        repo = MagicMock(spec=SQLiteTaskRepository)
         repo.create = AsyncMock(side_effect=lambda task: task)
         service = TaskService(repo)
 

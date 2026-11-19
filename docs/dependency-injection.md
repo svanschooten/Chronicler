@@ -11,8 +11,8 @@ signature and nothing has to be wired by hand at each call site.
 | Registration | Lifetime | Used for |
 | ------------ | -------- | -------- |
 | `register_instance` | Shared forever, never rebuilt | `DatabaseManager` — one per process |
-| `register_factory` | Rebuilt per scope | `AsyncSession`, repositories |
-| No registration | Auto-built per scope, from type hints | Services |
+| `register_factory` | Rebuilt per scope | `AsyncSession` |
+| No registration | Auto-built per scope, from type hints | Repositories and services |
 
 `_explicit_instances` and `_resolved_cache` are kept separate precisely so
 `create_scope()` can share the singletons while rebuilding everything else.
@@ -46,23 +46,21 @@ was actually set up to build one — a service with no database dependency (a te
 a bare `Container()`, say) should not trigger the auto-build fallback for
 `AsyncSession`, which is not constructible without a bound engine and would raise.
 
-## `register_local_repositories`
+## `register_local_storage`
 
-Server mode and desktop full-stack mode need the archive session and repository
-factories wired identically, so that mapping lives in one function.
+Server mode and desktop full-stack mode need the workspace's `DatabaseManager` and archive
+session wired identically, so those two registrations live in one function.
 
-`TranscriptService` is deliberately *not* registered there. It depends on
-`DatabaseManager` and `ChronicleRepository` directly rather than a pre-bound
-`TranscriptRepository` (see [storage.md](storage.md)), so it needs no factory of its
-own — `Container` builds it from what is already registered.
+Nothing else needs registering. Services name the SQLite repositories they use, and each
+repository takes only an `AsyncSession`, so `Container` builds it from the scope's session.
+Every archive repository in a scope therefore shares that scope's one session.
 
-## A known typing wart
+`TranscriptService` does not take a `SQLiteTranscriptRepository`. It depends on
+`DatabaseManager` and `SQLiteChronicleRepository` and opens each chronicle's own database
+as it needs it (see [storage.md](storage.md)).
 
-`register_factory(ChronicleRepository, SQLiteChronicleRepository)` needs
-`# type: ignore[type-abstract]`. `Container.register_factory`'s generics do not fully
-accommodate the interface-to-implementation registration pattern it is designed for:
-mypy treats passing an ABC as the `type[T]` key as if `T` itself were being
-instantiated. This is tension in `Container`'s typing, not a bug in the registration.
+An optional dependency, such as `SystemService`'s `SQLiteChronicleRepository | None`,
+resolves to `None` in a container that cannot build an `AsyncSession`.
 
 ## Nothing session-shaped belongs on the root container
 

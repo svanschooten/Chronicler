@@ -12,9 +12,8 @@ from chronicler.core.config import Settings
 from chronicler.core.config_sections import ServerSettings
 from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
-from chronicler.core.local_container import register_local_repositories
+from chronicler.core.local_container import register_local_storage
 from chronicler.core.models import Chronicle, TranscriptLine
-from chronicler.core.repositories import ChronicleRepository, TaskRepository
 from chronicler.core.rpc import RpcServer, TempFile, service
 from chronicler.core.services import (
     ChronicleService,
@@ -23,6 +22,7 @@ from chronicler.core.services import (
 )
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
+    SQLiteKnownSpeakerRepository,
     SQLiteTaskRepository,
     SQLiteTranscriptRepository,
 )
@@ -35,7 +35,7 @@ _PATH_PROBE_FILES: dict[str, Path] = {}
 class _PathProbeService:
     """Test-only service returning a plain `Path` and a `TempFile`."""
 
-    def __init__(self, repository: TaskRepository):
+    def __init__(self, repository: SQLiteTaskRepository):
         self.repository = repository
 
     async def kept(self) -> Path:
@@ -52,7 +52,7 @@ class _SessionIdProbeService:
     each request gets a fresh one rather than reaching into RpcServer internals.
     """
 
-    def __init__(self, repository: TaskRepository):
+    def __init__(self, repository: SQLiteTaskRepository):
         self.repository = repository
 
     async def session_id(self) -> int:
@@ -81,20 +81,28 @@ async def test_server_builds_without_error(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_every_repository_is_concrete_enough_to_resolve(tmp_path):
+async def test_the_local_registrations_are_enough_to_build_every_archive_repository(tmp_path):
     """
-    Resolving a service used to raise TypeError because a registered repository left an
-    abstract method unimplemented.
+    The repositories are not registered: Container builds them from the archive session,
+    and they share that one session within a scope.
     """
     db_manager = DatabaseManager(tmp_path)
     try:
         await db_manager.init_archive()
 
         container = Container()
-        register_local_repositories(container, db_manager)
+        register_local_storage(container, db_manager)
 
-        assert container.resolve(TaskRepository) is not None
-        assert container.resolve(ChronicleRepository) is not None
+        scope = container.create_scope()
+        session = scope.resolve(AsyncSession)
+        repositories = (
+            SQLiteTaskRepository,
+            SQLiteChronicleRepository,
+            SQLiteKnownSpeakerRepository,
+        )
+
+        assert all(scope.resolve(cls).session is session for cls in repositories)
+        await session.close()
     finally:
         await db_manager.close_all()
 
@@ -170,7 +178,6 @@ async def test_each_request_gets_a_fresh_session(tmp_path):
         container = Container()
         container.register_instance(DatabaseManager, db_manager)
         container.register_factory(AsyncSession, make_session)
-        container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
 
         server = RpcServer(container, services=[_SessionIdProbeService], api_key="probe-key")
         app = server.build()
@@ -196,7 +203,6 @@ async def test_request_scoped_session_is_closed_after_request(tmp_path, monkeypa
         container = Container()
         container.register_instance(DatabaseManager, db_manager)
         container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-        container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
 
         server = RpcServer(container, services=[_SessionIdProbeService], api_key="probe-key")
         app = server.build()
@@ -635,7 +641,6 @@ async def test_only_a_temp_file_is_streamed_and_deleted(tmp_path):
         container = Container()
         container.register_instance(DatabaseManager, db_manager)
         container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-        container.register_factory(TaskRepository, SQLiteTaskRepository)  # type: ignore[type-abstract]
         app = RpcServer(container, services=[_PathProbeService], api_key="probe-key").build()
 
         headers = {"X-API-Key": "probe-key"}

@@ -1,6 +1,6 @@
 # Audio sources
 
-`audio_sources` table in the project database, `AudioSourceRepository`,
+`audio_sources` table in the project database, `SQLiteAudioSourceRepository`,
 `TranscriptService.list_audio_sources`
 
 A chronicle's audio tracks used to be nothing but files in a directory. There was

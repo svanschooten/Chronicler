@@ -4,8 +4,8 @@ from uuid import UUID
 
 from chronicler.core.models import Task, TaskStatus, TaskType
 from chronicler.core.processing.regex_guard import compile_pattern
-from chronicler.core.repositories import TaskRepository
 from chronicler.core.rpc import service
+from chronicler.core.sqlite import SQLiteTaskRepository
 
 CANCELLABLE_WHILE_WORKING = {TaskType.TRANSCRIBE}
 """Task types whose handler checks for cancellation as it runs."""
@@ -32,7 +32,7 @@ MAX_ATTEMPTS: dict[TaskType, int] = {TaskType.TRANSCRIBE: 1}
     ]
 )
 class TaskService:
-    def __init__(self, repository: TaskRepository):
+    def __init__(self, repository: SQLiteTaskRepository):
         self.repository = repository
 
     async def _create(self, task: Task) -> Task:

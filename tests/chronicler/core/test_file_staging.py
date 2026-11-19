@@ -11,7 +11,7 @@ from chronicler.core.file_staging import (
     sanitize_stage_name,
     stage_local_file,
 )
-from chronicler.core.local_container import register_local_repositories
+from chronicler.core.local_container import register_local_storage
 from chronicler.core.rpc import RpcServer
 
 
@@ -110,7 +110,7 @@ async def test_remote_file_stager_uploads_and_returns_server_path(tmp_path):
         await db_manager.init_archive()
 
         container = Container()
-        register_local_repositories(container, db_manager)
+        register_local_storage(container, db_manager)
         upstream_app = RpcServer(container, services=[], api_key="secret-key").build()
 
         source_file = tmp_path / "picked" / "transcript.txt"
