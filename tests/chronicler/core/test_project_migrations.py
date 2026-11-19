@@ -170,3 +170,26 @@ async def test_tracks_lines_and_search_survive_dropping_the_duration_column(tmp_
     with closing(sqlite3.connect(project_db)) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(audio_sources)")}
     assert "duration_seconds" not in columns
+
+
+def test_the_duration_column_comes_back_on_downgrade(tmp_path):
+    project_db = tmp_path / "project.db"
+    _project_db_at(project_db, "head")
+    with closing(sqlite3.connect(project_db)) as connection, connection:
+        connection.execute(
+            "INSERT INTO audio_sources (id, filename, added_at, transcription_state, "
+            "normalization_state) VALUES (?, 'alice.wav', '2026-01-01', 'DONE', 'PENDING')",
+            (SOURCE,),
+        )
+
+    engine = create_engine(f"sqlite:///{project_db}")
+    with engine.begin() as connection:
+        cfg = Config()
+        cfg.set_main_option("script_location", str(_MIGRATIONS_ROOT / "project"))
+        cfg.attributes["connection"] = connection
+        command.downgrade(cfg, "c5e8a1f3d920")
+    engine.dispose()
+
+    with closing(sqlite3.connect(project_db)) as connection:
+        row = connection.execute("SELECT filename, duration_seconds FROM audio_sources").fetchone()
+    assert row == ("alice.wav", None)

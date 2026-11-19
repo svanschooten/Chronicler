@@ -317,14 +317,9 @@ class TestTheRealServices:
         assert "mark_source_transcribed" not in published
 
     def test_every_published_method_exists_and_is_async(self):
-        from chronicler.core.services import (
-            ChronicleService,
-            SystemService,
-            TaskService,
-            TranscriptService,
-        )
+        from chronicler.server.main import served_services
 
-        for cls in (ChronicleService, TranscriptService, TaskService, SystemService):
+        for cls in served_services():
             for name in exposed_methods(cls):
                 method = getattr(cls, name, None)
                 assert method is not None, f"{cls.__name__}.{name}"

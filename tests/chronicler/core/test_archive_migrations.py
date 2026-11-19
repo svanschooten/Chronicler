@@ -66,10 +66,7 @@ async def test_rows_survive_dropping_the_unused_columns(tmp_path):
         await db_manager.init_archive()
         async with db_manager.get_archive_session() as session:
             chronicle = await SQLiteChronicleRepository(session).get_by_id(CHRONICLE)
-            speakers = SQLiteKnownSpeakerRepository(session)
-            # The rebuilt table keeps its unique normalized name: no second Alice.
-            await speakers.register("ALICE")
-            names = await speakers.list_names()
+            names = await SQLiteKnownSpeakerRepository(session).list_names()
     finally:
         await db_manager.close_all()
 
@@ -88,6 +85,30 @@ async def test_rows_survive_dropping_the_unused_columns(tmp_path):
     assert task_keys == {"chronicles"}
     assert tag_keys == {"chronicles", "tags"}
     assert task_chronicle == CHRONICLE
+
+
+@pytest.mark.parametrize(("name", "normalized_name"), [("Alice", "someone"), ("Someone", "alice")])
+def test_the_rebuilt_speaker_table_keeps_both_unique_names(tmp_path, name, normalized_name):
+    """
+    Through the database, not `register`: that looks the normalized name up first, so it
+    never inserts a duplicate and would pass without the constraints.
+    """
+    archive_db = tmp_path / "chronicler.db"
+    _archive_db_at(archive_db, BEFORE_UNUSED_COLUMNS_DROPPED)
+    with closing(sqlite3.connect(archive_db)) as connection, connection:
+        connection.execute(
+            "INSERT INTO known_speakers (id, name, normalized_name, uses, first_seen, "
+            "last_used) VALUES (?, 'Alice', 'alice', 1, '2026-01-01', '2026-01-01')",
+            (SPEAKER,),
+        )
+    _archive_db_at(archive_db, "head")
+
+    with closing(sqlite3.connect(archive_db)) as connection:
+        with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+            connection.execute(
+                "INSERT INTO known_speakers (id, name, normalized_name) VALUES (?, ?, ?)",
+                (TAG, name, normalized_name),
+            )
 
 
 def test_the_migration_can_be_undone(tmp_path):

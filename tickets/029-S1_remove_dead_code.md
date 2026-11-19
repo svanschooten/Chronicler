@@ -41,6 +41,20 @@ chain, and remove the `source_file` argument from `create_chronicle`.
 
 Done when vulture no longer reports these, and the suite passes.
 
+### not additive
+
+Rule 2 in `docs/storage.md` (ticket 074) asks project migrations to be additive. The
+project revision here drops `audio_sources.duration_seconds`, so this ticket is the
+exception it allows for:
+
+- No data is lost. Nothing ever wrote the column, so every row holds `NULL`.
+- An older Chronicler already refuses a newer `project.db` with `NewerSchemaError`, so
+  keeping the column would not let an older version open the file today.
+- Like any project revision, it drops linked chronicles out of workspace search until each
+  is opened once (`would_upgrade_linked`).
+
+The archive columns belong to one workspace on one machine, so the rule does not cover them.
+
 ### related tickets
 
 - (BLOCKS) [030-S2_remove_repository_abcs](030-S2_remove_repository_abcs.md): removes the unused methods first
