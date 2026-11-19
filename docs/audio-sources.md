@@ -1,7 +1,7 @@
 # Audio sources
 
 `audio_sources` table in the project database, `SQLiteAudioSourceRepository`,
-`TranscriptService.list_audio_sources`
+`SourceService.list_audio_sources`
 
 A chronicle's audio tracks used to be nothing but files in a directory. There was
 nowhere to record that a track had been transcribed, which speaker it belongs to, or
@@ -110,10 +110,10 @@ is used only when audio is added. Reading a chronicle that has no row, or whose 
 new empty database.
 
 A linked chronicle's files were never in the workspace, so looking there made every one
-of its sources read as missing while `chronicle_directory()` — used by *Open folder* on a
+of its sources read as missing while `SourceService.chronicle_directory()` — used by *Open folder* on a
 full stack — correctly resolved the external path. The two disagreed.
 
-`TranscriptService.sources_dir` and `HandlerBase.sources_root_for` both go through that
+`SourceService.sources_dir` and `HandlerBase.sources_root_for` both go through that
 one function, which is why they are async: the answer depends on the chronicle row.
 `ChronicleService.add_audio_source` uses it too, so an import into a linked chronicle
 lands beside its database rather than in a workspace directory nothing reads.

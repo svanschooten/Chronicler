@@ -1,6 +1,6 @@
 # PDF export
 
-`chronicler/core/services/pdf.py`, `chronicler/core/services/fonts/`
+`chronicler/core/exports/pdf.py`, `chronicler/core/exports/fonts/`
 
 ## Fonts
 
@@ -25,7 +25,7 @@ It does so only when the transcript has characters DejaVu cannot draw. Loading t
 WenQuanYi collection made a 300-line all-Latin export take about a second instead of a
 fifth of one.
 
-`TranscriptService.export_pdf` runs `format_pdf` through `asyncio.to_thread`, so a long
+`ExportService.export_pdf` runs `format_pdf` through `asyncio.to_thread`, so a long
 transcript does not freeze the desktop UI or stall a server's other clients while it is
 laid out.
 
