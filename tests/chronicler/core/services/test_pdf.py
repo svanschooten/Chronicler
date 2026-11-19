@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 from pypdf import PdfReader
 
+from chronicler.core.exports.pdf import format_pdf
 from chronicler.core.models import TranscriptLine
-from chronicler.core.services.pdf import format_pdf
 
 SAMPLE = "Are you sure? Ja, natürlich. Łódź Ελληνικά Привет"
 CJK = "你好"
@@ -81,7 +81,7 @@ def test_rendering_raises_no_deprecation_warnings():
 
 def test_an_all_latin_export_does_not_load_the_fallback_font(monkeypatch):
     """Loading a 17 MB CJK font made a 300-line Latin export take 1 s instead of 0.2 s."""
-    from chronicler.core.services.pdf import TranscriptPDF
+    from chronicler.core.exports.pdf import TranscriptPDF
 
     loads = []
     monkeypatch.setattr(TranscriptPDF, "load_fallback", lambda self, c=None: loads.append(c))

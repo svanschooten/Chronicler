@@ -308,23 +308,18 @@ class TestTheRealServices:
                 assert inspect.iscoroutinefunction(method), f"{cls.__name__}.{name}"
 
     def test_the_published_surface_is_what_we_think_it_is(self):
-        from chronicler.core.services import (
-            ChronicleService,
-            SystemService,
-            TaskService,
-            TranscriptService,
-        )
+        from chronicler.server.main import served_services
 
-        surface = {
-            cls.__name__: len(exposed_methods(cls))
-            for cls in (ChronicleService, TranscriptService, TaskService, SystemService)
-        }
+        surface = {cls.__name__: len(exposed_methods(cls)) for cls in served_services()}
 
         assert surface == {
             "ChronicleService": 12,
-            "TranscriptService": 17,
-            "TaskService": 10,
+            "ExportService": 5,
+            "SourceService": 2,
+            "SummaryService": 2,
             "SystemService": 3,
+            "TaskService": 10,
+            "TranscriptService": 7,
         }
 
 

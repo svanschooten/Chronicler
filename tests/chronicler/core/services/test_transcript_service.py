@@ -11,6 +11,7 @@ from chronicler.core.sqlite import (
     SQLiteTranscriptRepository,
 )
 from tests.projects import register_chronicle
+from tests.services import build_services
 
 
 async def _noop_progress(_progress: int) -> None:
@@ -182,8 +183,8 @@ async def test_list_audio_sources_empty_when_no_sources_dir_yet(tmp_path):
         async with archive_session:
             chronicle_repo = SQLiteChronicleRepository(archive_session)
             chronicle = await chronicle_repo.create(Chronicle(title="Empty"))
-            service = TranscriptService(db_manager, chronicle_repo)
-            sources = await service.list_audio_sources(chronicle.id)
+            service = build_services(db_manager, chronicle_repo)
+            sources = await service.sources.list_audio_sources(chronicle.id)
 
         assert sources == []
     finally:
@@ -237,7 +238,9 @@ async def test_reading_an_unknown_chronicle_raises_and_creates_nothing(tmp_path)
         with pytest.raises(LookupError):
             await service.get_transcript(unknown)
         with pytest.raises(LookupError):
-            await service.list_audio_sources(unknown)
+            await build_services(
+                db_manager, service.chronicle_repository
+            ).sources.list_audio_sources(unknown)
 
         assert not (tmp_path / "chronicles" / str(unknown)).exists()
     finally:
@@ -296,11 +299,11 @@ async def test_three_panel_loads_at_once_all_succeed_on_an_empty_connection_pool
             # first load is still opening the connection when the other two arrive.
             await db_manager.archive_engine.dispose()
             async with db_manager.get_archive_session() as shared:
-                service = TranscriptService(db_manager, SQLiteChronicleRepository(shared))
+                service = build_services(db_manager, SQLiteChronicleRepository(shared))
                 results = await asyncio.gather(
-                    service.get_transcript(chronicle.id),
-                    service.list_audio_sources(chronicle.id),
-                    service.list_summaries(chronicle.id),
+                    service.transcripts.get_transcript(chronicle.id),
+                    service.sources.list_audio_sources(chronicle.id),
+                    service.summaries.list_summaries(chronicle.id),
                 )
             assert results == [[], [], []]
     finally:
