@@ -104,8 +104,8 @@ class SQLiteChronicleRepository:
 
     async def add_tag(self, chronicle_id: UUID, tag_name: str) -> None:
         """
-        Attach a tag to a chronicle, creating the tag if a tag with this name doesn't
-        exist yet.
+        Attach a tag to a chronicle, creating the tag if no tag has this name yet. Names
+        match without regard to case, so "Product" attaches the existing "product".
         """
         result = await self.session.execute(
             select(DBChronicle).where(DBChronicle.id == str(chronicle_id))
@@ -114,7 +114,9 @@ class SQLiteChronicleRepository:
         if not db_chronicle:
             raise ValueError(f"Chronicle {chronicle_id} not found")
 
-        tag_result = await self.session.execute(select(DBTag).where(DBTag.name == tag_name))
+        tag_result = await self.session.execute(
+            select(DBTag).where(func.lower(DBTag.name) == tag_name.casefold())
+        )
         db_tag = tag_result.scalar_one_or_none()
         if not db_tag:
             db_tag = DBTag(name=tag_name)
@@ -124,3 +126,33 @@ class SQLiteChronicleRepository:
         if db_tag not in db_chronicle.tags:
             db_chronicle.tags.append(db_tag)
             await self.session.commit()
+
+    async def remove_tag(self, chronicle_id: UUID, tag_name: str) -> None:
+        """
+        Detaches a tag from a chronicle, and deletes the tag once no chronicle has it, so
+        the workspace does not collect tags nothing uses. A tag the chronicle does not
+        have is left alone.
+        """
+        result = await self.session.execute(
+            select(DBChronicle).where(DBChronicle.id == str(chronicle_id))
+        )
+        db_chronicle = result.scalar_one_or_none()
+        if not db_chronicle:
+            raise ValueError(f"Chronicle {chronicle_id} not found")
+
+        db_tag = next(
+            (tag for tag in db_chronicle.tags if tag.name.casefold() == tag_name.casefold()), None
+        )
+        if db_tag is None:
+            return
+        db_chronicle.tags.remove(db_tag)
+        await self.session.flush()
+
+        still_used = await self.session.execute(
+            select(func.count())
+            .select_from(chronicle_tags)
+            .where(chronicle_tags.c.tag_id == db_tag.id)
+        )
+        if not still_used.scalar_one():
+            await self.session.delete(db_tag)
+        await self.session.commit()
