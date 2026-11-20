@@ -23,13 +23,21 @@ with `LookupError` rather than creating one.
 `core/reconcile.py::reconcile` is the one place that derives a chronicle's speaker count,
 duration, tags and status from its transcript. Every handler that rewrites text calls it
 through `HandlerBase.reconcile`, and so do linking and restoring a snapshot, through
-`TranscriptService.refresh_speaker_count`. It sets:
+`TranscriptService.reconcile_from_project`. It sets:
 
 * the speaker count, the number of distinct speaker names on the lines;
 * the `Transcript` tag, once there are lines;
+* with summaries, the `Summarized` tag, and `Imported`, `Transcribed` and `Cleaned` become
+  `Summarized`.
+
+Only with `timings` - a transcription, a link or a restore, which know how long the
+recording is - does it also set:
+
 * the duration, unless the timings are synthetic (see below);
-* the status: `Imported` becomes `Transcribed` once there are lines, and with summaries,
-  `Imported`, `Transcribed` and `Cleaned` become `Summarized`, which also adds that tag.
+* the status `Imported` to `Transcribed`, once there are lines.
+
+An import, a clean, a summary and the manual speaker refresh leave both alone, so an
+imported text stays `Imported` and a duration typed by hand survives them.
 
 ## Timestamps
 

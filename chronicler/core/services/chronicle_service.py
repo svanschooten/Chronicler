@@ -121,7 +121,7 @@ class ChronicleService:
         if self.transcripts is None:
             return chronicle
 
-        await self.transcripts.refresh_speaker_count(chronicle_id)
+        await self.transcripts.reconcile_from_project(chronicle_id, timings=True)
         return await self.repository.get_by_id(chronicle_id) or chronicle
 
     async def edit_chronicle(

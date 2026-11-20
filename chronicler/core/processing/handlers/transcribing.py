@@ -146,7 +146,7 @@ class TranscribeHandler(HandlerBase):
                 model=parameters.model_size,
             )
 
-        await self.reconcile(chronicle_id)
+        await self.reconcile(chronicle_id, timings=True)
 
         await update_progress(100)
         logger.info(
