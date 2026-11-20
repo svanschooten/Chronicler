@@ -112,6 +112,55 @@ async def test_add_tag_is_idempotent(async_session):
 
 
 @pytest.mark.asyncio
+async def test_add_tag_matches_an_existing_name_in_any_case(async_session):
+    repo = SQLiteChronicleRepository(async_session)
+    c1 = await repo.create(Chronicle(title="C1"))
+    c2 = await repo.create(Chronicle(title="C2"))
+
+    await repo.add_tag(c1.id, "product")
+    await repo.add_tag(c2.id, "Product")
+
+    assert len((await async_session.execute(select(DBTag))).scalars().all()) == 1
+    assert [t.name for t in (await repo.get_by_id(c2.id)).tags] == ["product"]
+
+
+@pytest.mark.asyncio
+async def test_remove_tag_detaches_it_and_keeps_a_tag_another_chronicle_has(async_session):
+    repo = SQLiteChronicleRepository(async_session)
+    c1 = await repo.create(Chronicle(title="C1"))
+    c2 = await repo.create(Chronicle(title="C2"))
+    await repo.add_tag(c1.id, "product")
+    await repo.add_tag(c2.id, "product")
+
+    await repo.remove_tag(c1.id, "Product")
+
+    assert (await repo.get_by_id(c1.id)).tags == []
+    assert [t.name for t in (await repo.get_by_id(c2.id)).tags] == ["product"]
+    assert len((await async_session.execute(select(DBTag))).scalars().all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_remove_tag_deletes_a_tag_nothing_uses_any_more(async_session):
+    repo = SQLiteChronicleRepository(async_session)
+    chronicle = await repo.create(Chronicle(title="C"))
+    await repo.add_tag(chronicle.id, "product")
+
+    await repo.remove_tag(chronicle.id, "product")
+
+    assert (await async_session.execute(select(DBTag))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_remove_tag_the_chronicle_does_not_have_is_a_no_op(async_session):
+    repo = SQLiteChronicleRepository(async_session)
+    chronicle = await repo.create(Chronicle(title="C"))
+
+    await repo.remove_tag(chronicle.id, "nothing")
+
+    assert (await repo.get_by_id(chronicle.id)).tags == []
+
+
+@pytest.mark.asyncio
 async def test_delete_chronicle(async_session):
     repo = SQLiteChronicleRepository(async_session)
     chronicle = await repo.create(Chronicle(title="To be deleted"))

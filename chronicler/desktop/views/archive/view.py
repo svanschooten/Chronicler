@@ -30,6 +30,8 @@ TRANSCRIPT_SEARCH_DELAY = 0.3
 # A refresh after a finished task waits longer, so tasks finishing one after another start
 # one transcript search between them rather than one each.
 REFRESH_SEARCH_DELAY = 2.0
+TAG_FILTER_WIDTH = 200
+ALL_TAGS = ""
 
 
 class ArchiveView(ft.Column):
@@ -49,6 +51,10 @@ class ArchiveView(ft.Column):
         self.colors = theme_colors(dark_mode)
         self.can_link = can_link
         self.query = ""
+        # The tag the list is narrowed to, and the tags to choose from: those on the chronicles
+        # last listed without a search, so a search never shrinks the choices.
+        self.tag: str | None = None
+        self.tag_options: list[str] = []
         # Bumped by every load; a transcript search finishing for an older one is dropped.
         self._generation = 0
         # The "Said in" section last shown, and for which query. It stays on screen while
@@ -74,6 +80,14 @@ class ArchiveView(ft.Column):
             on_changed=self.load_chronicles,
         )
 
+        self.tag_filter = ft.Dropdown(
+            width=TAG_FILTER_WIDTH,
+            dense=True,
+            hint_text=t("tags.filter"),
+            hint_style=ft.TextStyle(color=self.colors.muted),
+            options=[],
+            on_select=self.tag_selected,
+        )
         super().__init__(expand=True, spacing=16, controls=self._build_controls())
 
     def _link_items(self) -> list[ft.PopupMenuItem]:
@@ -136,6 +150,7 @@ class ArchiveView(ft.Column):
                         color=self.colors.text,
                         on_change=self.search_changed,
                     ),
+                    self.tag_filter,
                 ],
             ),
             self.chronicle_list,
@@ -185,6 +200,31 @@ class ArchiveView(ft.Column):
             return  # typing went on, and that keystroke's own call will load
         await self.load_chronicles(transcript_delay=TRANSCRIPT_SEARCH_DELAY)
 
+    async def tag_selected(self, e):
+        picked = e.control.value
+        self.tag = picked if picked and picked != ALL_TAGS else None
+        await self.load_chronicles()
+
+    def _offer_tags(self, chronicles: list[Chronicle]) -> None:
+        """
+        Refreshes the choices from a full listing, and drops a filter whose tag no chronicle
+        has any more (its last chronicle lost it, or was deleted).
+        """
+        names = {tag.name for chronicle in chronicles for tag in chronicle.tags}
+        self.tag_options = sorted(names, key=str.casefold)
+        if self.tag not in self.tag_options:
+            self.tag = None
+        self.tag_filter.options = [
+            ft.DropdownOption(key=ALL_TAGS, text=t("tags.all")),
+            *[ft.DropdownOption(key=name, text=name) for name in self.tag_options],
+        ]
+        self.tag_filter.value = self.tag
+
+    def _tagged(self, chronicles: list[Chronicle]) -> list[Chronicle]:
+        if self.tag is None:
+            return chronicles
+        return [c for c in chronicles if self.tag in (tag.name for tag in c.tags)]
+
     async def load_chronicles(self, transcript_delay: float = 0.0):
         """
         The chronicles whose title, description or tags match, then, below them and once
@@ -197,6 +237,7 @@ class ArchiveView(ft.Column):
                 chronicles = await self.chronicle_service.search_chronicles(self.query)
             else:
                 chronicles = await self.chronicle_service.list_chronicles()
+                self._offer_tags(chronicles)
         except Exception as e:
             logger.exception(f"Error loading chronicles: {e}")
             if generation == self._generation:
@@ -209,6 +250,7 @@ class ArchiveView(ft.Column):
         if generation != self._generation:
             return
 
+        chronicles = self._tagged(chronicles)
         cards: list[ft.Control] = [self.create_chronicle_card(c) for c in chronicles]
         if self._section_query != self.query or not self.query.strip():
             self._transcript_section, self._section_query = [], ""
@@ -247,7 +289,11 @@ class ArchiveView(ft.Column):
 
         # A chronicle already listed by its title is not listed a second time.
         shown = {chronicle.id for chronicle in found_by_title}
-        matches = [match for match in matches if match.chronicle.id not in shown]
+        matches = [
+            match
+            for match in matches
+            if match.chronicle.id not in shown and self._tagged([match.chronicle])
+        ]
 
         section: list[ft.Control] = []
         if failed is not None:

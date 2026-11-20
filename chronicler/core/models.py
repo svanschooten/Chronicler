@@ -65,6 +65,13 @@ class TranscriptLine(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+TRANSCRIPT_TAG = "Transcript"
+SUMMARIZED_TAG = "Summarized"
+SYSTEM_TAGS = frozenset({TRANSCRIPT_TAG, SUMMARIZED_TAG})
+"""Tags `reconcile` derives from a chronicle's transcript and summaries. A user can filter by
+them, but not remove them: the next task would only put them back."""
+
+
 class Chronicle(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     title: str

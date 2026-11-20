@@ -184,7 +184,9 @@ large and worth keeping portable:
 * Generated content
 
 Tags are shared across the workspace rather than owned by a single Chronicle, so they
-live in the workspace database.
+live in the workspace database. Add or remove a Chronicle's tags in its details panel, and
+narrow the archive to one tag with the tag filter beside the search box. Typing a tag in
+different case reuses the existing one, and a tag no Chronicle has any more is deleted.
 
 ### Designed for existing storage solutions
 

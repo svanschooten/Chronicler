@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import flet as ft
 import pytest
 
-from chronicler.core.models import Chronicle
+from chronicler.core.models import Chronicle, Tag
 from chronicler.desktop.views.archive import ArchiveView
 from chronicler.desktop.views.archive import view as archive_view
 from tests.chronicler.desktop.controls import text_values
@@ -505,3 +505,50 @@ async def test_a_slow_answer_for_an_earlier_query_does_not_replace_the_later_one
     shown = text_values(view.chronicle_list)
     assert "Answer for abc" in shown
     assert "Answer for a" not in shown
+
+
+def _tagged(title, *names):
+    return Chronicle(title=title, tags=[Tag(name=name) for name in names])
+
+
+@pytest.mark.asyncio
+async def test_the_tag_filter_offers_the_tags_in_use_and_narrows_the_list(make_view):
+    chronicle_service = AsyncMock()
+    chronicle_service.list_chronicles.return_value = [
+        _tagged("Weekly", "work"),
+        _tagged("Campaign", "Games", "work"),
+        _tagged("Untagged"),
+    ]
+    view = make_view(chronicle_service=chronicle_service)
+    view.update = MagicMock()
+    view.load_chronicles = ArchiveView.load_chronicles.__get__(view)
+
+    await view.load_chronicles()
+
+    assert [option.key for option in view.tag_filter.options] == ["", "Games", "work"]
+    assert len(view.chronicle_list.controls) == 3
+
+    await view.tag_selected(MagicMock(control=MagicMock(value="work")))
+
+    titles = [
+        value
+        for card in view.chronicle_list.controls
+        for value in text_values(card)
+        if value in {"Weekly", "Campaign", "Untagged"}
+    ]
+    assert titles == ["Weekly", "Campaign"]
+
+
+@pytest.mark.asyncio
+async def test_a_filter_whose_tag_is_gone_is_dropped(make_view):
+    chronicle_service = AsyncMock()
+    chronicle_service.list_chronicles.return_value = [_tagged("Weekly", "work")]
+    view = make_view(chronicle_service=chronicle_service)
+    view.update = MagicMock()
+    view.load_chronicles = ArchiveView.load_chronicles.__get__(view)
+    view.tag = "gone"
+
+    await view.load_chronicles()
+
+    assert view.tag is None
+    assert len(view.chronicle_list.controls) == 1

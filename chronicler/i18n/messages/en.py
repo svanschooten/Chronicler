@@ -10,6 +10,12 @@ MESSAGES = {
         "tasks": "Tasks",
         "settings": "Settings",
     },
+    "tags": {
+        "add": "Add a tag",
+        "failed": "Could not change the tags: {error}",
+        "filter": "Filter by tag",
+        "all": "All tags",
+    },
     "common": {
         "cancel": "Cancel",
         "save": "Save",

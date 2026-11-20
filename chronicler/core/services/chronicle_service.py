@@ -12,7 +12,7 @@ from chronicler.core.database_manager import (
     check_linkable_project,
 )
 from chronicler.core.file_staging import confine_to_directory, safe_display_name
-from chronicler.core.models import Chronicle, Snapshot
+from chronicler.core.models import SYSTEM_TAGS, Chronicle, Snapshot
 from chronicler.core.rpc import service
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.sqlite import SQLiteChronicleRepository
@@ -58,6 +58,8 @@ class LinkPolicy:
         "restore_snapshot",
         "search_chronicles",
         "edit_chronicle",
+        "add_tag",
+        "remove_tag",
     ]
 )
 class ChronicleService:
@@ -148,6 +150,38 @@ class ChronicleService:
         if duration is not None:
             chronicle.duration = duration or None
         return await self.repository.update(chronicle)
+
+    async def add_tag(self, chronicle_id: UUID, name: str) -> Chronicle:
+        """
+        Gives the chronicle a tag, creating it if no chronicle has it yet. Names match
+        without regard to case, so typing "Product" reuses "product". A blank name changes
+        nothing. Raises LookupError for an unknown chronicle.
+        """
+        if await self.repository.get_by_id(chronicle_id) is None:
+            raise LookupError(f"No chronicle {chronicle_id}")
+        name = " ".join(name.split())
+        if name:
+            await self.repository.add_tag(chronicle_id, name)
+        return await self._stored(chronicle_id)
+
+    async def remove_tag(self, chronicle_id: UUID, name: str) -> Chronicle:
+        """
+        Takes a tag off the chronicle. A tag no chronicle has any more is deleted. Raises
+        LookupError for an unknown chronicle, and ValueError for a system tag (`SYSTEM_TAGS`),
+        which follows the transcript and would come straight back.
+        """
+        if await self.repository.get_by_id(chronicle_id) is None:
+            raise LookupError(f"No chronicle {chronicle_id}")
+        if is_system_tag(name):
+            raise ValueError(f"The {name} tag follows the chronicle's transcript")
+        await self.repository.remove_tag(chronicle_id, name)
+        return await self._stored(chronicle_id)
+
+    async def _stored(self, chronicle_id: UUID) -> Chronicle:
+        chronicle = await self.repository.get_by_id(chronicle_id)
+        if chronicle is None:
+            raise LookupError(f"No chronicle {chronicle_id}")
+        return chronicle
 
     async def list_snapshots(self, chronicle_id: UUID) -> list[Snapshot]:
         """The copies kept from before a clean, an import, a re-transcription or a restore."""
@@ -269,3 +303,8 @@ def _title_for(project_path: Path) -> str:
     if title in ("", "chronicles"):
         return project_path.stem
     return title
+
+
+def is_system_tag(name: str) -> bool:
+    """Whether `name` is one of `SYSTEM_TAGS`, in any case."""
+    return name.casefold() in {tag.casefold() for tag in SYSTEM_TAGS}

@@ -13,9 +13,10 @@ def find_controls(root, predicate: Callable[[object], bool]) -> list:
     for attr in ("controls", "items"):
         for child in getattr(root, attr, None) or []:
             found.extend(find_controls(child, predicate))
-    content = getattr(root, "content", None)
-    if content is not None:
-        found.extend(find_controls(content, predicate))
+    for attr in ("content", "label"):
+        child = getattr(root, attr, None)
+        if isinstance(child, ft.Control):
+            found.extend(find_controls(child, predicate))
     return found
 
 

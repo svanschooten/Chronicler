@@ -9,6 +9,12 @@ MESSAGES = {
         "tasks": "Taken",
         "settings": "Instellingen",
     },
+    "tags": {
+        "add": "Voeg een label toe",
+        "failed": "De labels konden niet worden aangepast: {error}",
+        "filter": "Filter op label",
+        "all": "Alle labels",
+    },
     "common": {
         "cancel": "Annuleren",
         "save": "Opslaan",

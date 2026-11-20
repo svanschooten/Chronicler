@@ -68,7 +68,8 @@ holds the problem and its evidence.
   A speaker is counted once per name on the lines, so a speaker with no lines no longer
   counts, and editing or deleting a line updates the count (051). The reflection-based
   container is gone: a `Services` object holds the four services for one unit of work,
-  built by `local_services` or `remote_services`, and views take it (041).
+  built by `local_services` or `remote_services`, and views take it (041). A chronicle's tags
+  can be added and removed, and the archive can be narrowed to one tag (066).
 
 Waves 9, 10 and 12 are still open.
 

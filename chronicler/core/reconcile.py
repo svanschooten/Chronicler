@@ -4,7 +4,7 @@ import logging
 from uuid import UUID
 
 from chronicler.core.formatting import format_duration, looks_synthetic
-from chronicler.core.models import Chronicle, TranscriptLine
+from chronicler.core.models import SUMMARIZED_TAG, TRANSCRIPT_TAG, Chronicle, TranscriptLine
 from chronicler.core.sqlite import SQLiteChronicleRepository
 
 logger = logging.getLogger(__name__)
@@ -56,9 +56,9 @@ async def reconcile(
         return None
 
     if lines:
-        await chronicles.add_tag(chronicle_id, "Transcript")
+        await chronicles.add_tag(chronicle_id, TRANSCRIPT_TAG)
     if summaries:
-        await chronicles.add_tag(chronicle_id, "Summarized")
+        await chronicles.add_tag(chronicle_id, SUMMARIZED_TAG)
 
     chronicle.speakers_count = count_speakers(lines)
     if timings and lines and not looks_synthetic(lines):
