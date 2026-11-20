@@ -61,10 +61,9 @@ def format_pdf(
         text = line.text.strip()
         if not text:
             continue
-        ts = getattr(line, "timestamp", None) or getattr(line, "start_time", None)
         rows.append(
             (
-                format_timestamp(float(str(ts))),
+                format_timestamp(line.start_time),
                 line.speaker_name or "Unknown",
                 text.replace("\r", "").replace("\n", " "),
             )

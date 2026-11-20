@@ -9,13 +9,13 @@ import pytest
 from chronicler.core.database_manager import DatabaseManager, LinkRefusedError
 from chronicler.core.models import TranscriptLine
 from chronicler.core.services.chronicle_service import ChronicleService
-from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.sqlite import (
     SQLiteChronicleRepository,
     SQLiteKnownSpeakerRepository,
     SQLiteTranscriptRepository,
 )
 from tests.projects import forget_chronicle, register_chronicle
+from tests.services import build_services
 
 
 async def _workspace(tmp_path):
@@ -24,9 +24,9 @@ async def _workspace(tmp_path):
     session = db_manager.get_archive_session()
     chronicles = SQLiteChronicleRepository(session)
     speakers = SQLiteKnownSpeakerRepository(session)
-    transcripts = TranscriptService(db_manager, chronicles, speakers)
-    service = ChronicleService(chronicles, db_manager, transcripts)
-    return db_manager, session, service, transcripts
+    built = build_services(db_manager, chronicles, speakers)
+    service = ChronicleService(chronicles, db_manager, built.transcripts)
+    return db_manager, session, service, built
 
 
 async def _external_project(db_manager, tmp_path, lines):
@@ -217,7 +217,7 @@ class TestExternalSources:
             (sources / "gm.wav").write_bytes(b"audio")
 
             chronicle = await service.link_external_chronicle(str(project_db))
-            found = await transcripts.list_audio_sources(chronicle.id)
+            found = await transcripts.sources.list_audio_sources(chronicle.id)
 
             assert [source.filename for source in found] == ["gm.wav"]
             assert found[0].missing is False
@@ -233,7 +233,7 @@ class TestExternalSources:
             path = db_manager.ensure_sources_path_for(str(chronicle.id)) / "gm.wav"
             path.write_bytes(b"audio")
 
-            found = await transcripts.list_audio_sources(chronicle.id)
+            found = await transcripts.sources.list_audio_sources(chronicle.id)
 
             assert [source.filename for source in found] == ["gm.wav"]
         finally:
@@ -247,7 +247,7 @@ class TestExternalSources:
             project_db = await _external_project(db_manager, tmp_path, [])
             chronicle = await service.link_external_chronicle(str(project_db))
 
-            assert await transcripts.list_audio_sources(chronicle.id) == []
+            assert await transcripts.sources.list_audio_sources(chronicle.id) == []
         finally:
             await session.close()
             await db_manager.close_all()

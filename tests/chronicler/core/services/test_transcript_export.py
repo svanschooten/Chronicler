@@ -1,4 +1,4 @@
-"""Tests for TranscriptService.export_plaintext."""
+"""Tests for ExportService.export_plaintext."""
 
 import json
 
@@ -7,9 +7,9 @@ import pytest
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Chronicle, Task, TaskType, TranscriptLine
 from chronicler.core.processing.handlers import ImportHandler
-from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
 from tests.paths import EXAMPLES_DIR
+from tests.services import build_services
 
 
 async def _noop_progress(_progress: int) -> None:
@@ -47,7 +47,7 @@ async def test_export_plaintext_preserves_raw_turn_structure_from_real_example(t
         archive_session = db_manager.get_archive_session()
         async with archive_session:
             chronicle_repo = SQLiteChronicleRepository(archive_session)
-            service = TranscriptService(db_manager, chronicle_repo)
+            service = build_services(db_manager, chronicle_repo).exports
             exported = await service.export_plaintext(chronicle.id)
 
         assert (
@@ -98,7 +98,7 @@ async def test_export_plaintext_pads_speaker_column_to_longest_name(tmp_path):
         archive_session = db_manager.get_archive_session()
         async with archive_session:
             chronicle_repo = SQLiteChronicleRepository(archive_session)
-            service = TranscriptService(db_manager, chronicle_repo)
+            service = build_services(db_manager, chronicle_repo).exports
             exported = await service.export_plaintext(chronicle.id)
 
         assert exported == "GM      : Hi\nLonghand: Hello"
@@ -129,7 +129,7 @@ async def test_export_plaintext_omits_timestamps_by_default(tmp_path):
         archive_session = db_manager.get_archive_session()
         async with archive_session:
             chronicle_repo = SQLiteChronicleRepository(archive_session)
-            service = TranscriptService(db_manager, chronicle_repo)
+            service = build_services(db_manager, chronicle_repo).exports
             exported = await service.export_plaintext(chronicle.id)
 
         assert exported == "GM: Hi"
@@ -169,7 +169,7 @@ async def test_export_plaintext_with_timestamps_prefixes_and_aligns(tmp_path):
         archive_session = db_manager.get_archive_session()
         async with archive_session:
             chronicle_repo = SQLiteChronicleRepository(archive_session)
-            service = TranscriptService(db_manager, chronicle_repo)
+            service = build_services(db_manager, chronicle_repo).exports
             exported = await service.export_plaintext(chronicle.id, include_timestamps=True)
 
         assert exported == (
@@ -215,7 +215,7 @@ async def test_export_plaintext_wraps_long_merged_lines_with_hanging_indent(tmp_
         archive_session = db_manager.get_archive_session()
         async with archive_session:
             chronicle_repo = SQLiteChronicleRepository(archive_session)
-            service = TranscriptService(db_manager, chronicle_repo)
+            service = build_services(db_manager, chronicle_repo).exports
             exported = await service.export_plaintext(chronicle.id)
 
         exported_lines = exported.splitlines()
@@ -253,7 +253,7 @@ async def test_export_plaintext_drops_blank_lines(tmp_path):
         archive_session = db_manager.get_archive_session()
         async with archive_session:
             chronicle_repo = SQLiteChronicleRepository(archive_session)
-            service = TranscriptService(db_manager, chronicle_repo)
+            service = build_services(db_manager, chronicle_repo).exports
             exported = await service.export_plaintext(chronicle.id)
 
         assert exported == "GM: Hi"

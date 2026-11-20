@@ -9,9 +9,9 @@ from pathlib import Path
 
 import flet as ft
 
+from chronicler.core.exports.bundle import safe_folder_name
 from chronicler.core.models import Chronicle
-from chronicler.core.services.bundle import safe_folder_name
-from chronicler.core.services.transcript_service import TranscriptService
+from chronicler.core.services.export_service import ExportService
 from chronicler.desktop.dialogs import await_dialog
 from chronicler.desktop.reveal import describe_desktop_integration_error
 from chronicler.desktop.widgets import amber_button
@@ -57,13 +57,13 @@ class TranscriptExporter:
     def __init__(
         self,
         chronicle: Chronicle,
-        transcript_service: TranscriptService,
+        export_service: ExportService,
         show_snackbar: Callable[[str], None],
         file_picker: Callable[[], ft.FilePicker | None],
         page: Callable[[], ft.Page | None],
     ):
         self.chronicle = chronicle
-        self.transcript_service = transcript_service
+        self.export_service = export_service
         self.show_snackbar = show_snackbar
         self._file_picker = file_picker
         self._page = page
@@ -112,7 +112,7 @@ class TranscriptExporter:
     async def export_plaintext_clicked(self, e):
         include_timestamps = bool(e.control.data)
         try:
-            content = await self.transcript_service.export_plaintext(
+            content = await self.export_service.export_plaintext(
                 self.chronicle.id, include_timestamps=include_timestamps
             )
         except Exception as ex:
@@ -146,7 +146,7 @@ class TranscriptExporter:
 
     async def export_srt_clicked(self, e):
         try:
-            content = await self.transcript_service.export_srt(self.chronicle.id)
+            content = await self.export_service.export_srt(self.chronicle.id)
         except Exception as ex:
             logger.error(f"Error exporting subtitles: {ex}")
             self.show_snackbar(t("export.failed", error=ex))
@@ -156,9 +156,7 @@ class TranscriptExporter:
 
     async def export_html_clicked(self, e):
         try:
-            content = await self.transcript_service.export_html(
-                self.chronicle.id, self.chronicle.title
-            )
+            content = await self.export_service.export_html(self.chronicle.id, self.chronicle.title)
         except Exception as ex:
             logger.error(f"Error exporting html: {ex}")
             self.show_snackbar(t("export.failed", error=ex))
@@ -168,9 +166,7 @@ class TranscriptExporter:
 
     async def export_pdf_clicked(self, e):
         try:
-            content = await self.transcript_service.export_pdf(
-                self.chronicle.id, self.chronicle.title
-            )
+            content = await self.export_service.export_pdf(self.chronicle.id, self.chronicle.title)
         except Exception as ex:
             logger.error(f"Error exporting pdf: {ex}")
             self.show_snackbar(t("export.failed", error=ex))
@@ -184,7 +180,7 @@ class TranscriptExporter:
             return
 
         try:
-            content = await self.transcript_service.export_zip(
+            content = await self.export_service.export_zip(
                 self.chronicle.id, include_sources=include_sources
             )
         except Exception as ex:

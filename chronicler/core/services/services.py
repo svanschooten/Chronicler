@@ -10,6 +10,9 @@ from chronicler.core.config import Settings
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.remote import RemoteServiceProxy
 from chronicler.core.services.chronicle_service import ChronicleService, LinkPolicy
+from chronicler.core.services.export_service import ExportService
+from chronicler.core.services.source_service import SourceService
+from chronicler.core.services.summary_service import SummaryService
 from chronicler.core.services.system_service import SystemService
 from chronicler.core.services.task_service import TaskService
 from chronicler.core.services.transcript_service import TranscriptService
@@ -34,6 +37,9 @@ class Services:
     tasks: TaskService
     transcripts: TranscriptService
     system: SystemService
+    exports: ExportService
+    sources: SourceService
+    summaries: SummaryService
     close: Callable[[], Awaitable[None]]
 
     def of(self, service_class: type[T]) -> T:
@@ -41,7 +47,15 @@ class Services:
         The service of that class, for the RPC server, which is given classes to serve.
         Local sets only: a remote set holds proxies, which are not instances of the class.
         """
-        for service in (self.chronicles, self.tasks, self.transcripts, self.system):
+        for service in (
+            self.chronicles,
+            self.tasks,
+            self.transcripts,
+            self.system,
+            self.exports,
+            self.sources,
+            self.summaries,
+        ):
             if isinstance(service, service_class):
                 return service
         raise LookupError(f"No {service_class.__name__} in these services")
@@ -53,14 +67,17 @@ def local_services(
     """The services over a workspace, on one new archive session that `close` returns."""
     session = db_manager.get_archive_session()
     chronicle_repository = SQLiteChronicleRepository(session)
-    transcripts = TranscriptService(
-        db_manager, chronicle_repository, SQLiteKnownSpeakerRepository(session)
-    )
+    known_speakers = SQLiteKnownSpeakerRepository(session)
+    transcripts = TranscriptService(db_manager, chronicle_repository, known_speakers)
+    sources = SourceService(db_manager, known_speakers)
     return Services(
         chronicles=ChronicleService(chronicle_repository, db_manager, transcripts, link_policy),
         tasks=TaskService(SQLiteTaskRepository(session)),
         transcripts=transcripts,
         system=SystemService(chronicle_repository, settings),
+        exports=ExportService(db_manager, chronicle_repository, transcripts, sources),
+        sources=sources,
+        summaries=SummaryService(db_manager),
         close=session.close,
     )
 
@@ -76,5 +93,8 @@ def remote_services(url: str, api_key: str | None, client: httpx.AsyncClient) ->
         tasks=RemoteServiceProxy(url, TaskService, client, api_key),  # type: ignore[arg-type]
         transcripts=RemoteServiceProxy(url, TranscriptService, client, api_key),  # type: ignore[arg-type]
         system=RemoteServiceProxy(url, SystemService, client, api_key),  # type: ignore[arg-type]
+        exports=RemoteServiceProxy(url, ExportService, client, api_key),  # type: ignore[arg-type]
+        sources=RemoteServiceProxy(url, SourceService, client, api_key),  # type: ignore[arg-type]
+        summaries=RemoteServiceProxy(url, SummaryService, client, api_key),  # type: ignore[arg-type]
         close=close,
     )

@@ -2,8 +2,7 @@
 
 `chronicler/core/services/services.py`
 
-The four services — chronicles, tasks, transcripts and system — are built together, as one
-`Services` object, for one unit of work:
+The seven services are built together, as one `Services` object, for one unit of work:
 
 ```python
 @dataclass
@@ -12,8 +11,26 @@ class Services:
     tasks: TaskService
     transcripts: TranscriptService
     system: SystemService
+    exports: ExportService
+    sources: SourceService
+    summaries: SummaryService
     close: Callable[[], Awaitable[None]]
 ```
+
+Each service has one topic:
+
+| Service | Route prefix | Holds |
+| ------- | ------------ | ----- |
+| `ChronicleService` | `/chronicle` | Chronicles: create, edit, link, tags, snapshots |
+| `TaskService` | `/task` | The task queue |
+| `TranscriptService` | `/transcript` | Reading, searching and editing a transcript, and its speakers |
+| `SourceService` | `/source` | A chronicle's audio tracks and which speaker each belongs to |
+| `SummaryService` | `/summary` | A chronicle's generated summaries |
+| `ExportService` | `/export` | Plain text, subtitles, HTML, PDF and the zip bundle |
+| `SystemService` | `/system` | Server info, models, `ping` |
+
+The formatters `ExportService` uses are in `chronicler/core/exports/`, not here: they
+turn lines into text or bytes and know nothing of a workspace.
 
 Two functions make one, and nothing else wires services:
 

@@ -61,7 +61,7 @@ which meant the helpful "install the extra" message never actually appeared.
 
 ## Subtitles
 
-`TranscriptService.export_srt` renders SubRip directly — the format is a counter, two
+`ExportService.export_srt` renders SubRip directly — the format is a counter, two
 timestamps and a blank line, which is not worth a dependency.
 
 It passes `require_real_timestamps=True`, which refuses a transcript whose timings are

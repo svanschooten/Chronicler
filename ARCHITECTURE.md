@@ -83,7 +83,9 @@ Where each part of the above actually lives.
 | `chronicler/__main__.py` | Argument parsing and mode dispatch (`desktop`, `server`) |
 | `chronicler/core/config.py` | `Settings` — user configuration, including the persisted deployment mode |
 | `chronicler/core/wizard.py` | First-run configuration wizard |
-| `chronicler/core/services/services.py` | `Services`, `local_services` and `remote_services` — the four services built together for one unit of work, which gets its own session |
+| `chronicler/core/services/` | Application services: chronicles, tasks, transcripts, sources, summaries, exports and system, with the formatters they use in `core/exports/` |
+| `chronicler/core/services/services.py` | `Services`, `local_services` and `remote_services` — the services built together for one unit of work, which gets its own session |
+| `chronicler/core/exports/` | Formatters for plain text, SRT, HTML, PDF and the zip bundle, with the PDF fonts |
 | `chronicler/core/remote.py` | `RemoteServiceProxy` — the thin client's stand-in for one service |
 | `chronicler/core/rpc.py` | The `@service` decorator, and the FastAPI app generated from the services `RpcServer` is given (plus `/upload`) |
 | `chronicler/core/models.py` | Pydantic domain models crossing every boundary |

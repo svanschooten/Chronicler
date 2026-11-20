@@ -189,7 +189,7 @@ async def test_export_srt_writes_subtitles_to_the_chosen_file(make_exporter, tmp
 
 @pytest.mark.asyncio
 async def test_export_srt_reports_a_transcript_without_real_timestamps(make_exporter):
-    from chronicler.core.services.srt import NoRealTimestampsError
+    from chronicler.core.exports.srt import NoRealTimestampsError
 
     transcript_service = AsyncMock()
     transcript_service.export_srt.side_effect = NoRealTimestampsError("no timings")

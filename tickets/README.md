@@ -278,7 +278,7 @@ Internal only, and the most likely to conflict, so these come after the user-fac
 
 - [x] [066-F4 Tag management](066-F4_tag_management.md) · low · M · after 029
 
-- [ ] [043-S16 Split TranscriptService](043-S16_split_transcript_service.md) · low · M · after 041, 032, 037
+- [x] [043-S16 Split TranscriptService](043-S16_split_transcript_service.md) · low · M · after 041, 032, 037
 
 ### Wave 11: a transcript editor that reads like the transcript
 

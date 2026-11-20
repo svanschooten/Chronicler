@@ -30,7 +30,7 @@ each method a `@service` class names in `expose=` into a `POST` route.
 `Service` suffix is stripped and the rest lowercased. Nothing else is published; see
 [Exposure is explicit](#exposure-is-explicit).
 
-Only coroutine functions can be exposed. That is why `TranscriptService.list_audio_sources`
+Only coroutine functions can be exposed. That is why `SourceService.list_audio_sources`
 is `async` despite being plain filesystem I/O.
 
 Every parameter becomes a body field. The method's own default is preserved, including
@@ -147,7 +147,7 @@ became a route, without anyone deciding it should. Two did exactly that, and ser
 server's absolute filesystem paths to any authenticated client:
 
 ```text
-POST /transcript/source_path  {"filename": "../../../../etc/passwd"}
+POST /source/source_path  {"filename": "../../../../etc/passwd"}
   -> 200  "/ws/chronicles/<id>/sources/../../../../etc/passwd"
 ```
 

@@ -16,6 +16,7 @@ from chronicler.core.sqlite import (
     SQLiteTranscriptRepository,
 )
 from tests.chronicler.core.processing.handlers.helpers import read_chronicle
+from tests.services import build_services
 
 
 async def _noop_progress(_progress: int) -> None:
@@ -229,7 +230,6 @@ class TestHandleSummarize:
 
     @pytest.mark.asyncio
     async def test_summaries_are_readable_through_the_service(self, tmp_path):
-        from chronicler.core.services.transcript_service import TranscriptService
 
         db_manager = DatabaseManager(tmp_path)
         await db_manager.init_archive()
@@ -248,17 +248,17 @@ class TestHandleSummarize:
                     _noop_progress,
                 )
 
-            service = TranscriptService(db_manager, repo)
-            summaries = await service.list_summaries(chronicle.id)
+            service = build_services(db_manager, repo)
+            summaries = await service.summaries.list_summaries(chronicle.id)
             assert summaries[0].content == "readable recap"
 
             assert summaries[0].number == 1
 
-            text = await service.read_transcript_text(chronicle.id)
+            text = await service.exports.export_plaintext(chronicle.id)
             assert "Line 0" in text
 
-            await service.delete_summary(chronicle.id, summaries[0].id)
-            assert await service.list_summaries(chronicle.id) == []
+            await service.summaries.delete_summary(chronicle.id, summaries[0].id)
+            assert await service.summaries.list_summaries(chronicle.id) == []
         finally:
             await session.close()
             await db_manager.close_all()

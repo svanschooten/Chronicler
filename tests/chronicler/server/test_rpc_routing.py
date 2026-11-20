@@ -106,7 +106,7 @@ async def test_server_routes_reject_missing_key(tmp_path):
             resp = await client.post("/chronicle/list_chronicles", json={})
             assert resp.status_code == 401
 
-            resp = await client.post("/transcript/list_summaries", json={"chronicle_id": ""})
+            resp = await client.post("/summary/list_summaries", json={"chronicle_id": ""})
             assert resp.status_code == 401
 
             resp = await client.post("/task/list_tasks", json={})
@@ -407,11 +407,11 @@ async def test_document_exports_reach_a_thin_client(tmp_path, monkeypatch):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             remote = remote_services("http://test", "valid-key", client)
-            transcripts = remote.transcripts
+            exports = remote.exports
 
-            html = await transcripts.export_html(chronicle.id, "Remote Exports")
-            pdf = await transcripts.export_pdf(chronicle.id, "Remote Exports")
-            archive = await transcripts.export_zip(chronicle.id)
+            html = await exports.export_html(chronicle.id, "Remote Exports")
+            pdf = await exports.export_pdf(chronicle.id, "Remote Exports")
+            archive = await exports.export_zip(chronicle.id)
 
         assert "Alice" in html
         assert bytes(pdf).startswith(b"%PDF")

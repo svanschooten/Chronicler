@@ -33,9 +33,12 @@ def source(filename="alice.mp3", **overrides):
 @pytest.fixture
 def make_panel():
     def _make(transcript_service=None, task_service=None, chronicle=None, capabilities=None):
+        # One double answers for both services the panel asks: the tracks and the speakers.
+        transcript_service = transcript_service or AsyncMock()
         panel = SourcesPanel(
             chronicle or Chronicle(title="Some Chronicle"),
-            transcript_service or AsyncMock(),
+            transcript_service,
+            transcript_service,
             task_service or AsyncMock(),
             theme_colors(True),
             MagicMock(),

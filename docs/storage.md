@@ -370,8 +370,8 @@ view's *Identify speakers* covers the speaker half of the same job.
 
 ## Exporting a Chronicle as an archive
 
-`TranscriptService.export_zip(chronicle_id, include_sources=False)` packs one chronicle
-into a portable `.zip`, built by `chronicler/core/services/bundle.py`:
+`ExportService.export_zip(chronicle_id, include_sources=False)` packs one chronicle
+into a portable `.zip`, built by `chronicler/core/exports/bundle.py`:
 
 ```text
 <Chronicle title>/

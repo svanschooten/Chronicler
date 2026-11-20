@@ -70,6 +70,10 @@ holds the problem and its evidence.
   container is gone: a `Services` object holds the four services for one unit of work,
   built by `local_services` or `remote_services`, and views take it (041). A chronicle's tags
   can be added and removed, and the archive can be narrowed to one tag (066).
+  `TranscriptService` is split by topic: exports, audio sources and summaries are services
+  of their own, the formatters moved to `core/exports/`, and `read_transcript_text`, the
+  `GM` speaker style and the prototype `timestamp` lookups are gone (043). Routes moved
+  with them, which is safe because client and server must run the same version.
 
 Waves 9, 10 and 12 are still open.
 

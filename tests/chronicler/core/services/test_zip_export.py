@@ -13,12 +13,12 @@ import pytest
 from sqlalchemy import select
 
 from chronicler.core.database_manager import DatabaseManager
+from chronicler.core.exports.bundle import BundleManifest, format_bundle
 from chronicler.core.models import Chronicle, Tag, TranscriptLine
 from chronicler.core.project_database import DBSpeaker
-from chronicler.core.services.bundle import BundleManifest, format_bundle
-from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.sqlite import SQLiteChronicleRepository, SQLiteTranscriptRepository
 from tests.projects import register_chronicle
+from tests.services import build_services
 
 
 def _manifest(**overrides) -> BundleManifest:
@@ -231,7 +231,7 @@ class TestExportZip:
         await db_manager.init_archive()
         chronicle = await _chronicle_with_a_transcript(db_manager)
         async with db_manager.get_archive_session() as session:
-            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+            service = build_services(db_manager, SQLiteChronicleRepository(session)).exports
 
             archive = await service.export_zip(chronicle.id)
 
@@ -251,7 +251,7 @@ class TestExportZip:
         await db_manager.init_archive()
         chronicle = await _chronicle_with_a_transcript(db_manager)
         async with db_manager.get_archive_session() as session:
-            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+            service = build_services(db_manager, SQLiteChronicleRepository(session)).exports
 
             archive = await service.export_zip(chronicle.id)
 
@@ -282,7 +282,7 @@ class TestExportZip:
             kind="Session",
         )
         async with db_manager.get_archive_session() as session:
-            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+            service = build_services(db_manager, SQLiteChronicleRepository(session)).exports
 
             archive = await service.export_zip(chronicle.id)
 
@@ -305,7 +305,7 @@ class TestExportZip:
         (sources / "alice.normalized.wav").write_bytes(b"RIFF" + b"\x00" * 2048)
 
         async with db_manager.get_archive_session() as session:
-            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+            service = build_services(db_manager, SQLiteChronicleRepository(session)).exports
 
             without = await service.export_zip(chronicle.id)
             with_audio = await service.export_zip(chronicle.id, include_sources=True)
@@ -328,7 +328,7 @@ class TestExportZip:
         await db_manager.init_archive()
         chronicle = await _chronicle_with_a_transcript(db_manager, title="D&D: Session #3 / Recap")
         async with db_manager.get_archive_session() as session:
-            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+            service = build_services(db_manager, SQLiteChronicleRepository(session)).exports
 
             archive = await service.export_zip(chronicle.id)
 
@@ -345,10 +345,10 @@ class TestExportZip:
         await db_manager.init_archive()
         chronicle = await _chronicle_with_a_transcript(db_manager)
         async with db_manager.get_archive_session() as session:
-            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+            service = build_services(db_manager, SQLiteChronicleRepository(session))
 
-            await service.export_zip(chronicle.id)
-            lines = await service.get_transcript(chronicle.id)
+            await service.exports.export_zip(chronicle.id)
+            lines = await service.transcripts.get_transcript(chronicle.id)
 
         assert [line.text for line in lines] == ["We left one at least."]
 
@@ -359,7 +359,7 @@ class TestExportZip:
         db_manager = DatabaseManager(tmp_path)
         await db_manager.init_archive()
         async with db_manager.get_archive_session() as session:
-            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+            service = build_services(db_manager, SQLiteChronicleRepository(session)).exports
 
             with pytest.raises(LookupError):
                 await service.export_zip(uuid4())
@@ -393,10 +393,11 @@ class TestExportsLeaveTheEventLoopFree:
 
     @staticmethod
     def _recording_the_thread(monkeypatch, name: str) -> list[threading.Thread]:
-        from chronicler.core.services import pdf, transcript_service
+        from chronicler.core.exports import pdf
+        from chronicler.core.services import export_service
 
         # format_pdf is imported inside export_pdf, so it is patched where it lives.
-        module = pdf if name == "format_pdf" else transcript_service
+        module = pdf if name == "format_pdf" else export_service
         original = getattr(module, name)
         seen: list[threading.Thread] = []
 
@@ -414,7 +415,7 @@ class TestExportsLeaveTheEventLoopFree:
         await db_manager.init_archive()
         chronicle = await _chronicle_with_a_transcript(db_manager)
         async with db_manager.get_archive_session() as session:
-            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+            service = build_services(db_manager, SQLiteChronicleRepository(session)).exports
 
             pdf = await service.export_pdf(chronicle.id, chronicle.title)
         await db_manager.close_all()
@@ -429,7 +430,7 @@ class TestExportsLeaveTheEventLoopFree:
         await db_manager.init_archive()
         chronicle = await _chronicle_with_a_transcript(db_manager)
         async with db_manager.get_archive_session() as session:
-            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+            service = build_services(db_manager, SQLiteChronicleRepository(session)).exports
 
             archive = await service.export_zip(chronicle.id)
         await db_manager.close_all()
@@ -448,7 +449,7 @@ class TestExportsLeaveTheEventLoopFree:
             chronicle = await SQLiteChronicleRepository(session).create(
                 Chronicle(title="Moved", project_path=str(gone))
             )
-            service = TranscriptService(db_manager, SQLiteChronicleRepository(session))
+            service = build_services(db_manager, SQLiteChronicleRepository(session)).exports
 
             with pytest.raises(FileNotFoundError):
                 await service.export_zip(chronicle.id)

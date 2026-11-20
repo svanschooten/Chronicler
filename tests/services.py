@@ -4,6 +4,12 @@ from collections.abc import Callable
 from typing import Any
 from unittest.mock import AsyncMock
 
+from chronicler.core.services import (
+    ExportService,
+    SourceService,
+    SummaryService,
+    TranscriptService,
+)
 from chronicler.core.services.services import Services
 
 
@@ -33,5 +39,26 @@ def fake_services(**services: Any) -> Services:
         tasks=services.get("tasks", AsyncMock()),
         transcripts=services.get("transcripts", AsyncMock()),
         system=services.get("system", AsyncMock()),
+        exports=services.get("exports", AsyncMock()),
+        sources=services.get("sources", AsyncMock()),
+        summaries=services.get("summaries", AsyncMock()),
         close=AsyncMock(),
+    )
+
+
+def build_services(db_manager: Any, chronicle_repository: Any, known_speakers: Any = None):
+    """
+    The transcript-side services over one repository, built as `local_services` builds
+    them but on a session the test already holds. A namespace of `transcripts`, `sources`,
+    `summaries` and `exports`.
+    """
+    from types import SimpleNamespace
+
+    transcripts = TranscriptService(db_manager, chronicle_repository, known_speakers)
+    sources = SourceService(db_manager, known_speakers)
+    return SimpleNamespace(
+        transcripts=transcripts,
+        sources=sources,
+        summaries=SummaryService(db_manager),
+        exports=ExportService(db_manager, chronicle_repository, transcripts, sources),
     )
