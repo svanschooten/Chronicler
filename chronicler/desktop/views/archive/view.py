@@ -5,9 +5,7 @@ from collections.abc import Awaitable, Callable
 import flet as ft
 
 from chronicler.core.models import Chronicle
-from chronicler.core.services.chronicle_service import ChronicleService
-from chronicler.core.services.task_service import TaskService
-from chronicler.core.services.transcript_service import TranscriptService
+from chronicler.core.services.services import Services
 from chronicler.desktop.forms import CreateChronicleForm
 from chronicler.desktop.imports import ImportCoordinator
 from chronicler.desktop.operations import ChronicleOperations
@@ -37,18 +35,16 @@ REFRESH_SEARCH_DELAY = 2.0
 class ArchiveView(ft.Column):
     def __init__(
         self,
-        chronicle_service: ChronicleService,
-        task_service: TaskService,
+        services: Services,
         on_open_chronicle: Callable[[Chronicle], Awaitable[None]],
         stage_file: Callable[[str], Awaitable[str]],
-        transcript_service: TranscriptService,
         dark_mode: bool = True,
         can_link: bool = True,
     ):
         logger.debug("ArchiveView constructed")
-        self.chronicle_service = chronicle_service
-        self.task_service = task_service
-        self.transcript_service = transcript_service
+        chronicle_service = self.chronicle_service = services.chronicles
+        task_service = self.task_service = services.tasks
+        transcript_service = self.transcript_service = services.transcripts
         self.on_open_chronicle = on_open_chronicle
         self.colors = theme_colors(dark_mode)
         self.can_link = can_link

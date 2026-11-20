@@ -3,9 +3,9 @@ from uuid import UUID, uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from chronicler.core.container import Container
-from chronicler.core.remote import RemoteContainer
+from chronicler.core.remote import RemoteServiceProxy
 from chronicler.core.rpc import RpcServer, TempFile, service
+from tests.services import serving
 
 
 @service(expose=["echo_id"])
@@ -24,15 +24,15 @@ class _UuidEchoService:
 
 @pytest.mark.asyncio
 async def test_remote_proxy_serializes_uuid_arguments():
-    container = Container()
-    server = RpcServer(container, services=[_UuidEchoService], api_key="key")
+    server = RpcServer(
+        serving(_UuidEchoService()), None, services=[_UuidEchoService], api_key="key"
+    )
     app = server.build()
 
     the_id = uuid4()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        remote = RemoteContainer("http://test", client=client, api_key="key")
-        proxy = remote.resolve(_UuidEchoService)
+        proxy = RemoteServiceProxy("http://test", _UuidEchoService, client, "key")
 
         result = await proxy.echo_id(the_id)
 
@@ -42,15 +42,15 @@ async def test_remote_proxy_serializes_uuid_arguments():
 
 @pytest.mark.asyncio
 async def test_remote_proxy_serializes_uuid_keyword_arguments():
-    container = Container()
-    server = RpcServer(container, services=[_UuidEchoService], api_key="key")
+    server = RpcServer(
+        serving(_UuidEchoService()), None, services=[_UuidEchoService], api_key="key"
+    )
     app = server.build()
 
     the_id = uuid4()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        remote = RemoteContainer("http://test", client=client, api_key="key")
-        proxy = remote.resolve(_UuidEchoService)
+        proxy = RemoteServiceProxy("http://test", _UuidEchoService, client, "key")
 
         result = await proxy.echo_id(chronicle_id=the_id)
 
@@ -71,14 +71,12 @@ class _BinaryService:
 
 @pytest.mark.asyncio
 async def test_remote_proxy_round_trips_binary_returns():
-    container = Container()
-    server = RpcServer(container, services=[_BinaryService], api_key="key")
+    server = RpcServer(serving(_BinaryService()), None, services=[_BinaryService], api_key="key")
     app = server.build()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        remote = RemoteContainer("http://test", client=client, api_key="key")
-        proxy = remote.resolve(_BinaryService)
+        proxy = RemoteServiceProxy("http://test", _BinaryService, client, "key")
 
         result = await proxy.render(marker=7)
 
@@ -87,8 +85,7 @@ async def test_remote_proxy_round_trips_binary_returns():
 
 @pytest.mark.asyncio
 async def test_binary_route_serves_octet_stream_rather_than_json():
-    container = Container()
-    server = RpcServer(container, services=[_BinaryService], api_key="key")
+    server = RpcServer(serving(_BinaryService()), None, services=[_BinaryService], api_key="key")
     app = server.build()
 
     transport = ASGITransport(app=app)
@@ -128,9 +125,7 @@ async def test_a_temp_file_download_is_streamed_to_disk(tmp_path, monkeypatch):
         return httpx.Response(200, content=body())
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        proxy = RemoteContainer("http://test", client=client, api_key="key").resolve(
-            _DownloadService
-        )
+        proxy = RemoteServiceProxy("http://test", _DownloadService, client, "key")
 
         tracemalloc.start()
         try:

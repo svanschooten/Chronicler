@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from chronicler.core.container import Container
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.file_staging import (
     LocalFileStager,
@@ -11,8 +10,8 @@ from chronicler.core.file_staging import (
     sanitize_stage_name,
     stage_local_file,
 )
-from chronicler.core.local_container import register_local_storage
 from chronicler.core.rpc import RpcServer
+from tests.services import serving
 
 
 def test_sanitize_stage_name_keeps_only_whitelisted_extension():
@@ -109,9 +108,7 @@ async def test_remote_file_stager_uploads_and_returns_server_path(tmp_path):
     try:
         await db_manager.init_archive()
 
-        container = Container()
-        register_local_storage(container, db_manager)
-        upstream_app = RpcServer(container, services=[], api_key="secret-key").build()
+        upstream_app = RpcServer(serving(), db_manager, services=[], api_key="secret-key").build()
 
         source_file = tmp_path / "picked" / "transcript.txt"
         source_file.parent.mkdir()

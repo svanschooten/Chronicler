@@ -7,9 +7,9 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 
-from chronicler.core.container import Container
-from chronicler.core.remote import RemoteContainer
+from chronicler.core.remote import RemoteServiceProxy
 from chronicler.core.rpc import RpcServer, exposed_methods, service
+from tests.services import serving
 
 
 class Item(BaseModel):
@@ -31,9 +31,8 @@ class MockService:
 
 @pytest.mark.asyncio
 async def test_rpc_server_and_remote_proxy():
-    container = Container()
     api_key = "test-secret-key"
-    server = RpcServer(container, services=[MockService], api_key=api_key)
+    server = RpcServer(serving(MockService()), None, services=[MockService], api_key=api_key)
     app = server.build()
 
     transport = ASGITransport(app=app)
@@ -60,9 +59,8 @@ async def test_optional_parameters_stay_optional_over_rpc():
     means required in FastAPI/Pydantic, discarding the method's own default regardless of
     what it was.
     """
-    container = Container()
     api_key = "test-secret-key"
-    server = RpcServer(container, services=[MockService], api_key=api_key)
+    server = RpcServer(serving(MockService()), None, services=[MockService], api_key=api_key)
     app = server.build()
 
     transport = ASGITransport(app=app)
@@ -94,7 +92,7 @@ async def test_optional_parameters_stay_optional_over_rpc():
 
 def test_no_cors_middleware_is_installed():
     """No browser calls the API since the web client was removed, so no origin is allowed."""
-    app = RpcServer(Container(), services=[], api_key="test-key").build()
+    app = RpcServer(serving(), None, services=[], api_key="test-key").build()
 
     assert not [m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"]
 
@@ -106,9 +104,8 @@ async def test_wrong_key_of_same_length_still_rejected():
     `!=` and compare_digest both reject it - the point is the endpoint stays correct after
     switching comparison functions, not that we can observe timing here.
     """
-    container = Container()
     api_key = "a" * 32
-    server = RpcServer(container, services=[MockService], api_key=api_key)
+    server = RpcServer(serving(MockService()), None, services=[MockService], api_key=api_key)
     app = server.build()
 
     transport = ASGITransport(app=app)
@@ -121,15 +118,13 @@ async def test_wrong_key_of_same_length_still_rejected():
 
 @pytest.mark.asyncio
 async def test_remote_container_full_cycle():
-    container = Container()
     api_key = "remote-test-key"
-    server = RpcServer(container, services=[MockService], api_key=api_key)
+    server = RpcServer(serving(MockService()), None, services=[MockService], api_key=api_key)
     app = server.build()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        remote_container = RemoteContainer("http://test", client=client, api_key=api_key)
-        proxy = remote_container.resolve(MockService)
+        proxy = RemoteServiceProxy("http://test", MockService, client, api_key)
 
         items = await proxy.get_items()
         assert len(items) == 1
@@ -148,19 +143,13 @@ async def build_upload_app():
     managers = []
 
     async def build(tmp_path):
-        from sqlalchemy.ext.asyncio import AsyncSession
-
         from chronicler.core.database_manager import DatabaseManager
 
         db_manager = DatabaseManager(tmp_path)
         managers.append(db_manager)
         await db_manager.init_archive()
 
-        container = Container()
-        container.register_instance(DatabaseManager, db_manager)
-        container.register_factory(AsyncSession, lambda: db_manager.get_archive_session())
-
-        server = RpcServer(container=container, services=[], api_key="test-key")
+        server = RpcServer(serving(), db_manager, services=[], api_key="test-key")
         return server.build(), db_manager.get_imports_path()
 
     yield build

@@ -5,11 +5,12 @@ from pathlib import Path
 import flet as ft
 
 from chronicler.core import extras
-from chronicler.core.config import Mode, Settings, get_settings
+from chronicler.core.config import Mode, Settings
+from chronicler.core.file_staging import FileStager
 from chronicler.core.formatting import format_timestamp
 from chronicler.core.models import Chronicle, TranscriptLine
-from chronicler.core.services.task_service import TaskService
-from chronicler.core.services.transcript_service import FIND_LIMIT, TranscriptService
+from chronicler.core.services.services import Services
+from chronicler.core.services.transcript_service import FIND_LIMIT
 from chronicler.desktop.dialogs import await_dialog
 from chronicler.desktop.extras_prompt import ExtraInstaller
 from chronicler.desktop.imports import ImportCoordinator
@@ -73,26 +74,25 @@ class TranscriptView(ft.Column):
     def __init__(
         self,
         chronicle: Chronicle,
+        services: Services,
         on_back: Callable[[], Awaitable[None]],
-        transcript_service: TranscriptService,
-        task_service: TaskService,
-        dark_mode: bool = True,
-        chronicle_service=None,
-        file_stager=None,
-        available_models=None,
-        model_error: Callable[[], str | None] | None = None,
+        file_stager: FileStager,
+        settings: Settings,
+        available_models: Callable[[], list[str]],
+        model_error: Callable[[], str | None],
+        on_reload: Callable[[], Awaitable[None]],
         capabilities: Callable[[], set[str]] | None = None,
-        settings: Settings | None = None,
-        on_reload: Callable[[], Awaitable[None]] | None = None,
+        dark_mode: bool = True,
     ):
+        """`capabilities` is None when the service layer could not say: assume it all works."""
         super().__init__(expand=True, spacing=16)
         self.chronicle = chronicle
         self.on_back = on_back
-        self.transcript_service = transcript_service
-        self.task_service = task_service
-        self.chronicle_service = chronicle_service
+        transcript_service = self.transcript_service = services.transcripts
+        task_service = self.task_service = services.tasks
+        chronicle_service = self.chronicle_service = services.chronicles
         self.file_stager = file_stager
-        self.settings = settings or get_settings()
+        self.settings = settings
         self.capabilities = capabilities
         self.on_reload = on_reload
         self.file_picker: ft.FilePicker | None = None
@@ -167,7 +167,7 @@ class TranscriptView(ft.Column):
                 chronicle_service,
                 task_service,
                 transcript_service,
-                file_stager.stage if file_stager is not None else _no_stager,
+                file_stager.stage,
             ),
             task_service,
             transcript_service,
@@ -416,12 +416,7 @@ class TranscriptView(ft.Column):
         if self.editing:
             await self.load_transcript()
             return
-        if self.on_reload is not None:
-            await self.on_reload()
-            return
-        await self.load_transcript()
-        await self.sources.load()
-        await self.summaries.load()
+        await self.on_reload()
 
     async def refresh(self) -> None:
         """
@@ -442,8 +437,6 @@ class TranscriptView(ft.Column):
         Copies the stored chronicle onto the one this view and its panels already share.
         False when it no longer exists.
         """
-        if self.chronicle_service is None:
-            return True
         fresh = await self.chronicle_service.get_chronicle(self.chronicle.id)
         if fresh is None:
             return False
@@ -660,8 +653,3 @@ class TranscriptView(ft.Column):
     async def show_timestamps_changed(self, e):
         self.show_timestamps = e.control.value
         self._render_transcript()
-
-
-async def _no_stager(path: str) -> str:
-    """Staging is unavailable, so an import can only report why - see docs/desktop.md."""
-    raise RuntimeError("File staging is not available in this view")

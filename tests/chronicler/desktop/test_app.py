@@ -3,13 +3,33 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.config import Mode, Settings
 from chronicler.core.models import ModelCheck
 from chronicler.desktop.app import DesktopApp
 from chronicler.desktop.runtime import build_runtime
 from chronicler.desktop.state import ViewType
+from tests.services import fake_services
+
+
+def _track_services(runtime):
+    """Records every set of services the runtime makes, with `close` watched."""
+    made = []
+    original = runtime.new_services
+
+    def new_services():
+        services = original()
+        services.close = AsyncMock(wraps=services.close)
+        made.append(services)
+        return services
+
+    runtime.new_services = new_services
+    return made
+
+
+def _with_system(runtime, system):
+    """Makes every set of services answer system calls with `system`."""
+    runtime.new_services = lambda: fake_services(system=system)
 
 
 @pytest_asyncio.fixture
@@ -29,29 +49,20 @@ async def desktop_app(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_update_view_closes_previous_session_before_opening_next(desktop_app, monkeypatch):
-    close_calls = 0
-    original_close = AsyncSession.close
-
-    async def counting_close(self):
-        nonlocal close_calls
-        close_calls += 1
-        await original_close(self)
-
-    monkeypatch.setattr(AsyncSession, "close", counting_close)
+async def test_update_view_closes_previous_services_before_opening_next(desktop_app):
+    made = _track_services(desktop_app.runtime)
 
     desktop_app.state.navigate_to(ViewType.ARCHIVE)
     await desktop_app.update_view()
-    first_scope = desktop_app._view_scope
-    first_session = first_scope.resolve(AsyncSession)
-    assert close_calls == 0
+    (first,) = made
+    first.close.assert_not_awaited()
 
     desktop_app.state.navigate_to(ViewType.TASKS)
     await desktop_app.update_view()
 
-    assert close_calls == 1
-    assert desktop_app._view_scope is not first_scope
-    assert desktop_app._view_scope.resolve(AsyncSession) is not first_session
+    first.close.assert_awaited_once()
+    assert desktop_app._view_services is made[1]
+    assert made[1].close.await_count == 0
 
 
 @pytest.mark.asyncio
@@ -63,7 +74,7 @@ async def test_settings_view_has_no_session(desktop_app):
     desktop_app.state.navigate_to(ViewType.SETTINGS)
     await desktop_app.update_view()
 
-    assert desktop_app._view_scope is None
+    assert desktop_app._view_services is None
 
 
 @pytest.mark.asyncio
@@ -73,12 +84,12 @@ async def test_cleanup_closes_the_view_session_and_stops_the_worker(desktop_app)
     desktop_app.state.navigate_to(ViewType.ARCHIVE)
     await desktop_app.update_view()
 
-    view_session = desktop_app._view_scope.resolve(AsyncSession)
-    view_session.close = AsyncMock(wraps=view_session.close)
+    services = desktop_app._view_services
+    services.close = AsyncMock(wraps=services.close)
 
     await desktop_app.cleanup(None)
 
-    view_session.close.assert_awaited_once()
+    services.close.assert_awaited_once()
     desktop_app.worker_manager.stop.assert_called_once()
 
 
@@ -187,18 +198,12 @@ async def test_on_dark_mode_change_rebuilds_current_view_with_new_colors(desktop
 
 
 async def _create_chronicle(desktop_app, title: str):
-    """
-    A throwaway scope just to create a test fixture, closed immediately after - unlike
-    desktop_app._view_scope (torn down by update_view()/cleanup()), a scope created ad hoc
-    in a test body is otherwise never closed, and SQLAlchemy warns about the abandoned
-    connection when it's garbage collected.
-    """
-    from chronicler.core.services.chronicle_service import ChronicleService
-
-    scope = desktop_app._new_scope()
-    chronicle = await scope.resolve(ChronicleService).create_chronicle(title)
-    await scope.resolve(AsyncSession).close()
-    return chronicle
+    """A throwaway set of services just to create a test fixture, closed straight after."""
+    services = desktop_app.runtime.new_services()
+    try:
+        return await services.chronicles.create_chronicle(title)
+    finally:
+        await services.close()
 
 
 @pytest.mark.asyncio
@@ -243,15 +248,15 @@ async def test_on_task_completed_refreshes_the_list_view_in_place(desktop_app, v
 
 
 @pytest.mark.asyncio
-async def test_on_task_completed_keeps_the_view_session(desktop_app):
+async def test_on_task_completed_keeps_the_view_services(desktop_app):
     desktop_app.state.navigate_to(ViewType.ARCHIVE)
     await desktop_app.update_view()
-    scope = desktop_app._view_scope
+    services = desktop_app._view_services
     desktop_app.content_area.content.refresh = AsyncMock()
 
     await desktop_app._on_task_completed(_completed())
 
-    assert desktop_app._view_scope is scope
+    assert desktop_app._view_services is services
 
 
 @pytest.mark.asyncio
@@ -272,8 +277,6 @@ async def test_on_task_completed_refreshes_transcript_view_for_matching_chronicl
 @pytest.mark.asyncio
 async def test_a_finished_task_shows_in_the_open_transcript_view(desktop_app):
     """The view on screen picks up what the task changed, without being replaced."""
-    from chronicler.core.services.chronicle_service import ChronicleService
-
     chronicle = await _create_chronicle(desktop_app, "Recording")
     desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
     await desktop_app.update_view()
@@ -282,11 +285,11 @@ async def test_a_finished_task_shows_in_the_open_transcript_view(desktop_app):
     view.sources.load = AsyncMock()
     view.summaries.load = AsyncMock()
 
-    scope = desktop_app.resolver.create_scope()
-    stored = await scope.resolve(ChronicleService).get_chronicle(chronicle.id)
+    services = desktop_app.runtime.new_services()
+    stored = await services.chronicles.get_chronicle(chronicle.id)
     stored.duration = "1h 0m"
-    await scope.resolve(ChronicleService).update_chronicle(stored)
-    await scope.resolve(AsyncSession).close()
+    await services.chronicles.update_chronicle(stored)
+    await services.close()
 
     await desktop_app._on_task_completed(_completed(chronicle.id))
 
@@ -342,15 +345,13 @@ async def test_update_view_transcript_refetches_chronicle(desktop_app):
     keep showing stale values after a background task (e.g. transcription) changes the
     chronicle.
     """
-    from chronicler.core.services.chronicle_service import ChronicleService
-
     chronicle = await _create_chronicle(desktop_app, "Recording")
 
     desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
     await desktop_app.update_view()
     assert desktop_app.content_area.content.chronicle.duration is None
 
-    chronicle_service = desktop_app._view_scope.resolve(ChronicleService)
+    chronicle_service = desktop_app._view_services.chronicles
     chronicle.duration = "1h 0m"
     await chronicle_service.update_chronicle(chronicle)
 
@@ -362,15 +363,12 @@ async def test_update_view_transcript_refetches_chronicle(desktop_app):
 
 @pytest.mark.asyncio
 async def test_update_view_transcript_goes_back_if_chronicle_was_deleted(desktop_app):
-    from chronicler.core.services.chronicle_service import ChronicleService
-
     chronicle = await _create_chronicle(desktop_app, "Doomed")
     desktop_app.state.navigate_to(ViewType.TRANSCRIPT, chronicle)
 
-    scope = desktop_app._new_scope()
-    await scope.resolve(ChronicleService).delete_chronicle(chronicle.id)
-    await scope.resolve(AsyncSession).close()
-    desktop_app._view_scope = None
+    services = desktop_app.runtime.new_services()
+    await services.chronicles.delete_chronicle(chronicle.id)
+    await services.close()
 
     await desktop_app.update_view()
 
@@ -378,43 +376,39 @@ async def test_update_view_transcript_goes_back_if_chronicle_was_deleted(desktop
 
 
 @pytest.mark.asyncio
-async def test_thin_client_resolves_a_working_remote_service(tmp_path):
+async def test_thin_client_makes_services_that_round_trip_to_a_live_server(tmp_path):
     """
-    DesktopApp resolved through a RemoteContainer must get a proxy that actually round-trips
-    to a live server, not just an object of the right type.
+    A thin client's services must be proxies that actually round-trip to a live server, not
+    just objects of the right type.
     """
     from httpx import ASGITransport, AsyncClient
 
-    from chronicler.core.container import Container
     from chronicler.core.database_manager import DatabaseManager
-    from chronicler.core.local_container import register_local_storage
     from chronicler.core.models import Chronicle
     from chronicler.core.rpc import RpcServer
     from chronicler.core.services import ChronicleService
+    from chronicler.core.services.services import local_services, remote_services
     from chronicler.core.sqlite import SQLiteChronicleRepository
 
     upstream_db_manager = DatabaseManager(tmp_path)
     await upstream_db_manager.init_archive()
-    upstream_container = Container()
-    register_local_storage(upstream_container, upstream_db_manager)
 
     archive_session = upstream_db_manager.get_archive_session()
     async with archive_session:
         await SQLiteChronicleRepository(archive_session).create(Chronicle(title="Remote One"))
 
-    upstream_app = RpcServer(upstream_container, services=[ChronicleService], api_key="key").build()
+    upstream_app = RpcServer(
+        lambda: local_services(upstream_db_manager, Settings()),
+        upstream_db_manager,
+        services=[ChronicleService],
+        api_key="key",
+    ).build()
 
     try:
-        settings = Settings(server_url="http://upstream", api_key="key", mode=Mode.THIN_CLIENT)
-        runtime = build_runtime(settings)
-        app = DesktopApp(runtime)
-
         transport = ASGITransport(app=upstream_app)
         async with AsyncClient(transport=transport, base_url="http://upstream") as client:
-            runtime.resolver._client = client  # type: ignore[attr-defined]
-            scope = app._new_scope()
-            chronicle_service = scope.resolve(ChronicleService)
-            chronicles = await chronicle_service.list_chronicles()
+            services = remote_services("http://upstream", "key", client)
+            chronicles = await services.chronicles.list_chronicles()
 
         assert len(chronicles) == 1
         assert chronicles[0].title == "Remote One"
@@ -430,14 +424,12 @@ async def test_refresh_models_caches_the_provider_listing(tmp_path):
     """
     from unittest.mock import AsyncMock
 
-    from chronicler.core.services.system_service import SystemService
-
     runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
     system.list_models.return_value = ModelCheck(models=["qwen3", "llama3"])
-    runtime.resolver.register_instance(SystemService, system)
+    _with_system(runtime, system)
 
     await app.refresh_models()
 
@@ -451,14 +443,12 @@ async def test_on_llm_change_asks_again(tmp_path):
     """
     from unittest.mock import AsyncMock
 
-    from chronicler.core.services.system_service import SystemService
-
     runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
     system.list_models.return_value = ModelCheck(models=["qwen3"])
-    runtime.resolver.register_instance(SystemService, system)
+    _with_system(runtime, system)
 
     check = await app.on_llm_change()
 
@@ -476,7 +466,6 @@ async def test_on_llm_change_re_reads_the_capabilities(tmp_path):
     from unittest.mock import AsyncMock
 
     from chronicler.core.models import ServerInfo
-    from chronicler.core.services.system_service import SystemService
 
     runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
@@ -487,7 +476,7 @@ async def test_on_llm_change_re_reads_the_capabilities(tmp_path):
     system.get_server_info.return_value = ServerInfo(
         version="1.0.0", capabilities=["import", "summarize"]
     )
-    runtime.resolver.register_instance(SystemService, system)
+    _with_system(runtime, system)
 
     await app.on_llm_change()
 
@@ -498,14 +487,12 @@ async def test_on_llm_change_re_reads_the_capabilities(tmp_path):
 async def test_refresh_models_reports_an_unreachable_provider_to_the_caller(tmp_path):
     from unittest.mock import AsyncMock
 
-    from chronicler.core.services.system_service import SystemService
-
     runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
     system.list_models.side_effect = RuntimeError("connection refused")
-    runtime.resolver.register_instance(SystemService, system)
+    _with_system(runtime, system)
 
     check = await app.refresh_models()
 
@@ -517,14 +504,12 @@ async def test_refresh_models_reports_an_unreachable_provider_to_the_caller(tmp_
 async def test_refresh_models_survives_an_unreachable_provider(tmp_path):
     from unittest.mock import AsyncMock
 
-    from chronicler.core.services.system_service import SystemService
-
     runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
     system.list_models.side_effect = RuntimeError("connection refused")
-    runtime.resolver.register_instance(SystemService, system)
+    _with_system(runtime, system)
 
     await app.refresh_models()
 
@@ -540,7 +525,6 @@ async def test_refresh_models_also_learns_what_the_server_can_do(tmp_path):
     from unittest.mock import AsyncMock
 
     from chronicler.core.models import ServerInfo
-    from chronicler.core.services.system_service import SystemService
 
     runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
@@ -550,7 +534,7 @@ async def test_refresh_models_also_learns_what_the_server_can_do(tmp_path):
     system.get_server_info.return_value = ServerInfo(
         version="9.9.9", capabilities=["import", "summarize"]
     )
-    runtime.resolver.register_instance(SystemService, system)
+    _with_system(runtime, system)
 
     await app.refresh_models()
 
@@ -562,15 +546,13 @@ async def test_unreachable_capabilities_leave_every_action_offered(tmp_path):
     """A failed handshake must not silently disable half the interface."""
     from unittest.mock import AsyncMock
 
-    from chronicler.core.services.system_service import SystemService
-
     runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     app = DesktopApp(runtime)
 
     system = AsyncMock()
     system.list_models.return_value = ModelCheck()
     system.get_server_info.side_effect = RuntimeError("connection refused")
-    runtime.resolver.register_instance(SystemService, system)
+    _with_system(runtime, system)
 
     await app.refresh_models()
 
@@ -580,24 +562,24 @@ async def test_unreachable_capabilities_leave_every_action_offered(tmp_path):
 @pytest.mark.asyncio
 async def test_startup_discovery_does_not_leave_a_session_open(tmp_path):
     """
-    Regression test: `refresh_models` resolved SystemService off the *root* container, so
-    the AsyncSession its repository needed was cached there for the life of the process -
-    with an open read transaction, and nothing to close it. At exit the garbage collector
-    terminated the connection mid-finalisation:
+    Regression test: model discovery once cached the session its repository needed for the
+    life of the process - with an open read transaction, and nothing to close it. At exit
+    the garbage collector terminated the connection mid-finalisation:
 
         RuntimeError: greenlet is being finalized
 
-    Every other consumer resolves through a per-operation scope; this one has to as well.
+    Every set of services is closed by whoever made it, and this one has to be as well.
     """
-    from sqlalchemy.ext.asyncio import AsyncSession
-
     runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     await runtime.db_manager.init_archive()
+    made = _track_services(runtime)
     app = DesktopApp(runtime)
     try:
         await app.refresh_models()
 
-        assert AsyncSession not in runtime.resolver._resolved_cache
+        assert made
+        for services in made:
+            services.close.assert_awaited_once()
     finally:
         await runtime.db_manager.close_all()
 
@@ -619,10 +601,9 @@ async def test_startup_discovery_still_reports_what_it_found(tmp_path):
 @pytest.mark.asyncio
 async def test_cleanup_leaves_no_session_active_anywhere(tmp_path):
     """What the shutdown error actually measures: an unreturned pooled connection."""
-    from sqlalchemy.ext.asyncio import AsyncSession
-
     runtime = build_runtime(Settings(workspace_path=tmp_path, mode=Mode.FULL_STACK))
     await runtime.db_manager.init_archive()
+    made = _track_services(runtime)
     app = DesktopApp(runtime)
     app._maybe_start_worker_manager()
     await app.refresh_models()
@@ -630,12 +611,9 @@ async def test_cleanup_leaves_no_session_active_anywhere(tmp_path):
 
     await app.cleanup(None)
 
-    leaked = [
-        container._resolved_cache.get(AsyncSession)
-        for container in (runtime.resolver, app._view_scope)
-        if container is not None
-    ]
-    assert not [session for session in leaked if session is not None and session.is_active]
+    assert made
+    for services in made:
+        services.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

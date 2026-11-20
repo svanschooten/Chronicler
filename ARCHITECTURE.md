@@ -83,9 +83,8 @@ Where each part of the above actually lives.
 | `chronicler/__main__.py` | Argument parsing and mode dispatch (`desktop`, `server`) |
 | `chronicler/core/config.py` | `Settings` — user configuration, including the persisted deployment mode |
 | `chronicler/core/wizard.py` | First-run configuration wizard |
-| `chronicler/core/container.py` | DI container; `create_scope()` is what gives each unit of work its own session |
-| `chronicler/core/local_container.py` | The registrations every local (non-remote) container shares |
-| `chronicler/core/remote.py` | `RemoteContainer` / `RemoteServiceProxy` — the thin client's stand-in for a container |
+| `chronicler/core/services/services.py` | `Services`, `local_services` and `remote_services` — the four services built together for one unit of work, which gets its own session |
+| `chronicler/core/remote.py` | `RemoteServiceProxy` — the thin client's stand-in for one service |
 | `chronicler/core/rpc.py` | The `@service` decorator, and the FastAPI app generated from the services `RpcServer` is given (plus `/upload`) |
 | `chronicler/core/models.py` | Pydantic domain models crossing every boundary |
 | `chronicler/core/sqlite/` | The repositories: SQLite access for the workspace and each chronicle |

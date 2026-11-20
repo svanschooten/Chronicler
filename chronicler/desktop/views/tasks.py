@@ -6,8 +6,8 @@ from uuid import UUID
 import flet as ft
 
 from chronicler.core.models import Task, TaskStatus
-from chronicler.core.services.chronicle_service import ChronicleService
-from chronicler.core.services.task_service import CANCELLABLE_WHILE_WORKING, TaskService
+from chronicler.core.services.services import Services
+from chronicler.core.services.task_service import CANCELLABLE_WHILE_WORKING
 from chronicler.desktop.dialogs import Choice, ask_choice
 from chronicler.desktop.theme import theme_colors
 from chronicler.i18n import t
@@ -26,13 +26,12 @@ POLL_SECONDS = 2.0
 class TasksView(ft.Column):
     def __init__(
         self,
-        task_service: TaskService,
-        chronicle_service: ChronicleService,
+        services: Services,
         dark_mode: bool = True,
     ):
         logger.debug("TasksView constructed")
-        self.task_service = task_service
-        self.chronicle_service = chronicle_service
+        self.task_service = services.tasks
+        self.chronicle_service = services.chronicles
         self.colors = theme_colors(dark_mode)
         self.task_list = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True, spacing=16)
         self.query = ""

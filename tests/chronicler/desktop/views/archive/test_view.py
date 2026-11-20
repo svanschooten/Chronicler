@@ -10,17 +10,20 @@ from chronicler.core.models import Chronicle
 from chronicler.desktop.views.archive import ArchiveView
 from chronicler.desktop.views.archive import view as archive_view
 from tests.chronicler.desktop.controls import text_values
+from tests.services import fake_services
 
 
 @pytest.fixture
 def make_view():
     def _make(chronicle_service=None, task_service=None, transcript_service=None, **kwargs):
         view = ArchiveView(
-            chronicle_service or AsyncMock(),
-            task_service or AsyncMock(),
+            fake_services(
+                chronicles=chronicle_service or AsyncMock(),
+                tasks=task_service or AsyncMock(),
+                transcripts=transcript_service or AsyncMock(),
+            ),
             AsyncMock(),
             AsyncMock(),
-            transcript_service or AsyncMock(),
             **kwargs,
         )
         view.load_chronicles = AsyncMock()
@@ -260,7 +263,11 @@ async def test_refresh_keeps_the_search_and_the_open_form(monkeypatch):
     chronicle_service.search_chronicles.return_value = [Chronicle(title="Budget review")]
     transcript_service = AsyncMock()
     transcript_service.search_transcripts.return_value = []
-    view = ArchiveView(chronicle_service, AsyncMock(), AsyncMock(), AsyncMock(), transcript_service)
+    view = ArchiveView(
+        fake_services(chronicles=chronicle_service, transcripts=transcript_service),
+        AsyncMock(),
+        AsyncMock(),
+    )
     view.update = MagicMock()
     view.query = "budget"
     form = view.create_form
@@ -284,7 +291,11 @@ def _searching_view(found_by_title, matches):
     chronicle_service.search_chronicles.return_value = found_by_title
     transcript_service = AsyncMock()
     transcript_service.search_transcripts.return_value = matches
-    view = ArchiveView(chronicle_service, AsyncMock(), AsyncMock(), AsyncMock(), transcript_service)
+    view = ArchiveView(
+        fake_services(chronicles=chronicle_service, transcripts=transcript_service),
+        AsyncMock(),
+        AsyncMock(),
+    )
     view.update = MagicMock()
     return view, transcript_service
 

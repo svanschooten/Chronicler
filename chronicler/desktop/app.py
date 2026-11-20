@@ -3,16 +3,10 @@ import logging
 from collections.abc import Callable
 
 import flet as ft
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from chronicler.core.config import Mode
-from chronicler.core.container import Container
 from chronicler.core.models import Chronicle, ModelCheck
-from chronicler.core.remote import RemoteContainer
-from chronicler.core.services.chronicle_service import ChronicleService
-from chronicler.core.services.system_service import SystemService
-from chronicler.core.services.task_service import TaskService
-from chronicler.core.services.transcript_service import TranscriptService
+from chronicler.core.services.services import Services
 from chronicler.core.task_events import TaskCompletedEvent, TaskEventBus
 from chronicler.core.worker_wiring import build_worker_manager
 from chronicler.core.workers import WorkerManager
@@ -28,20 +22,10 @@ from chronicler.desktop.views.transcript import TranscriptView
 logger = logging.getLogger(__name__)
 
 
-async def close_scope(scope: "Container | RemoteContainer | None") -> None:
-    """Returns a resolution scope's session to the pool, if it ever built one."""
-    if not isinstance(scope, Container) or not scope.is_registered(AsyncSession):
-        return
-    session = scope.cached(AsyncSession)
-    if session is not None:
-        await session.close()
-
-
 class DesktopApp:
     def __init__(self, runtime: DesktopRuntime):
         self.state = AppState()
         self.runtime = runtime
-        self.resolver = runtime.resolver
         self.db_manager = runtime.db_manager
         self.file_stager = runtime.file_stager
 
@@ -58,7 +42,7 @@ class DesktopApp:
         self.available_models: list[str] = []
         self.capabilities: set[str] | None = None
         self.model_error: str | None = None
-        self._view_scope: Container | None = None
+        self._view_services: Services | None = None
         self.current_view: ft.Control | None = None
         logger.debug("DesktopApp constructed")
 
@@ -135,8 +119,7 @@ class DesktopApp:
         if self._unsubscribe_task_events is not None:
             self._unsubscribe_task_events()
 
-        await self._close_view_scope()
-        await close_scope(self.resolver)
+        await self._close_view_services()
         if self.runtime.http_client is not None:
             await self.runtime.http_client.aclose()
         if self.db_manager is not None:
@@ -206,22 +189,18 @@ class DesktopApp:
         """
         Asks the service layer what it can do.
 
-        Through a scope of its own, like every other consumer: resolving off the root
-        container cached its repository's session there for the life of the process,
-        holding an open read transaction that nothing ever closed.
+        Through a set of services of its own, closed again after: a session kept for the
+        life of the process would hold an open read transaction that nothing ever closed.
 
         Both answers are the server's in thin-client mode - its extras and its model
         configuration decide what the buttons here should offer. `capabilities` stays None
         when the call fails, which every consumer reads as "assume it works" rather than
         greying out half the interface over an unrelated network hiccup.
         """
-        scope = (
-            self.resolver.create_scope() if isinstance(self.resolver, Container) else self.resolver
-        )
+        services = self.runtime.new_services()
         try:
-            system = scope.resolve(SystemService)
             try:
-                check = await system.list_models()
+                check = await services.system.list_models()
                 self.available_models = list(check.models)
                 self.model_error = check.error
             except Exception as error:
@@ -230,13 +209,12 @@ class DesktopApp:
                 self.model_error = str(error)
 
             try:
-                self.capabilities = set((await system.get_server_info()).capabilities)
+                self.capabilities = set((await services.system.get_server_info()).capabilities)
             except Exception:
                 logger.warning("Could not read the service layer's capabilities", exc_info=True)
                 self.capabilities = None
         finally:
-            if scope is not self.resolver:
-                await close_scope(scope)
+            await services.close()
 
         return ModelCheck(models=list(self.available_models), error=self.model_error)
 
@@ -256,26 +234,23 @@ class DesktopApp:
             self.sidebar.relabel()
         await self.update_view()
 
-    async def _close_view_scope(self):
-        await close_scope(self._view_scope)
-        self._view_scope = None
+    async def _close_view_services(self):
+        services, self._view_services = self._view_services, None
+        if services is not None:
+            await services.close()
 
-    def _new_scope(self) -> Container | RemoteContainer:
+    def _new_services(self) -> Services:
         """
-        A fresh resolution scope for the view about to be shown - a real scope (fresh
-        session on next resolve) for a local Container, or the RemoteContainer itself
-        for thin-client mode, which has no session of its own to keep fresh (RpcServer
-        already scopes each call server-side).
+        A fresh set of services for the view about to be shown, on a session of its own
+        that is closed when the view is left. A thin client's set holds no session, since
+        the server scopes each call itself.
         """
-        if isinstance(self.resolver, Container):
-            scope = self.resolver.create_scope()
-            self._view_scope = scope
-            return scope
-        return self.resolver
+        self._view_services = self.runtime.new_services()
+        return self._view_services
 
     async def update_view(self):
         logger.debug(f"Navigating to view: {self.state.current_view}")
-        await self._close_view_scope()
+        await self._close_view_services()
 
         content = await self._build_view()
         if content is None:
@@ -296,24 +271,16 @@ class DesktopApp:
         dark_mode = self.runtime.settings.dark_mode
 
         if self.state.current_view == ViewType.ARCHIVE:
-            scope = self._new_scope()
             return ArchiveView(
-                scope.resolve(ChronicleService),
-                scope.resolve(TaskService),
+                self._new_services(),
                 self.open_chronicle,
                 self.file_stager.stage,
-                scope.resolve(TranscriptService),
                 dark_mode=dark_mode,
                 can_link=self.runtime.settings.desktop_mode is not Mode.THIN_CLIENT,
             )
 
         if self.state.current_view == ViewType.TASKS:
-            scope = self._new_scope()
-            return TasksView(
-                scope.resolve(TaskService),
-                scope.resolve(ChronicleService),
-                dark_mode=dark_mode,
-            )
+            return TasksView(self._new_services(), dark_mode=dark_mode)
 
         if self.state.current_view == ViewType.SETTINGS:
             return SettingsView(
@@ -329,8 +296,8 @@ class DesktopApp:
             await self.go_back()
             return None
 
-        scope = self._new_scope()
-        chronicle = await scope.resolve(ChronicleService).get_chronicle(selected.id)
+        services = self._new_services()
+        chronicle = await services.chronicles.get_chronicle(selected.id)
         if chronicle is None:
             await self.go_back()
             return None
@@ -338,17 +305,15 @@ class DesktopApp:
         self.state.selected_chronicle = chronicle
         return TranscriptView(
             chronicle,
+            services,
             self.go_back,
-            transcript_service=scope.resolve(TranscriptService),
-            task_service=scope.resolve(TaskService),
-            dark_mode=dark_mode,
-            chronicle_service=scope.resolve(ChronicleService),
             file_stager=self.runtime.file_stager,
+            settings=self.runtime.settings,
             available_models=lambda: self.available_models,
             model_error=lambda: self.model_error,
             capabilities=(
                 None if self.capabilities is None else (lambda: self.capabilities or set())
             ),
-            settings=self.runtime.settings,
             on_reload=self.update_view,
+            dark_mode=dark_mode,
         )

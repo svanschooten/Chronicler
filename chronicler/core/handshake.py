@@ -1,7 +1,6 @@
 """The thin client's startup check against the server it is configured to use."""
 
 import logging
-from typing import Any
 
 from chronicler import __version__
 from chronicler.core.models import ServerInfo
@@ -14,13 +13,13 @@ class HandshakeError(RuntimeError):
     """A thin client could not establish a usable connection to its server."""
 
 
-async def perform_handshake(resolver: Any) -> ServerInfo:
+async def perform_handshake(system: SystemService) -> ServerInfo:
     """
     Proves the server answers and runs exactly this client's version, and returns what it
     reported. Exact equality, because the generated RPC surface has no version of its own.
     """
     try:
-        info: ServerInfo = await resolver.resolve(SystemService).get_server_info()
+        info: ServerInfo = await system.get_server_info()
     except Exception as error:
         raise HandshakeError(f"Could not reach the Chronicler server: {error}") from error
 
