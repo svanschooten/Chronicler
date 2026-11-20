@@ -6,7 +6,7 @@ from collections.abc import Callable
 import flet as ft
 
 from chronicler.core.models import Chronicle
-from chronicler.core.services.chronicle_service import ChronicleService
+from chronicler.core.services.chronicle_service import ChronicleService, is_system_tag
 from chronicler.desktop.theme import ThemeColors
 from chronicler.desktop.widgets import repaint
 from chronicler.i18n import t
@@ -49,7 +49,8 @@ class TagsPanel(ft.Column):
                 ft.Chip(
                     label=ft.Text(tag.name, color=self.colors.text),
                     data=tag.name,
-                    on_delete=self.remove_clicked,
+                    # A system tag follows the transcript, so it has no remove button.
+                    on_delete=None if is_system_tag(tag.name) else self.remove_clicked,
                 )
                 for tag in tags
             ]

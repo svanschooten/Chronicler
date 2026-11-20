@@ -106,6 +106,10 @@ class SQLiteChronicleRepository:
         """
         Attach a tag to a chronicle, creating the tag if no tag has this name yet. Names
         match without regard to case, so "Product" attaches the existing "product".
+
+        The match is made here with `str.casefold`, not in SQL: SQLite's `lower()` folds
+        ASCII only, so "Über" would miss itself and hit the unique index on `tags.name`.
+        A workspace has few tags, so reading them all is cheap.
         """
         result = await self.session.execute(
             select(DBChronicle).where(DBChronicle.id == str(chronicle_id))
@@ -114,10 +118,9 @@ class SQLiteChronicleRepository:
         if not db_chronicle:
             raise ValueError(f"Chronicle {chronicle_id} not found")
 
-        tag_result = await self.session.execute(
-            select(DBTag).where(func.lower(DBTag.name) == tag_name.casefold())
-        )
-        db_tag = tag_result.scalar_one_or_none()
+        wanted = tag_name.casefold()
+        tags = (await self.session.execute(select(DBTag))).scalars()
+        db_tag = next((tag for tag in tags if tag.name.casefold() == wanted), None)
         if not db_tag:
             db_tag = DBTag(name=tag_name)
             self.session.add(db_tag)

@@ -1,5 +1,6 @@
 """Adding and removing a chronicle's tags through the service layer."""
 
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -18,7 +19,7 @@ async def archive(tmp_path):
     session = db_manager.get_archive_session()
     repository = SQLiteChronicleRepository(session)
     chronicle = await repository.create(Chronicle(title="Session"))
-    yield ChronicleService(repository, db_manager), chronicle
+    yield ChronicleService(repository, db_manager, AsyncMock()), chronicle
     await session.close()
     await db_manager.close_all()
 
@@ -63,3 +64,32 @@ async def test_tags_of_an_unknown_chronicle_are_refused(archive):
         await service.add_tag(uuid4(), "x")
     with pytest.raises(LookupError):
         await service.remove_tag(uuid4(), "x")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("again", ["Über", "über", "ÜBER"])
+async def test_a_tag_with_a_non_ascii_capital_is_reused(archive, again):
+    """SQLite's lower() folds ASCII only, which made "Über" miss itself."""
+    service, chronicle = archive
+    other = await service.repository.create(Chronicle(title="Other"))
+    await service.add_tag(chronicle.id, "Über")
+
+    tagged = await service.add_tag(other.id, again)
+
+    assert _names(tagged) == ["Über"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["Transcript", "summarized"])
+async def test_a_system_tag_cannot_be_removed(archive, name):
+    service, chronicle = archive
+    await service.repository.add_tag(chronicle.id, "Transcript")
+    await service.repository.add_tag(chronicle.id, "Summarized")
+
+    with pytest.raises(ValueError):
+        await service.remove_tag(chronicle.id, name)
+
+    assert sorted(_names(await service.get_chronicle(chronicle.id))) == [
+        "Summarized",
+        "Transcript",
+    ]

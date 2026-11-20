@@ -53,8 +53,8 @@ per-request server-side.
 
 ## Tags
 
-The transcript view's details panel shows each tag as a chip with a remove button, and a
-field below adds one (`views/transcript/tags.py`). Both call the chronicle service and
+The transcript view's details panel shows each tag as a chip with a remove button (none on
+the system tags, which follow the transcript), and a field below adds one (`views/transcript/tags.py`). Both call the chronicle service and
 replace the shared chronicle's tags with what comes back, so the header and the archive
 agree. The archive has a tag filter beside its search box. Its choices are the tags on the
 chronicles last listed without a search, so a search never shrinks them, and the filter is
