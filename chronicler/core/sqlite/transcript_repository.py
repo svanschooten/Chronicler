@@ -51,6 +51,20 @@ class SQLiteTranscriptRepository:
         )
         return self._to_lines(result.scalars().all())
 
+    async def count_speakers(self) -> int:
+        """
+        The speakers with at least one line, counted in the database: what
+        `reconcile.count_speakers` gives for `get_lines()`, without loading the transcript.
+        Lines with no speaker count as one, as they do there.
+        """
+        result = await self.session.execute(
+            select(DBSpeaker.name)
+            .select_from(DBTranscriptLine)
+            .outerjoin(DBSpeaker, DBTranscriptLine.speaker_id == DBSpeaker.id)
+            .distinct()
+        )
+        return len(result.all())
+
     @staticmethod
     def _to_lines(db_lines) -> list[TranscriptLine]:
         lines = []
