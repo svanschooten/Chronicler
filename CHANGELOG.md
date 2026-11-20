@@ -66,7 +66,7 @@ holds the problem and its evidence.
   type instead of one built by inheritance, one `reconcile` for a chronicle's derived
   fields where five backfills were, a plain `claim_next`, and no sync-handler branch (040).
   A speaker is counted once per name on the lines, so a speaker with no lines no longer
-  counts.
+  counts, and editing or deleting a line updates the count (051).
 
 Waves 9, 10 and 12 are still open.
 

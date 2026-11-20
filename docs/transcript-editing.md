@@ -8,6 +8,13 @@ normalise, transcribe, clean, summarise, export and record, and you could not fi
 misheard word. The text field was `read_only=True` and `update_line` was a stub that
 returned its argument and wrote nothing.
 
+Both write calls keep the chronicle's speaker count right: it is the number of speakers
+with at least one line (`core/reconcile.py`), so giving a line a new speaker raises it and
+deleting a speaker's last line lowers it. Only the count is touched, so a duration set by
+hand survives a corrected word. The count is taken in the database
+(`SQLiteTranscriptRepository.count_speakers`) rather than from the whole transcript, and a
+text-only correction skips it, since it cannot change who speaks.
+
 ## Two modes, not one editable blob
 
 The read view is a single selectable block of text, which is what makes it readable — and

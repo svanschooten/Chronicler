@@ -20,7 +20,7 @@ from chronicler.core.models import (
     TranscriptMatch,
 )
 from chronicler.core.processing.fingerprint import fingerprint_file
-from chronicler.core.reconcile import reconcile
+from chronicler.core.reconcile import reconcile, update_speaker_count
 from chronicler.core.rpc import TempFile, service
 from chronicler.core.services.bundle import (
     DATABASE_NAME,
@@ -171,6 +171,10 @@ class TranscriptService:
             if speaker_name:
                 speaker_id = (await repo.get_or_create_speaker(speaker_name)).id
             line = await repo.update_line(line_id, text=text, speaker_id=speaker_id)
+            # A corrected word cannot change who speaks, so only a new speaker recounts.
+            count = await repo.count_speakers() if speaker_name else None
+        if count is not None:
+            await update_speaker_count(self.chronicle_repository, chronicle_id, count)
 
         if speaker_name and line.speaker_name:
             # The spelling the chronicle already uses, which may differ in case from what
@@ -179,9 +183,15 @@ class TranscriptService:
         return line
 
     async def delete_line(self, chronicle_id: UUID, line_id: UUID) -> None:
-        """Removes one line. The speaker row stays - it still names an audio source."""
+        """
+        Removes one line. The speaker row stays - it still names an audio source - but a
+        speaker left with no lines stops counting.
+        """
         async with self.db_manager.transaction(chronicle_id) as session:
-            await SQLiteTranscriptRepository(session).delete_line(line_id)
+            repo = SQLiteTranscriptRepository(session)
+            await repo.delete_line(line_id)
+            count = await repo.count_speakers()
+        await update_speaker_count(self.chronicle_repository, chronicle_id, count)
 
     async def export_plaintext(self, chronicle_id: UUID, include_timestamps: bool = False) -> str:
         lines = [line for line in await self.get_transcript(chronicle_id) if line.text.strip()]

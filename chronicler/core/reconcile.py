@@ -13,6 +13,25 @@ SUMMARIZABLE = ("Imported", "Transcribed", "Cleaned")
 """The statuses a first summary moves on to "Summarized". Later ones stay as they are."""
 
 
+def count_speakers(lines: list[TranscriptLine]) -> int:
+    """The speakers with at least one line. A speaker row outlives its lines on purpose."""
+    return len({line.speaker_name for line in lines})
+
+
+async def update_speaker_count(
+    chronicles: SQLiteChronicleRepository, chronicle_id: UUID, count: int
+) -> None:
+    """
+    Only the count, for an edit that cannot change anything else reconcile derives, so a
+    duration someone set by hand survives a corrected word. `count` is what
+    `SQLiteTranscriptRepository.count_speakers` returns, which agrees with `count_speakers`.
+    """
+    chronicle = await chronicles.get_by_id(chronicle_id)
+    if chronicle is not None and chronicle.speakers_count != count:
+        chronicle.speakers_count = count
+        await chronicles.update(chronicle)
+
+
 async def reconcile(
     chronicles: SQLiteChronicleRepository,
     chronicle_id: UUID,
@@ -41,7 +60,7 @@ async def reconcile(
     if summaries:
         await chronicles.add_tag(chronicle_id, "Summarized")
 
-    chronicle.speakers_count = len({line.speaker_name for line in lines})
+    chronicle.speakers_count = count_speakers(lines)
     if timings and lines and not looks_synthetic(lines):
         chronicle.duration = format_duration(max(line.end_time for line in lines))
     if timings and lines and chronicle.status == "Imported":

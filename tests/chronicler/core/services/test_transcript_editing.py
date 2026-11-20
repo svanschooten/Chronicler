@@ -239,3 +239,85 @@ class TestSpeakerSpelling:
         finally:
             await session.close()
             await db_manager.close_all()
+
+
+class TestSpeakerCount:
+    @pytest.mark.asyncio
+    async def test_giving_a_line_a_new_speaker_raises_the_count(self, tmp_path):
+        db_manager, session, service, chronicle = await _service(tmp_path)
+        try:
+            assert await service.refresh_speaker_count(chronicle.id) == 1
+            lines = await service.get_transcript(chronicle.id)
+
+            await service.update_line(chronicle.id, lines[0].id, speaker_name="Vale")
+
+            assert (await service.chronicle_repository.get_by_id(chronicle.id)).speakers_count == 2
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_deleting_a_speakers_last_line_lowers_the_count(self, tmp_path):
+        db_manager, session, service, chronicle = await _service(tmp_path)
+        try:
+            lines = await service.get_transcript(chronicle.id)
+            await service.update_line(chronicle.id, lines[0].id, speaker_name="Vale")
+
+            await service.delete_line(chronicle.id, lines[0].id)
+
+            assert (await service.chronicle_repository.get_by_id(chronicle.id)).speakers_count == 1
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_an_edit_leaves_a_duration_set_by_hand(self, tmp_path):
+        db_manager, session, service, chronicle = await _service(tmp_path)
+        try:
+            await service.chronicle_repository.update(
+                chronicle.model_copy(update={"duration": "9h"})
+            )
+            lines = await service.get_transcript(chronicle.id)
+
+            await service.update_line(chronicle.id, lines[0].id, text="Fixed")
+
+            assert (await service.chronicle_repository.get_by_id(chronicle.id)).duration == "9h"
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_a_text_only_edit_does_not_recount(self, tmp_path):
+        from unittest.mock import patch
+
+        db_manager, session, service, chronicle = await _service(tmp_path)
+        try:
+            lines = await service.get_transcript(chronicle.id)
+            with patch.object(SQLiteTranscriptRepository, "count_speakers") as count:
+                await service.update_line(chronicle.id, lines[0].id, text="Fixed")
+            count.assert_not_called()
+        finally:
+            await session.close()
+            await db_manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_the_database_count_agrees_with_the_lines(self, tmp_path):
+        from chronicler.core.reconcile import count_speakers
+
+        db_manager, session, service, chronicle = await _service(tmp_path)
+        try:
+            async with db_manager.transaction(chronicle.id) as project:
+                repo = SQLiteTranscriptRepository(project)
+                assert await repo.count_speakers() == count_speakers(await repo.get_lines())
+                vale = await repo.get_or_create_speaker("Vale")
+                await repo.add_lines(
+                    [
+                        TranscriptLine(speaker_id=vale.id, text="Hi", start_time=5.0, end_time=6.0),
+                        TranscriptLine(text="Nobody", start_time=7.0, end_time=8.0),
+                    ]
+                )
+                assert await repo.count_speakers() == count_speakers(await repo.get_lines())
+                assert await repo.count_speakers() == 3
+        finally:
+            await session.close()
+            await db_manager.close_all()
