@@ -65,7 +65,7 @@ class ChronicleService:
         self,
         repository: SQLiteChronicleRepository,
         db_manager: DatabaseManager,
-        transcripts: TranscriptService | None = None,
+        transcripts: TranscriptService,
         link_policy: LinkPolicy | None = None,
     ):
         self.repository = repository
@@ -118,9 +118,6 @@ class ChronicleService:
         chronicle = await self.repository.get_by_id(chronicle_id)
         if chronicle is None:
             raise ValueError(f"No chronicle {chronicle_id}")
-        if self.transcripts is None:
-            return chronicle
-
         await self.transcripts.reconcile_from_project(chronicle_id, timings=True)
         return await self.repository.get_by_id(chronicle_id) or chronicle
 
