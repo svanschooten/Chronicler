@@ -12,7 +12,7 @@ from chronicler.core.database_manager import (
     check_linkable_project,
 )
 from chronicler.core.file_staging import confine_to_directory, safe_display_name
-from chronicler.core.models import Chronicle, Snapshot
+from chronicler.core.models import SYSTEM_TAGS, Chronicle, Snapshot
 from chronicler.core.rpc import service
 from chronicler.core.services.transcript_service import TranscriptService
 from chronicler.core.sqlite import SQLiteChronicleRepository
@@ -67,7 +67,7 @@ class ChronicleService:
         self,
         repository: SQLiteChronicleRepository,
         db_manager: DatabaseManager,
-        transcripts: TranscriptService | None = None,
+        transcripts: TranscriptService,
         link_policy: LinkPolicy | None = None,
     ):
         self.repository = repository
@@ -120,10 +120,7 @@ class ChronicleService:
         chronicle = await self.repository.get_by_id(chronicle_id)
         if chronicle is None:
             raise ValueError(f"No chronicle {chronicle_id}")
-        if self.transcripts is None:
-            return chronicle
-
-        await self.transcripts.refresh_speaker_count(chronicle_id)
+        await self.transcripts.reconcile_from_project(chronicle_id, timings=True)
         return await self.repository.get_by_id(chronicle_id) or chronicle
 
     async def edit_chronicle(
@@ -170,10 +167,13 @@ class ChronicleService:
     async def remove_tag(self, chronicle_id: UUID, name: str) -> Chronicle:
         """
         Takes a tag off the chronicle. A tag no chronicle has any more is deleted. Raises
-        LookupError for an unknown chronicle.
+        LookupError for an unknown chronicle, and ValueError for a system tag (`SYSTEM_TAGS`),
+        which follows the transcript and would come straight back.
         """
         if await self.repository.get_by_id(chronicle_id) is None:
             raise LookupError(f"No chronicle {chronicle_id}")
+        if is_system_tag(name):
+            raise ValueError(f"The {name} tag follows the chronicle's transcript")
         await self.repository.remove_tag(chronicle_id, name)
         return await self._stored(chronicle_id)
 
@@ -303,3 +303,8 @@ def _title_for(project_path: Path) -> str:
     if title in ("", "chronicles"):
         return project_path.stem
     return title
+
+
+def is_system_tag(name: str) -> bool:
+    """Whether `name` is one of `SYSTEM_TAGS`, in any case."""
+    return name.casefold() in {tag.casefold() for tag in SYSTEM_TAGS}

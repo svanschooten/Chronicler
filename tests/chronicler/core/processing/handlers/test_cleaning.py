@@ -124,7 +124,7 @@ async def test_handle_clean_keeps_each_lines_track(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_handle_clean_backfills_speaker_count_without_retagging(tmp_path):
+async def test_handle_clean_backfills_speaker_count_without_duplicating_tags(tmp_path):
     db_manager = DatabaseManager(tmp_path)
     await db_manager.init_archive()
     try:
@@ -568,3 +568,35 @@ class TestCleaningOutsideTheTransaction:
             assert await _texts(db_manager, chronicle_id) == [edits[-1]]
         finally:
             await db_manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_import_and_clean_leave_status_and_a_hand_set_duration_alone(tmp_path):
+    """Only a transcription or a link says how long a recording is, or that it was heard."""
+    db_manager = DatabaseManager(tmp_path)
+    await db_manager.init_archive()
+    try:
+        async with db_manager.get_archive_session() as session:
+            repo = SQLiteChronicleRepository(session)
+            chronicle = await repo.create(Chronicle(title="Typed up", duration="2:00:00"))
+
+        transcript_file = db_manager.get_imports_path() / "transcript.txt"
+        transcript_file.write_text("Alice: Hello\nBob: Hi\n")
+        await ImportHandler(db_manager).handle_import(
+            Task(
+                type=TaskType.IMPORT,
+                chronicle_id=chronicle.id,
+                data=json.dumps({"file_path": str(transcript_file)}),
+            ),
+            _noop_progress,
+        )
+        await CleanHandler(db_manager).handle_clean(
+            Task(type=TaskType.CLEAN, chronicle_id=chronicle.id), _noop_progress
+        )
+
+        updated = await read_chronicle(db_manager, chronicle.id)
+        assert updated.status == "Imported"
+        assert updated.duration == "2:00:00"
+        assert updated.speakers_count == 2
+    finally:
+        await db_manager.close_all()

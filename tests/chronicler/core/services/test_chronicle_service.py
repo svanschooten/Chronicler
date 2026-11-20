@@ -21,6 +21,11 @@ def _db_manager(workspace_path):
     return db_manager
 
 
+def _transcripts():
+    """A transcript service that has nothing to reconcile: these tests are about the archive."""
+    return AsyncMock()
+
+
 def _plain_repo():
     """A repository for a chronicle with no external project path."""
     repo = MagicMock(spec=SQLiteChronicleRepository)
@@ -33,7 +38,7 @@ async def test_list_chronicles():
     repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.get_all = AsyncMock(return_value=[])
 
-    service = ChronicleService(repo, MagicMock())
+    service = ChronicleService(repo, MagicMock(), _transcripts())
     result = await service.list_chronicles()
 
     assert result == []
@@ -45,7 +50,7 @@ async def test_create_chronicle():
     repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.create = AsyncMock(side_effect=lambda x: x)
 
-    service = ChronicleService(repo, MagicMock())
+    service = ChronicleService(repo, MagicMock(), _transcripts())
     result = await service.create_chronicle("New Chronicle")
 
     assert result.title == "New Chronicle"
@@ -57,7 +62,7 @@ async def test_search_chronicles():
     repo = MagicMock(spec=SQLiteChronicleRepository)
     repo.search = AsyncMock(return_value=[])
 
-    service = ChronicleService(repo, MagicMock())
+    service = ChronicleService(repo, MagicMock(), _transcripts())
     await service.search_chronicles("test")
 
     repo.search.assert_called_once_with("test")
@@ -75,7 +80,7 @@ async def test_delete_chronicle_removes_directory_for_non_linked_chronicle(tmp_p
     repo.delete = AsyncMock()
     db_manager = _db_manager(tmp_path)
 
-    service = ChronicleService(repo, db_manager)
+    service = ChronicleService(repo, db_manager, _transcripts())
     await service.delete_chronicle(chronicle_id)
 
     repo.delete.assert_awaited_once_with(chronicle_id)
@@ -102,7 +107,7 @@ async def test_delete_chronicle_does_not_touch_directory_for_linked_chronicle(tm
     repo.delete = AsyncMock()
     db_manager = _db_manager(tmp_path)
 
-    service = ChronicleService(repo, db_manager)
+    service = ChronicleService(repo, db_manager, _transcripts())
     await service.delete_chronicle(chronicle_id)
 
     assert external_dir.exists()
@@ -131,7 +136,7 @@ async def test_delete_chronicle_closes_the_project_database_before_removing_it(t
         "chronicler.core.services.chronicle_service.shutil.rmtree",
         side_effect=lambda path: order.append("removed"),
     ):
-        await ChronicleService(repo, db_manager).delete_chronicle(chronicle_id)
+        await ChronicleService(repo, db_manager, _transcripts()).delete_chronicle(chronicle_id)
 
     db_manager.close_project.assert_awaited_once_with(str(chronicle_id))
     assert order == ["deleted", "closed", "removed"]
@@ -153,7 +158,7 @@ async def test_delete_chronicle_closes_a_linked_project_database_too(tmp_path):
     repo.delete = AsyncMock()
     db_manager = _db_manager(tmp_path)
 
-    await ChronicleService(repo, db_manager).delete_chronicle(chronicle_id)
+    await ChronicleService(repo, db_manager, _transcripts()).delete_chronicle(chronicle_id)
 
     db_manager.close_project.assert_awaited_once_with(str(chronicle_id))
 
@@ -170,7 +175,7 @@ async def test_an_update_cannot_move_a_chronicle(tmp_path):
     """Ticket 076: where a chronicle's database lives is set when it is created or linked."""
     chronicle = Chronicle(title="Linked", project_path=str(tmp_path / "old" / "project.db"))
     repo = _repo_holding(chronicle)
-    service = ChronicleService(repo, _db_manager(tmp_path))
+    service = ChronicleService(repo, _db_manager(tmp_path), _transcripts())
 
     moved = chronicle.model_copy(
         update={"title": "Renamed", "project_path": str(tmp_path / "new" / "project.db")}
@@ -187,7 +192,9 @@ class TestLinkPolicy:
     def _service(self, tmp_path, allowed):
         repo = MagicMock(spec=SQLiteChronicleRepository)
         repo.create = AsyncMock(side_effect=lambda chronicle: chronicle)
-        return ChronicleService(repo, _db_manager(tmp_path), link_policy=LinkPolicy(allowed))
+        return ChronicleService(
+            repo, _db_manager(tmp_path), _transcripts(), link_policy=LinkPolicy(allowed)
+        )
 
     def test_a_path_inside_an_allowed_folder_is_kept(self, tmp_path):
         allowed = tmp_path / "shared"
@@ -230,7 +237,7 @@ class TestLinkPolicy:
         """The full-stack app: the caller is the machine's own user."""
         repo = MagicMock(spec=SQLiteChronicleRepository)
         repo.create = AsyncMock(side_effect=lambda chronicle: chronicle)
-        service = ChronicleService(repo, _db_manager(tmp_path))
+        service = ChronicleService(repo, _db_manager(tmp_path), _transcripts())
 
         assert LinkPolicy().confine(str(tmp_path / "x" / "project.db")) == (
             tmp_path / "x" / "project.db"
@@ -281,7 +288,7 @@ async def test_add_audio_source_moves_file_into_durable_sources_dir(tmp_path):
     )
     (tmp_path / "chronicles" / str(chronicle_id) / "sources").mkdir(parents=True)
 
-    service = ChronicleService(_plain_repo(), db_manager)
+    service = ChronicleService(_plain_repo(), db_manager, _transcripts())
     result = await service.add_audio_source(chronicle_id, str(staged_file), "recording.mp3")
 
     assert not staged_file.exists()
@@ -307,7 +314,7 @@ async def test_add_audio_source_refuses_a_file_that_is_not_audio(tmp_path):
     db_manager.get_imports_path.return_value = tmp_path / "imports"
     db_manager.ensure_sources_path_for.return_value = sources
 
-    service = ChronicleService(_plain_repo(), db_manager)
+    service = ChronicleService(_plain_repo(), db_manager, _transcripts())
     with pytest.raises(UnsupportedAudioError, match="notes.txt is not an audio file"):
         await service.add_audio_source(chronicle_id, str(staged_file), "notes.txt")
 
@@ -331,7 +338,7 @@ async def test_add_audio_source_avoids_overwriting_same_name(tmp_path):
     db_manager.get_imports_path.return_value = tmp_path / "imports"
     db_manager.ensure_sources_path_for.return_value = sources_dir
 
-    service = ChronicleService(_plain_repo(), db_manager)
+    service = ChronicleService(_plain_repo(), db_manager, _transcripts())
     result = await service.add_audio_source(chronicle_id, str(staged_file), "recording.mp3")
 
     assert result == str(sources_dir / "recording (1).mp3")
@@ -353,7 +360,7 @@ def _service_with_workspace(tmp_path, chronicle_id):
     db_manager.project_path_for = AsyncMock(return_value=None)
     db_manager.get_imports_path.return_value = imports_dir
     db_manager.ensure_sources_path_for.return_value = sources_dir
-    return ChronicleService(_plain_repo(), db_manager), imports_dir, sources_dir
+    return ChronicleService(_plain_repo(), db_manager, _transcripts()), imports_dir, sources_dir
 
 
 @pytest.mark.asyncio
@@ -436,7 +443,7 @@ class TestEditChronicle:
 
     def _service(self, tmp_path, chronicle):
         repo = _repo_holding(chronicle)
-        return ChronicleService(repo, _db_manager(tmp_path)), repo
+        return ChronicleService(repo, _db_manager(tmp_path), _transcripts()), repo
 
     @pytest.mark.asyncio
     async def test_only_the_given_fields_change(self, tmp_path):
@@ -479,7 +486,9 @@ class TestEditChronicle:
         repo.get_by_id = AsyncMock(return_value=None)
 
         with pytest.raises(LookupError):
-            await ChronicleService(repo, _db_manager(tmp_path)).edit_chronicle(uuid4(), title="x")
+            await ChronicleService(repo, _db_manager(tmp_path), _transcripts()).edit_chronicle(
+                uuid4(), title="x"
+            )
 
 
 def test_the_whole_object_update_is_not_a_remote_method():

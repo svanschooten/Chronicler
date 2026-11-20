@@ -43,7 +43,10 @@ class Services:
     close: Callable[[], Awaitable[None]]
 
     def of(self, service_class: type[T]) -> T:
-        """The service of that class, for the RPC server, which is given classes to serve."""
+        """
+        The service of that class, for the RPC server, which is given classes to serve.
+        Local sets only: a remote set holds proxies, which are not instances of the class.
+        """
         for service in (
             self.chronicles,
             self.tasks,

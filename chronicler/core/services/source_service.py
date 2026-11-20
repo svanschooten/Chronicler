@@ -6,6 +6,7 @@ from chronicler.core.audio_files import is_audio_track
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import AudioSource, SourceState
 from chronicler.core.processing.fingerprint import fingerprint_file
+from chronicler.core.processing.normalizer import NORMALIZED_SUFFIX
 from chronicler.core.rpc import service
 from chronicler.core.services.speakers import remember_speaker
 from chronicler.core.sqlite import (
@@ -15,8 +16,6 @@ from chronicler.core.sqlite import (
 )
 
 logger = logging.getLogger(__name__)
-
-NORMALIZED_SUFFIX = ".normalized.wav"
 
 
 @service(expose=["assign_speaker", "list_audio_sources"])

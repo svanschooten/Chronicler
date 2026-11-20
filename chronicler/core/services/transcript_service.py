@@ -141,8 +141,10 @@ class TranscriptService:
             if speaker_name:
                 speaker_id = (await repo.get_or_create_speaker(speaker_name)).id
             line = await repo.update_line(line_id, text=text, speaker_id=speaker_id)
-            lines = await repo.get_lines()
-        await update_speaker_count(self.chronicle_repository, chronicle_id, lines)
+            # A corrected word cannot change who speaks, so only a new speaker recounts.
+            count = await repo.count_speakers() if speaker_name else None
+        if count is not None:
+            await update_speaker_count(self.chronicle_repository, chronicle_id, count)
 
         if speaker_name and line.speaker_name:
             # The spelling the chronicle already uses, which may differ in case from what
@@ -158,8 +160,8 @@ class TranscriptService:
         async with self.db_manager.transaction(chronicle_id) as session:
             repo = SQLiteTranscriptRepository(session)
             await repo.delete_line(line_id)
-            lines = await repo.get_lines()
-        await update_speaker_count(self.chronicle_repository, chronicle_id, lines)
+            count = await repo.count_speakers()
+        await update_speaker_count(self.chronicle_repository, chronicle_id, count)
 
     async def list_known_speakers(self) -> list[str]:
         """Every speaker name seen anywhere in this workspace, not just this chronicle."""
@@ -188,7 +190,14 @@ class TranscriptService:
         """
         Reconciles the chronicle's row with its transcript and returns the speaker count - a
         manual action for chronicles imported before this existed, or whose transcript was
-        hand-edited since.
+        hand-edited since. It leaves duration and status alone, like an import.
+        """
+        return await self.reconcile_from_project(chronicle_id)
+
+    async def reconcile_from_project(self, chronicle_id: UUID, timings: bool = False) -> int:
+        """
+        `reconcile` with the lines the project database holds, returning the speaker count.
+        Not exposed: a link or a restore passes `timings`, the manual refresh does not.
         """
         async with await self._project_session(chronicle_id) as session:
             repo = SQLiteTranscriptRepository(session)
@@ -196,5 +205,5 @@ class TranscriptService:
             lines = await repo.get_lines()
         for speaker in speakers:
             await remember_speaker(self.known_speakers, speaker.name)
-        chronicle = await reconcile(self.chronicle_repository, chronicle_id, lines)
+        chronicle = await reconcile(self.chronicle_repository, chronicle_id, lines, timings=timings)
         return chronicle.speakers_count if chronicle else len({line.speaker_name for line in lines})

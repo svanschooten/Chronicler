@@ -38,6 +38,14 @@ def test_each_tag_is_a_chip():
     assert [chip.data for chip in chips] == ["a", "b"]
 
 
+def test_a_system_tag_has_no_remove_button():
+    panel, _, _ = _panel(Chronicle(title="T", tags=[Tag(name="Transcript"), Tag(name="b")]))
+
+    chips = find_controls(panel, lambda c: isinstance(c, ft.Chip))
+
+    assert [chip.on_delete is None for chip in chips] == [True, False]
+
+
 @pytest.mark.asyncio
 async def test_submitting_a_name_adds_it_and_clears_the_field():
     panel, chronicle, service = _panel()
