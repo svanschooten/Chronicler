@@ -40,9 +40,14 @@ async def test_the_worker_and_handlers_open_their_own_archive_sessions(tmp_path)
         await db_manager.init_archive()
 
         manager = build_worker_manager(db_manager)
+        owners = {handler.__self__ for handler in manager.handlers.values()}  # type: ignore[attr-defined]
+        assert len(owners) == len(manager.handlers), "one handler object per task type"
 
-        async with manager.sessions() as first, manager.sessions() as second:
-            assert first is not second
+        for owner in owners:
+            async with manager.sessions() as first, owner.chronicles() as chronicles:
+                async with owner.chronicles() as again:
+                    assert chronicles.session is not first
+                    assert again.session is not chronicles.session
     finally:
         await db_manager.close_all()
 

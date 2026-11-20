@@ -406,7 +406,14 @@ class TranscriptService:
         """
         Reconciles the chronicle's row with its transcript and returns the speaker count - a
         manual action for chronicles imported before this existed, or whose transcript was
-        hand-edited since.
+        hand-edited since. It leaves duration and status alone, like an import.
+        """
+        return await self.reconcile_from_project(chronicle_id)
+
+    async def reconcile_from_project(self, chronicle_id: UUID, timings: bool = False) -> int:
+        """
+        `reconcile` with the lines the project database holds, returning the speaker count.
+        Not exposed: a link or a restore passes `timings`, the manual refresh does not.
         """
         async with await self._project_session(chronicle_id) as session:
             repo = SQLiteTranscriptRepository(session)
@@ -414,5 +421,5 @@ class TranscriptService:
             lines = await repo.get_lines()
         for speaker in speakers:
             await self._remember_speaker(speaker.name)
-        chronicle = await reconcile(self.chronicle_repository, chronicle_id, lines)
+        chronicle = await reconcile(self.chronicle_repository, chronicle_id, lines, timings=timings)
         return chronicle.speakers_count if chronicle else len({line.speaker_name for line in lines})
