@@ -13,8 +13,9 @@ of 056's window of rows. Their design is in
 
 ## How to use this list
 
-- **The waves are the recommended order.** Waves 1-4 are done. Within an open wave,
-  tickets are listed in the order to take them, which is not always numeric.
+- **The waves are the recommended order.** Waves 1-11 are done, so only wave 12 is open.
+  Within an open wave, tickets are listed in the order to take them, which is not always
+  numeric.
 - Numbers 001-066 were assigned by importance, then dependencies. Later tickets got the
   next free number, so their numbers say nothing about their order: each sits in the wave
   where it belongs.
