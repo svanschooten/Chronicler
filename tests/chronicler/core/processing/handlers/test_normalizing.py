@@ -10,10 +10,11 @@ import pytest
 
 from chronicler.core.database_manager import DatabaseManager
 from chronicler.core.models import Task, TaskType
-from chronicler.core.processing.handlers import NormalizeHandler
+from chronicler.core.processing.handlers import NormalizeHandler, TranscribeHandler
 from chronicler.core.processing.normalizer import NORMALIZED_SUFFIX, NormalizationError
 from chronicler.core.sqlite import SQLiteAudioSourceRepository
 from tests.extras import require_extra
+from tests.projects import register_chronicle
 
 require_extra("normalization")
 
@@ -40,6 +41,7 @@ async def _fixture(tmp_path, settings=None):
     await db_manager.init_archive()
     handlers = NormalizeHandler(db_manager, settings=settings)
     chronicle_id = uuid4()
+    await register_chronicle(db_manager, chronicle_id)
     sources = db_manager.ensure_sources_path_for(str(chronicle_id))
     audio = write_tone(sources / "gm.wav")
     return db_manager, handlers, chronicle_id, audio
@@ -188,7 +190,7 @@ class TestNormalizeBeforeTranscribe:
                 return []
 
             with patch("chronicler.core.processing.transcriber.transcribe_audio", side_effect=fake):
-                await handlers.handle_transcribe(
+                await TranscribeHandler(handlers.db_manager, handlers.settings).handle_transcribe(
                     Task(
                         type=TaskType.TRANSCRIBE,
                         chronicle_id=chronicle_id,
@@ -212,7 +214,7 @@ class TestNormalizeBeforeTranscribe:
                 return []
 
             with patch("chronicler.core.processing.transcriber.transcribe_audio", side_effect=fake):
-                await handlers.handle_transcribe(
+                await TranscribeHandler(handlers.db_manager, handlers.settings).handle_transcribe(
                     Task(
                         type=TaskType.TRANSCRIBE,
                         chronicle_id=chronicle_id,
@@ -236,7 +238,7 @@ class TestNormalizeBeforeTranscribe:
                 return []
 
             with patch("chronicler.core.processing.transcriber.transcribe_audio", side_effect=fake):
-                await handlers.handle_transcribe(
+                await TranscribeHandler(handlers.db_manager, handlers.settings).handle_transcribe(
                     Task(
                         type=TaskType.TRANSCRIBE,
                         chronicle_id=chronicle_id,
@@ -272,7 +274,7 @@ class TestNormalizeBeforeTranscribe:
                 return []
 
             with patch("chronicler.core.processing.transcriber.transcribe_audio", side_effect=fake):
-                await handlers.handle_transcribe(
+                await TranscribeHandler(handlers.db_manager, handlers.settings).handle_transcribe(
                     Task(
                         type=TaskType.TRANSCRIBE,
                         chronicle_id=chronicle_id,
@@ -295,7 +297,7 @@ class TestNormalizeBeforeTranscribe:
                 patch("chronicler.core.processing.normalizer.normalize_audio") as normalize,
                 patch("chronicler.core.processing.transcriber.transcribe_audio", return_value=[]),
             ):
-                await handlers.handle_transcribe(
+                await TranscribeHandler(handlers.db_manager, handlers.settings).handle_transcribe(
                     Task(
                         type=TaskType.TRANSCRIBE,
                         chronicle_id=chronicle_id,
