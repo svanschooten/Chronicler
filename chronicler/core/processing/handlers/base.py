@@ -100,9 +100,11 @@ class HandlerBase:
             line.speaker_id = speaker_map[line.speaker_name]
         return speaker_map
 
-    async def reconcile(self, chronicle_id: UUID, summaries: int = 0) -> None:
+    async def reconcile(
+        self, chronicle_id: UUID, summaries: int = 0, timings: bool = False
+    ) -> None:
         """Brings the chronicle's archive row up to date with its transcript - see `reconcile`."""
         async with await self.project_session(chronicle_id) as session:
             lines = await SQLiteTranscriptRepository(session).get_lines()
         async with self.chronicles() as chronicles:
-            await reconcile(chronicles, chronicle_id, lines, summaries)
+            await reconcile(chronicles, chronicle_id, lines, summaries, timings)
